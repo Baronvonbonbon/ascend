@@ -1,0 +1,20 @@
+{
+  "name": "ascend",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Ascend — an ASCII roguelike on Polkadot. Descend to recover the JAM and ascend.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "build:pages": "tsc && vite build --base=/ascend/",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "rot-js": "^2.2.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}
