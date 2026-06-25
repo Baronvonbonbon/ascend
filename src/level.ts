@@ -1,12 +1,16 @@
 import * as ROT from "rot-js";
 import type { TileType } from "./data";
+import type { ItemType } from "./items";
 
-/** One dungeon level: tiles, fog-of-war, FOV, stairs, spawn points. */
+export interface FloorItem { x: number; y: number; type: ItemType; }
+
+/** One dungeon level: tiles, fog-of-war, FOV, stairs, items, spawn points. */
 export class Level {
   readonly width: number;
   readonly height: number;
   tiles: TileType[][] = [];
   explored: boolean[][] = [];
+  items: FloorItem[] = [];
   start = { x: 1, y: 1 };
   stairs = { x: 1, y: 1 };
 
@@ -81,5 +85,15 @@ export class Level {
 
   randomFloor(): { x: number; y: number } {
     return ROT.RNG.getItem(this.floors)!;
+  }
+
+  itemAt(x: number, y: number): FloorItem | undefined {
+    return this.items.find((i) => i.x === x && i.y === y);
+  }
+
+  revealAll(): void {
+    for (let y = 0; y < this.height; y++)
+      for (let x = 0; x < this.width; x++)
+        if (this.tiles[y][x]) this.explored[y][x] = true;
   }
 }

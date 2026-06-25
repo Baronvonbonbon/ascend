@@ -8,10 +8,12 @@ web3 ethos of **privacy, independence, and resiliency** — where provisions are
 bought with **PAS** and your deeds are recorded on-chain (reusing the
 [Datum](https://datum.javcon.io) relay + Paseo testnet).
 
-> **Status: Phase 0 — playable foundation.** Walkable procedural dungeon, fog-of-war
-> FOV, monsters with chase/wander AI, melee + permadeath, descending stairs, a
-> message log, and a status line. The economy, items, mythology, and on-chain
-> layer arrive in later phases — see **[DESIGN.md](./DESIGN.md)** for the full plan.
+> **Status: Phase 1 — core roguelike systems.** Procedural dungeon, fog-of-war FOV,
+> monsters with AI, melee + permadeath, **items** (weapons/armor/food/potions/scrolls)
+> on the floor, an **inventory**, **equip** (weapon damage + armor soak), **consumables**
+> with effects (heal/harm/strength/teleport/map/identify), a **hunger clock**, and
+> **identification** (randomised potion/scroll appearances). The PAS economy,
+> mythology, and on-chain layer arrive next — see **[DESIGN.md](./DESIGN.md)**.
 
 ## Play it
 
@@ -20,8 +22,8 @@ npm install
 npm run dev      # http://localhost:5180
 ```
 
-**Controls:** move with **arrows** / **hjkl** / **numpad**, diagonals **yubn**,
-descend stairs `>`, wait `.`, restart `R`.
+**Controls:** move **arrows/hjkl/yubn** · pick up `,` · inventory `i` · wield `w` ·
+wear `W` · quaff `q` · read `r` · eat `e` · drop `d` · descend `>` · wait `.` · restart `R`.
 
 `npm run build` → typecheck + production bundle in `dist/`.
 

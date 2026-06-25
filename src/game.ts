@@ -5,6 +5,7 @@ import { Log } from "./log";
 import {
   COLORS, TILE_GLYPH, MONSTERS, MonsterDef, DEATHS, GREETINGS,
 } from "./data";
+import { Idents, ITEMS, pickItemType, ItemType, EffectId } from "./items";
 
 const W = 80;
 const MAP_H = 30;
@@ -17,6 +18,7 @@ export class Game {
   readonly log: Log;
   level!: Level;
   player!: Player;
+  ident!: Idents;
   monsters: Monster[] = [];
   private scheduler = new ROT.Scheduler.Simple<Entity>();
   private engine!: ROT.Engine;
@@ -38,16 +40,29 @@ export class Game {
     this.over = false;
     this.scheduler.clear();
     this.monsters = [];
+    this.ident = new Idents();
     this.level = new Level(W, MAP_H);
     this.player = new Player(this, this.level.start.x, this.level.start.y);
+    this.giveStartingKit();
     this.spawnMonsters();
+    this.spawnItems();
     this.scheduler.add(this.player, true);
     for (const m of this.monsters) this.scheduler.add(m, true);
     this.level.computeFOV(this.player.x, this.player.y);
     this.log.add(ROT.RNG.getItem(GREETINGS)!, "sys");
+    this.log.add("Keys: move (arrows/hjkl/yubn), , pick up, i inventory, w wield, W wear, q quaff, r read, e eat, > descend.", "dim");
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
+  }
+
+  private giveStartingKit(): void {
+    const dagger = ITEMS.find((i) => i.id === "dagger")!;
+    const ration = ITEMS.find((i) => i.id === "ration")!;
+    const wielded = this.player.inventory.add(dagger);
+    this.player.weapon = wielded;
+    this.player.attackDmg = dagger.dmg!;
+    this.player.inventory.add(ration);
   }
 
   descend(): void {
@@ -59,6 +74,7 @@ export class Game {
     this.scheduler.clear();
     this.scheduler.add(this.player, true);
     this.spawnMonsters();
+    this.spawnItems();
     for (const m of this.monsters) this.scheduler.add(m, true);
     this.level.computeFOV(this.player.x, this.player.y);
     this.log.add(`You descend to depth ${this.player.depth}. The stack deepens.`, "sys");
@@ -77,11 +93,93 @@ export class Game {
   // ── combat ─────────────────────────────────────────────────────────────────
   attack(a: Entity, d: Entity): void {
     const [lo, hi] = a.attackDmg;
-    const dmg = ROT.RNG.getUniformInt(lo, hi);
+    let dmg = ROT.RNG.getUniformInt(lo, hi);
+    if (d === this.player && this.player.ac > 0) dmg = Math.max(1, dmg - this.player.ac); // armor soaks
     d.hp -= dmg;
     if (a === this.player) this.log.add(`You strike ${d.name} for ${dmg}.`, "good");
     else if (d === this.player) this.log.add(`${cap(a.name)} hits you for ${dmg}.`, "bad");
     if (d.hp <= 0) this.kill(d);
+  }
+
+  killPlayer(): void {
+    this.gameOver();
+  }
+
+  // ── items ──────────────────────────────────────────────────────────────────
+  private spawnItems(): void {
+    const count = 3 + Math.floor(this.player.depth * 0.7);
+    for (let i = 0; i < count; i++) {
+      const type = pickItemType();
+      let pos = this.level.randomFloor();
+      let tries = 0;
+      while (
+        tries < 40 &&
+        (this.level.itemAt(pos.x, pos.y) ||
+          (pos.x === this.player.x && pos.y === this.player.y) ||
+          this.level.tileAt(pos.x, pos.y) === "stairsDown")
+      ) { pos = this.level.randomFloor(); tries++; }
+      this.level.items.push({ x: pos.x, y: pos.y, type });
+    }
+  }
+
+  tryPickup(): boolean {
+    const fi = this.level.itemAt(this.player.x, this.player.y);
+    if (!fi) { this.log.add("There is nothing here to pick up.", "dim"); return false; }
+    if (this.player.inventory.full) { this.log.add("Your pack is full.", "bad"); return false; }
+    this.player.inventory.add(fi.type);
+    this.level.items = this.level.items.filter((i) => i !== fi);
+    this.log.add(`You pick up ${this.ident.name(fi.type)}.`);
+    return true;
+  }
+
+  dropItem(type: ItemType): void {
+    this.level.items.push({ x: this.player.x, y: this.player.y, type });
+  }
+
+  showInventory(): void {
+    const inv = this.player.inventory;
+    if (inv.items.length === 0) { this.log.add("Your pack is empty.", "dim"); return; }
+    this.log.add("— Inventory —", "sys");
+    inv.items.forEach((it, i) => {
+      const eq = it === this.player.weapon ? " (wielded)" : it === this.player.armor ? " (worn)" : "";
+      this.log.add(`  ${inv.letter(i)}) ${this.ident.name(it.type)}${eq}`, "dim");
+    });
+  }
+
+  applyEffect(effect: EffectId): void {
+    const p = this.player;
+    switch (effect) {
+      case "heal": {
+        p.hp = Math.min(p.maxHp, p.hp + ROT.RNG.getUniformInt(10, 16));
+        this.log.add("Finality washes over you — your wounds seal.", "good"); break;
+      }
+      case "harm": {
+        p.hp -= ROT.RNG.getUniformInt(4, 8);
+        this.log.add("A reorg tears through you!", "bad"); break;
+      }
+      case "strength": {
+        p.maxHp += 3; p.hp += 3;
+        this.log.add("You feel staked. (max HP increased)", "good"); break;
+      }
+      case "teleport": {
+        let pos = this.level.randomFloor(), t = 0;
+        while (t < 40 && (this.monsterAt(pos.x, pos.y) || this.level.tileAt(pos.x, pos.y) === "stairsDown")) { pos = this.level.randomFloor(); t++; }
+        p.x = pos.x; p.y = pos.y; this.level.computeFOV(p.x, p.y);
+        this.log.add("You blink across the chain.", "sys"); break;
+      }
+      case "map": {
+        this.level.revealAll();
+        this.log.add("A light client reveals the whole level.", "sys"); break;
+      }
+      case "identify": {
+        const unk = p.inventory.items.find((it) => !this.ident.isKnown(it.type));
+        if (unk) { this.ident.learn(unk.type); this.log.add(`It is ${unk.type.name}.`, "good"); }
+        else this.log.add("You have nothing to identify.", "dim");
+        break;
+      }
+    }
+    if (p.hp <= 0) this.killPlayer();
+    this.draw();
   }
 
   private kill(d: Entity): void {
@@ -145,6 +243,9 @@ export class Game {
         else if (this.level.explored[y][x]) this.display.draw(x, y, g.ch, g.fgDim, COLORS.bg);
       }
     }
+    for (const fi of this.level.items) {
+      if (this.level.isVisible(fi.x, fi.y)) this.display.draw(fi.x, fi.y, fi.type.ch, fi.type.fg, COLORS.bg);
+    }
     for (const m of this.monsters) {
       if (m.alive && this.level.isVisible(m.x, m.y)) this.display.draw(m.x, m.y, m.ch, m.fg, COLORS.bg);
     }
@@ -152,9 +253,14 @@ export class Game {
 
     const p = this.player;
     const hpCol = p.hp <= p.maxHp * 0.3 ? COLORS.bad : COLORS.good;
+    const hunger = p.hungerWord();
     this.display.drawText(
       1, MAP_H + 1,
-      `%c{${COLORS.dim}}HP %c{${hpCol}}${p.hp}%c{${COLORS.dim}}/${p.maxHp}   Depth %c{${COLORS.gold}}${p.depth}%c{${COLORS.dim}}   PAS %c{${COLORS.gold}}${p.pas}%c{${COLORS.dim}}   JAM: not found`,
+      `%c{${COLORS.dim}}HP %c{${hpCol}}${p.hp}%c{${COLORS.dim}}/${p.maxHp}  Depth %c{${COLORS.gold}}${p.depth}` +
+      `%c{${COLORS.dim}}  AC %c{${COLORS.good}}${p.ac}` +
+      `%c{${COLORS.dim}}  PAS %c{${COLORS.gold}}${p.pas}` +
+      (hunger ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}${hunger}` : "") +
+      `%c{${COLORS.dim}}  JAM: not found`,
     );
   }
 }
