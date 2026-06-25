@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ascend — a roguelike on Polkadot</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛓️</text></svg>" />
+    <style>
+      :root { --paper: #d8d2c0; --ink: #c9c4b0; --bg: #0a0a0c; --gold: #e0b94d; --dim: #6c6a60; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font-family: "Courier New", monospace; }
+      #app { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px; min-height: 100%; }
+      #title { color: var(--gold); letter-spacing: 2px; font-size: 13px; }
+      #title small { color: var(--dim); letter-spacing: 0; }
+      #screen { line-height: 0; box-shadow: 0 0 0 1px #222, 0 0 40px rgba(224,185,77,.08); }
+      #log {
+        width: 100%; max-width: 960px; height: 120px; overflow-y: auto;
+        background: #08080a; border: 1px solid #1c1c20; padding: 6px 10px;
+        font-size: 13px; line-height: 1.45;
+      }
+      #log .msg--good { color: #76c66a; } #log .msg--bad { color: #c75c5c; }
+      #log .msg--sys  { color: var(--gold); } #log .msg--dim { color: var(--dim); }
+      #help { color: var(--dim); font-size: 12px; max-width: 960px; }
+      a { color: var(--gold); }
+    </style>
+    <script type="module" crossorigin src="/ascend/assets/index-CwB5uRMC.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <div id="title">⛓ ASCEND <small>— descend to recover the JAM</small></div>
+      <div id="screen"></div>
+      <div id="log"></div>
+      <div id="help">
+        Move: <b>arrows</b> / <b>hjkl</b> / <b>numpad</b> · diagonals <b>yubn</b> · descend <b>&gt;</b> · wait <b>.</b> · restart <b>R</b>
+      </div>
+    </div>
+  </body>
+</html>
