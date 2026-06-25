@@ -1,0 +1,32 @@
+name: Deploy to GitHub Pages
+
+# Builds the static game and publishes it to the gh-pages branch (served by
+# Pages: Settings → Pages → Source "Deploy from a branch: gh-pages /"). Pushes
+# to a branch via peaceiris rather than the flaky actions/deploy-pages API.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install && npm run build:pages
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          publish_branch: gh-pages
