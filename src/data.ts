@@ -15,14 +15,31 @@ export const COLORS = {
   dim:       "#6c6a60",
 };
 
-export type TileType = "wall" | "floor" | "door" | "stairsDown";
+export type TileType = "wall" | "floor" | "door" | "stairsDown" | "stairsUp" | "altar";
 
 export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: string }> = {
   wall:       { ch: "#", fg: COLORS.wall,   fgDim: COLORS.wallDim },
   floor:      { ch: "·", fg: COLORS.floor,  fgDim: COLORS.floorDim },
   door:       { ch: "+", fg: COLORS.door,   fgDim: "#5a4520" },
   stairsDown: { ch: ">", fg: COLORS.stairs, fgDim: "#6a5a28" },
+  stairsUp:   { ch: "<", fg: COLORS.stairs, fgDim: "#6a5a28" },
+  altar:      { ch: "_", fg: "#c0d0e0",     fgDim: "#4a5560" },
 };
+
+export const MAX_DEPTH = 8; // the JAM lies on the deepest floor
+
+/** Realms deepen and grow chaotic — a nod to Polkadot → Kusama. */
+export function realmName(depth: number): string {
+  if (depth >= 7) return "the Kusama Deeps";
+  if (depth >= 4) return "the Parachain Reaches";
+  return "the Legacy Stack";
+}
+
+export const GRAY_PAPER = [
+  "From the Gray Paper: 'A chain ascends when it needs no master.'",
+  "Descend the Dungeon of Doom to depth 8. There lies the JAM — the artifact",
+  "of trustless finality. Take it, then climb back and ASCEND.",
+];
 
 export interface MonsterDef {
   name: string;
@@ -43,6 +60,11 @@ export const MONSTERS: MonsterDef[] = [
   { name: "a gas wraith",      ch: "w", fg: "#c08adf", hp: 6,  dmg: [2, 3], ai: "chase",  minDepth: 3, weight: 3 },
   { name: "a censor imp",      ch: "i", fg: "#d05c5c", hp: 8,  dmg: [3, 5], ai: "chase",  minDepth: 4, weight: 2 },
 ];
+
+/** The Censor — a unique boss guarding the JAM on the deepest floor. */
+export const CENSOR: MonsterDef = {
+  name: "THE CENSOR", ch: "C", fg: "#ff3b3b", hp: 48, dmg: [6, 11], ai: "chase", minDepth: 99, weight: 0,
+};
 
 export const DEATHS = [
   "Your stack overflowed.",

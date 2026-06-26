@@ -58,7 +58,7 @@ export class Level {
 
   private lightPasses(x: number, y: number): boolean {
     const t = this.tiles[y]?.[x];
-    return t === "floor" || t === "door" || t === "stairsDown";
+    return t === "floor" || t === "door" || t === "stairsDown" || t === "stairsUp" || t === "altar";
   }
 
   isPassable(x: number, y: number): boolean {

@@ -4,8 +4,9 @@ import { Entity, Player, Monster } from "./entities";
 import { Log } from "./log";
 import {
   COLORS, TILE_GLYPH, MONSTERS, MonsterDef, DEATHS, GREETINGS,
+  MAX_DEPTH, CENSOR, realmName, GRAY_PAPER,
 } from "./data";
-import { Idents, ITEMS, pickItemType, ItemType, EffectId } from "./items";
+import { Idents, ITEMS, JAM, pickItemType, ItemType, EffectId } from "./items";
 import { connectWallet, Wallet } from "./chain/wallet";
 import { bankBalancePas, spendPas, depositPas } from "./chain/bank";
 
@@ -44,20 +45,14 @@ export class Game {
   // ── lifecycle ──────────────────────────────────────────────────────────────
   newGame(): void {
     this.over = false;
-    this.scheduler.clear();
-    this.monsters = [];
     this.ident = new Idents();
     this.level = new Level(W, MAP_H);
     this.player = new Player(this, this.level.start.x, this.level.start.y);
     this.giveStartingKit();
-    this.spawnMonsters();
-    this.spawnItems();
-    this.spawnShop();
-    this.scheduler.add(this.player, true);
-    for (const m of this.monsters) this.scheduler.add(m, true);
-    this.level.computeFOV(this.player.x, this.player.y);
+    this.enterLevel();
     this.log.add(ROT.RNG.getItem(GREETINGS)!, "sys");
-    this.log.add("Keys: move (arrows/hjkl/yubn), , pick up, i inventory, w wield, W wear, q quaff, r read, e eat, > descend.", "dim");
+    for (const line of GRAY_PAPER) this.log.add(line, "dim");
+    this.log.add("Keys: move · , pick up · p buy · P pray · < up · > down · i/w/W/q/r/e/d items.", "dim");
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
@@ -72,20 +67,96 @@ export class Game {
     this.player.inventory.add(ration);
   }
 
-  descend(): void {
-    this.player.depth++;
-    this.level = new Level(W, MAP_H);
-    this.player.x = this.level.start.x;
-    this.player.y = this.level.start.y;
+  /** Populate the current level and (re)build the turn schedule. */
+  private enterLevel(): void {
     this.monsters = [];
     this.scheduler.clear();
     this.scheduler.add(this.player, true);
     this.spawnMonsters();
     this.spawnItems();
     this.spawnShop();
+    this.placeAltar();
+    if (this.player.depth >= MAX_DEPTH) this.placeJamAndBoss();
     for (const m of this.monsters) this.scheduler.add(m, true);
     this.level.computeFOV(this.player.x, this.player.y);
-    this.log.add(`You descend to depth ${this.player.depth}. The stack deepens.`, "sys");
+  }
+
+  descend(): void {
+    this.player.depth++;
+    this.level = new Level(W, MAP_H);
+    this.player.x = this.level.start.x;
+    this.player.y = this.level.start.y;
+    this.placeUpStair();
+    this.enterLevel();
+    this.log.add(`You descend to depth ${this.player.depth} — ${realmName(this.player.depth)}.`, this.player.depth >= 7 ? "bad" : "sys");
+    if (this.player.depth >= 7 && this.player.depth < MAX_DEPTH) this.log.add("Chaos thickens. Expect Kusama.", "bad");
+    if (this.player.depth >= MAX_DEPTH) this.log.add("The air reeks of centralisation. The JAM is here — and so is its keeper.", "bad");
+    this.draw();
+  }
+
+  ascend(): void {
+    const newDepth = this.player.depth - 1;
+    if (newDepth < 1) return;
+    this.player.depth = newDepth;
+    if (newDepth === 1 && this.player.hasJam) { this.win(); return; }
+    this.level = new Level(W, MAP_H);
+    this.player.x = this.level.stairs.x; // you climb up INTO the down-stairs of the level above
+    this.player.y = this.level.stairs.y;
+    if (newDepth > 1) this.placeUpStair();
+    this.enterLevel();
+    this.log.add(`You climb to depth ${newDepth} — ${realmName(newDepth)}.`, "sys");
+    this.draw();
+  }
+
+  private placeUpStair(): void {
+    const s = this.level.start;
+    this.level.tiles[s.y][s.x] = "stairsUp";
+  }
+
+  private placeJamAndBoss(): void {
+    const s = this.level.stairs;
+    this.level.tiles[s.y][s.x] = "floor"; // the bottom — no stairs deeper
+    this.level.items.push({ x: s.x, y: s.y, type: JAM });
+    const offs = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]];
+    for (const [dx, dy] of offs) {
+      const x = s.x + dx, y = s.y + dy;
+      if (this.level.isPassable(x, y) && !this.monsterAt(x, y) && !(x === this.player.x && y === this.player.y)) {
+        this.monsters.push(new Monster(this, CENSOR, x, y));
+        break;
+      }
+    }
+  }
+
+  private placeAltar(): void {
+    if (ROT.RNG.getUniform() > 0.45) return;
+    const centers = this.level.roomCenters.filter(
+      (c) => this.level.tileAt(c.x, c.y) === "floor" && !(c.x === this.player.x && c.y === this.player.y),
+    );
+    if (!centers.length) return;
+    const c = ROT.RNG.getItem(centers)!;
+    this.level.tiles[c.y][c.x] = "altar";
+  }
+
+  pray(): void {
+    const p = this.player;
+    if (p.prayerCooldown > 0) { this.log.add("Gavin is unmoved — pray again later.", "dim"); return; }
+    p.prayerCooldown = 130;
+    p.hp = p.maxHp;
+    p.nutrition = Math.max(p.nutrition, 600);
+    this.log.add("Gavin, the Architect, hears you. You are made whole.", "good");
+    if (ROT.RNG.getUniform() < 0.4) {
+      for (const it of p.inventory.items) this.ident.learn(it.type);
+      this.log.add("Truth is revealed — your pack is identified.", "sys");
+    }
+    this.draw();
+  }
+
+  private win(): void {
+    if (this.over) return;
+    this.over = true;
+    this.log.add("✦ You climb into the light, the JAM blazing in your grasp. ✦", "good");
+    this.log.add("ASCENSION! The chain needs no master. You have won, Seeker.", "sys");
+    this.log.add("Press R to begin a new descent.", "dim");
     this.draw();
   }
 
@@ -133,6 +204,12 @@ export class Game {
   tryPickup(): boolean {
     const fi = this.level.itemAt(this.player.x, this.player.y);
     if (!fi) { this.log.add("There is nothing here to pick up.", "dim"); return false; }
+    if (fi.type.id === "jam") {
+      this.player.hasJam = true;
+      this.level.items = this.level.items.filter((i) => i !== fi);
+      this.log.add("You seize the JAM! Finality is yours. Now ASCEND — climb back to the surface (press <).", "good");
+      return true;
+    }
     if (this.player.inventory.full) { this.log.add("Your pack is full.", "bad"); return false; }
     this.player.inventory.add(fi.type);
     this.level.items = this.level.items.filter((i) => i !== fi);
@@ -335,7 +412,7 @@ export class Game {
       `%c{${COLORS.dim}}  AC %c{${COLORS.good}}${p.ac}` +
       `%c{${COLORS.dim}}  PAS %c{${COLORS.gold}}${p.pas}` +
       (hunger ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}${hunger}` : "") +
-      `%c{${COLORS.dim}}  JAM: not found`,
+      (p.hasJam ? `%c{${COLORS.dim}}  %c{${COLORS.gold}}✦JAM — ASCEND (<)` : `%c{${COLORS.dim}}  JAM: depth ${MAX_DEPTH}`),
     );
   }
 }

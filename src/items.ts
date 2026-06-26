@@ -2,7 +2,10 @@
 
 import * as ROT from "rot-js";
 
-export type ItemKind = "weapon" | "armor" | "food" | "potion" | "scroll";
+export type ItemKind = "weapon" | "armor" | "food" | "potion" | "scroll" | "amulet";
+
+/** The JAM — the Amulet of Yendor of this world. Unique; never randomly spawned. */
+export const JAM: ItemType = { id: "jam", kind: "amulet", name: "the JAM", ch: "*", fg: "#f4e89a", weight: 0 };
 
 export interface ItemType {
   id: string;

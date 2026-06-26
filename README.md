@@ -8,12 +8,12 @@ web3 ethos of **privacy, independence, and resiliency** — where provisions are
 bought with **PAS** and your deeds are recorded on-chain (reusing the
 [Datum](https://datum.javcon.io) relay + Paseo testnet).
 
-> **Status: Phase 2 — the PAS economy.** Everything from Phase 1 (items, inventory,
-> equipment, consumables, hunger, identification) **plus a real on-chain economy**:
-> connect a wallet (MetaMask/Nova on Paseo), load PAS into your purse (one tx via
-> the **AscendBank** contract), then buy provisions at in-dungeon **bazaars** —
-> **gaslessly** (you sign, the Datum relay submits + pays gas). Mythology, the JAM
-> endgame, and on-chain leaderboards/NFT gear come next — see **[DESIGN.md](./DESIGN.md)**.
+> **Status: Phase 3 — mythology & a winnable endgame.** Everything from Phases 1–2
+> **plus a goal**: descend through realms (the Legacy Stack → Parachain Reaches →
+> the Kusama Deeps) to **depth 8**, slay **THE CENSOR**, seize **the JAM**, then
+> climb back to the surface (`<`) to **ASCEND** and win. Plus **Gavin's altars**
+> (`P` to pray → be made whole), the **Gray Paper** intro, and a theming pass.
+> On-chain leaderboards/bones + NFT gear are Phase 4 — see **[DESIGN.md](./DESIGN.md)**.
 
 **On-chain:** `AscendBank` on Paseo (`0x3D35694e…FcD31`) holds your purse; shop
 purchases are gasless `spendBySig` meta-transactions relayed by the Datum relay.

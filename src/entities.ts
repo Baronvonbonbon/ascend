@@ -46,6 +46,8 @@ export class Player extends Entity {
   inventory = new Inventory();
   weapon: Item | null = null;
   armor: Item | null = null;
+  hasJam = false;
+  prayerCooldown = 0;
   private pending: Verb | null = null;
   private resolveTurn: (() => void) | null = null;
 
@@ -67,6 +69,7 @@ export class Player extends Entity {
 
   private endTurn(): boolean {
     this.tickHunger();
+    if (this.prayerCooldown > 0) this.prayerCooldown--;
     const r = this.resolveTurn;
     this.resolveTurn = null;
     if (r) r();
@@ -100,6 +103,8 @@ export class Player extends Entity {
     switch (e.key) {
       case ".": case "5": this.game.log.add("You wait.", "dim"); return this.endTurn();
       case ">": return this.tryDescend();
+      case "<": return this.tryAscend();
+      case "P": return this.tryPray();
       case ",": case "g": return this.game.tryPickup() ? this.endTurn() : false;
       case "p": void this.game.tryBuy(); return false; // shop purchase (async, gasless — no turn)
       case "i": this.game.showInventory(); return false;
@@ -199,6 +204,24 @@ export class Player extends Entity {
       return false;
     }
     this.game.descend();
+    return this.endTurn();
+  }
+
+  private tryAscend(): boolean {
+    if (this.game.level.tileAt(this.x, this.y) !== "stairsUp") {
+      this.game.log.add("There are no stairs up here.", "dim");
+      return false;
+    }
+    this.game.ascend();
+    return this.endTurn();
+  }
+
+  private tryPray(): boolean {
+    if (this.game.level.tileAt(this.x, this.y) !== "altar") {
+      this.game.log.add("You can only pray at an altar (_).", "dim");
+      return false;
+    }
+    this.game.pray();
     return this.endTurn();
   }
 }
