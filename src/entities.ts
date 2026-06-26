@@ -48,7 +48,14 @@ export class Player extends Entity {
   armor: Item | null = null;
   hasJam = false;
   maxDepthReached = 1;
+  weaponBonus = 0; // from scrolls of enchantment
   prayerCooldown = 0;
+
+  /** Recompute attack damage from the wielded weapon (or fists) + enchant bonus. */
+  applyWeapon(): void {
+    if (this.weapon) this.attackDmg = [this.weapon.type.dmg![0] + this.weaponBonus, this.weapon.type.dmg![1] + this.weaponBonus];
+    else this.attackDmg = [1, 3];
+  }
   private pending: Verb | null = null;
   private resolveTurn: (() => void) | null = null;
 
@@ -145,7 +152,7 @@ export class Player extends Entity {
     switch (verb) {
       case "wield":
         if (t.kind !== "weapon") { this.game.log.add("That is not a weapon.", "dim"); return false; }
-        this.weapon = item; this.attackDmg = t.dmg!;
+        this.weapon = item; this.applyWeapon();
         this.game.log.add(`You wield ${ident.name(t)}.`, "good"); return this.endTurn();
       case "wear":
         if (t.kind !== "armor") { this.game.log.add("You can't wear that.", "dim"); return false; }
@@ -174,7 +181,7 @@ export class Player extends Entity {
   }
 
   private unequip(item: Item): void {
-    if (this.weapon === item) { this.weapon = null; this.attackDmg = [1, 3]; }
+    if (this.weapon === item) { this.weapon = null; this.applyWeapon(); }
     if (this.armor === item) { this.armor = null; this.ac = 0; }
   }
 
@@ -198,6 +205,8 @@ export class Player extends Entity {
     }
     const grave = this.game.level.graveAt(this.x, this.y);
     if (grave) this.game.log.add(`☗ ${grave.label}.`, "dim");
+    const trap = this.game.level.trapAt(this.x, this.y);
+    if (trap) this.game.triggerTrap(trap);
     this.game.draw();
     return this.endTurn();
   }
@@ -245,6 +254,9 @@ export class Monster extends Entity {
   act(): void {
     const p = this.game.player;
     if (!p.alive || !this.alive) return;
+
+    // The Sybil attack: occasionally a sybil spends its turn replicating.
+    if (this.def.splits && ROT.RNG.getUniform() < 0.1 && this.game.spawnSybilNear(this.x, this.y)) return;
 
     const dist = Math.max(Math.abs(this.x - p.x), Math.abs(this.y - p.y));
     if (dist === 1) { this.game.attack(this, p); return; }

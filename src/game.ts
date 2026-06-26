@@ -1,5 +1,5 @@
 import * as ROT from "rot-js";
-import { Level } from "./level";
+import { Level, Trap, TrapKind } from "./level";
 import { Entity, Player, Monster } from "./entities";
 import { Log } from "./log";
 import {
@@ -84,6 +84,7 @@ export class Game {
     this.spawnShop();
     this.placeAltar();
     this.maybePlaceBones();
+    this.spawnTraps();
     if (this.player.depth >= MAX_DEPTH) this.placeJamAndBoss();
     for (const m of this.monsters) this.scheduler.add(m, true);
     this.level.computeFOV(this.player.x, this.player.y);
@@ -306,6 +307,11 @@ export class Game {
         else this.log.add("You have nothing to identify.", "dim");
         break;
       }
+      case "enchant": {
+        if (p.weapon) { p.weaponBonus++; p.applyWeapon(); this.log.add(`Your ${p.weapon.type.name} thrums with finality. (+${p.weaponBonus})`, "good"); }
+        else this.log.add("You have no weapon to enchant.", "dim");
+        break;
+      }
     }
     if (p.hp <= 0) this.killPlayer();
     this.draw();
@@ -389,7 +395,7 @@ export class Game {
   // ── spawns ─────────────────────────────────────────────────────────────────
   private spawnMonsters(): void {
     const depth = this.player.depth;
-    const count = 4 + Math.floor(depth * 1.5);
+    const count = 4 + Math.floor(depth * 1.5) + (depth >= 7 ? 4 : 0); // the Kusama Deeps swarm
     for (let i = 0; i < count; i++) {
       const def = this.pickMonster(depth);
       let pos = this.level.randomFloor();
@@ -419,6 +425,53 @@ export class Game {
     return this.monsters.find((m) => m.alive && m.x === x && m.y === y);
   }
 
+  /** A sybil replicates into an adjacent free cell (capped). */
+  spawnSybilNear(x: number, y: number): boolean {
+    if (this.monsters.length >= 40) return false;
+    const offs = ROT.RNG.shuffle([[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]] as [number, number][]);
+    for (const [dx, dy] of offs) {
+      const nx = x + dx, ny = y + dy;
+      if (this.level.isPassable(nx, ny) && !this.monsterAt(nx, ny) && !(nx === this.player.x && ny === this.player.y)) {
+        const m = new Monster(this, MONSTERS[0], nx, ny);
+        this.monsters.push(m);
+        this.scheduler.add(m, true);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private spawnTraps(): void {
+    const count = 2 + Math.floor(this.player.depth * 0.8);
+    const kinds: TrapKind[] = ["gas", "slash", "reorg"];
+    for (let i = 0; i < count; i++) {
+      let pos = this.level.randomFloor();
+      let tries = 0;
+      while (tries < 40 && (this.level.tileAt(pos.x, pos.y) !== "floor" || this.level.trapAt(pos.x, pos.y) ||
+             this.level.itemAt(pos.x, pos.y) || (pos.x === this.player.x && pos.y === this.player.y))) {
+        pos = this.level.randomFloor(); tries++;
+      }
+      if (this.level.tileAt(pos.x, pos.y) === "floor")
+        this.level.traps.push({ x: pos.x, y: pos.y, kind: ROT.RNG.getItem(kinds)!, revealed: false });
+    }
+  }
+
+  triggerTrap(trap: Trap): void {
+    trap.revealed = true;
+    const p = this.player;
+    switch (trap.kind) {
+      case "gas": { const d = ROT.RNG.getUniformInt(3, 7); p.hp -= d; this.log.add(`A gas-fee trap drains ${d} from you!`, "bad"); break; }
+      case "slash": { const d = ROT.RNG.getUniformInt(6, 12); p.hp -= d; this.log.add(`A slashing trap bites for ${d}!`, "bad"); break; }
+      case "reorg": {
+        let pos = this.level.randomFloor(), t = 0;
+        while (t < 40 && (this.monsterAt(pos.x, pos.y) || this.level.tileAt(pos.x, pos.y) === "stairsDown")) { pos = this.level.randomFloor(); t++; }
+        p.x = pos.x; p.y = pos.y; this.level.computeFOV(p.x, p.y);
+        this.log.add("A reorg trap flings you across the level!", "bad"); break;
+      }
+    }
+    if (p.hp <= 0) this.killPlayer();
+  }
+
   // ── input + render ───────────────────────────────────────────────────────
   private onKey(e: KeyboardEvent): void {
     if (this.over) {
@@ -441,6 +494,9 @@ export class Game {
     }
     for (const g of this.level.graves) {
       if (this.level.isVisible(g.x, g.y)) this.display.draw(g.x, g.y, "‡", "#b0a890", COLORS.bg);
+    }
+    for (const t of this.level.traps) {
+      if (t.revealed && this.level.isVisible(t.x, t.y)) this.display.draw(t.x, t.y, "^", "#d06060", COLORS.bg);
     }
     for (const fi of this.level.items) {
       if (this.level.isVisible(fi.x, fi.y)) this.display.draw(fi.x, fi.y, fi.type.ch, fi.type.fg, fi.price ? "#2a2208" : COLORS.bg);

@@ -49,16 +49,21 @@ export interface MonsterDef {
   dmg: [number, number]; // inclusive min..max
   ai: "chase" | "wander";
   minDepth: number;
-  weight: number; // spawn weight
+  weight: number;        // spawn weight
+  splits?: boolean;      // a sybil — occasionally replicates (the Sybil attack)
 }
 
-// First themed bestiary — the centralised legacy stack fights back.
+// Themed bestiary — the centralised legacy stack fights back.
 export const MONSTERS: MonsterDef[] = [
-  { name: "a swarm of sybils", ch: "s", fg: "#9a9a9a", hp: 3,  dmg: [1, 2], ai: "chase",  minDepth: 1, weight: 6 },
+  { name: "a sybil",           ch: "s", fg: "#9a9a9a", hp: 3,  dmg: [1, 2], ai: "chase",  minDepth: 1, weight: 6, splits: true },
   { name: "a rust bug",        ch: "x", fg: "#7ac06a", hp: 2,  dmg: [1, 1], ai: "wander", minDepth: 1, weight: 5 },
   { name: "a validator golem", ch: "V", fg: "#5c8ad0", hp: 12, dmg: [2, 4], ai: "chase",  minDepth: 2, weight: 3 },
+  { name: "a fork daemon",     ch: "f", fg: "#d0a0d0", hp: 7,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 3 },
   { name: "a gas wraith",      ch: "w", fg: "#c08adf", hp: 6,  dmg: [2, 3], ai: "chase",  minDepth: 3, weight: 3 },
+  { name: "a rug puller",      ch: "r", fg: "#d08040", hp: 5,  dmg: [3, 6], ai: "chase",  minDepth: 4, weight: 2 },
   { name: "a censor imp",      ch: "i", fg: "#d05c5c", hp: 8,  dmg: [3, 5], ai: "chase",  minDepth: 4, weight: 2 },
+  { name: "a whale",           ch: "O", fg: "#4090c0", hp: 24, dmg: [3, 6], ai: "chase",  minDepth: 5, weight: 2 },
+  { name: "a 51% attacker",    ch: "A", fg: "#e05050", hp: 16, dmg: [4, 8], ai: "chase",  minDepth: 6, weight: 2 },
 ];
 
 /** The Censor — a unique boss guarding the JAM on the deepest floor. */

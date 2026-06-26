@@ -17,6 +17,10 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > it's recorded on-chain **gaslessly** (you sign, the relay submits) into the
 > **AscendLedger** Hall of Fame (`H` to view), and fallen heroes leave **bones**
 > (`‡` graves) that surface in later descents. NFT gear is the remaining Phase 4b.
+>
+> **Phase 5 (toward parity)** has begun: hidden **traps** (`^` — gas-fee / slashing /
+> reorg), a bigger bestiary including self-replicating **sybils** and the deadlier
+> **Kusama Deeps** swarm, and **scrolls of enchantment** for weapon progression.
 
 **On-chain (Paseo):** `AscendBank` (`0x3D35694e…FcD31`) holds your purse for gasless
 shop spends; `AscendLedger` (`0x56068D…ccaa5`) is the gasless run record + bones.

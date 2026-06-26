@@ -3,6 +3,8 @@ import type { TileType } from "./data";
 import type { ItemType } from "./items";
 
 export interface FloorItem { x: number; y: number; type: ItemType; price?: number; } // price set = a shop ware
+export type TrapKind = "gas" | "reorg" | "slash";
+export interface Trap { x: number; y: number; kind: TrapKind; revealed: boolean; }
 
 /** One dungeon level: tiles, fog-of-war, FOV, stairs, items, spawn points. */
 export class Level {
@@ -12,6 +14,7 @@ export class Level {
   explored: boolean[][] = [];
   items: FloorItem[] = [];
   graves: { x: number; y: number; label: string }[] = []; // bones of fallen heroes
+  traps: Trap[] = [];
   roomCenters: { x: number; y: number }[] = [];
   start = { x: 1, y: 1 };
   stairs = { x: 1, y: 1 };
@@ -94,6 +97,10 @@ export class Level {
 
   graveAt(x: number, y: number): { x: number; y: number; label: string } | undefined {
     return this.graves.find((g) => g.x === x && g.y === y);
+  }
+
+  trapAt(x: number, y: number): Trap | undefined {
+    return this.traps.find((t) => t.x === x && t.y === y);
   }
 
   revealAll(): void {
