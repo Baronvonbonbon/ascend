@@ -53,6 +53,8 @@ export class Player extends Entity {
   ring: Item | null = null;
   stealth = false;     // ring of privacy — monsters can't track you
   regenFast = false;   // ring of regeneration
+  poison = 0;          // turns of damage-over-time remaining
+  confused = 0;        // turns of staggering movement remaining
   private regenTimer = 0;
   hasJam = false;
   maxDepthReached = 1;
@@ -96,8 +98,15 @@ export class Player extends Entity {
   private endTurn(): boolean {
     this.tickHunger();
     if (this.prayerCooldown > 0) this.prayerCooldown--;
-    // Natural regeneration (faster with a ring of regeneration; not while starving).
-    if (this.hp < this.maxHp && this.nutrition > 0 && ++this.regenTimer >= (this.regenFast ? 5 : 14)) {
+    // Poison: damage over time. Confusion: just counts down.
+    if (this.poison > 0) {
+      this.poison--; this.hp--;
+      if (this.poison === 0) this.game.log.add("The poison passes.", "dim");
+      if (this.hp <= 0) { this.game.log.add("The poison takes you.", "bad"); this.game.killPlayer(); }
+    }
+    if (this.confused > 0 && --this.confused === 0) this.game.log.add("Your head clears.", "dim");
+    // Natural regeneration (faster with a ring of regeneration; not while starving/poisoned).
+    if (this.hp < this.maxHp && this.nutrition > 0 && this.poison === 0 && ++this.regenTimer >= (this.regenFast ? 5 : 14)) {
       this.regenTimer = 0; this.hp++;
     }
     const r = this.resolveTurn;
@@ -240,6 +249,11 @@ export class Player extends Entity {
   }
 
   private tryMove(dx: number, dy: number): boolean {
+    if (this.confused > 0 && ROT.RNG.getUniform() < 0.6) {
+      const d = ROT.RNG.getItem([[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, 1], [-1, 1], [1, -1]] as [number, number][])!;
+      dx = d[0]; dy = d[1];
+      this.game.log.add("You stagger drunkenly.", "dim");
+    }
     const nx = this.x + dx, ny = this.y + dy;
     const foe = this.game.monsterAt(nx, ny);
     if (foe) { this.game.attack(this, foe); return this.endTurn(); }

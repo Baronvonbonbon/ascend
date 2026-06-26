@@ -154,6 +154,7 @@ export class Game {
     p.prayerCooldown = 130;
     p.hp = p.maxHp;
     p.nutrition = Math.max(p.nutrition, 600);
+    p.poison = 0; p.confused = 0;
     this.log.add("Gavin, the Architect, hears you. You are made whole.", "good");
     if (ROT.RNG.getUniform() < 0.4) {
       for (const it of p.inventory.items) this.ident.learn(it.type);
@@ -222,8 +223,16 @@ export class Game {
     if (d === this.player && this.player.ac > 0) dmg = Math.max(1, dmg - this.player.ac); // armor soaks
     d.hp -= dmg;
     if (a === this.player) this.log.add(`You strike ${d.name} for ${dmg}.`, "good");
-    else if (d === this.player) this.log.add(`${cap(a.name)} hits you for ${dmg}.`, "bad");
+    else if (d === this.player) {
+      this.log.add(`${cap(a.name)} hits you for ${dmg}.`, "bad");
+      if (a instanceof Monster && a.def.inflict && d.hp > 0 && ROT.RNG.getUniform() < 0.3) this.applyStatus(a.def.inflict);
+    }
     if (d.hp <= 0) this.kill(d);
+  }
+
+  applyStatus(kind: "poison" | "confuse"): void {
+    if (kind === "poison") { this.player.poison = Math.max(this.player.poison, 6); this.log.add("You are poisoned!", "bad"); }
+    else { this.player.confused = Math.max(this.player.confused, 5); this.log.add("Your head spins — you're confused!", "bad"); }
   }
 
   killPlayer(): void {
@@ -317,6 +326,7 @@ export class Game {
     switch (effect) {
       case "heal": {
         p.hp = Math.min(p.maxHp, p.hp + ROT.RNG.getUniformInt(10, 16));
+        if (p.poison > 0) { p.poison = 0; this.log.add("The poison is purged.", "good"); }
         this.log.add("Finality washes over you — your wounds seal.", "good"); break;
       }
       case "harm": {
@@ -551,6 +561,8 @@ export class Game {
       `%c{${COLORS.dim}}  AC %c{${COLORS.good}}${p.ac}` +
       `%c{${COLORS.dim}}  PAS %c{${COLORS.gold}}${p.pas}` +
       (hunger ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}${hunger}` : "") +
+      (p.poison > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Psn` : "") +
+      (p.confused > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Cfz` : "") +
       (p.hasJam ? `%c{${COLORS.dim}}  %c{${COLORS.gold}}✦JAM — ASCEND (<)` : `%c{${COLORS.dim}}  JAM: depth ${MAX_DEPTH}`),
     );
   }
