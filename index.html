@@ -21,17 +21,26 @@
       #log .msg--good { color: #76c66a; } #log .msg--bad { color: #c75c5c; }
       #log .msg--sys  { color: var(--gold); } #log .msg--dim { color: var(--dim); }
       #help { color: var(--dim); font-size: 12px; max-width: 960px; }
+      #wallet { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--dim); }
+      #connect, #deposit { font-family: inherit; font-size: 12px; background: #1c1c20; color: var(--gold);
+        border: 1px solid var(--gold); border-radius: 4px; padding: 4px 10px; cursor: pointer; }
+      #connect:hover, #deposit:hover { background: #262620; }
       a { color: var(--gold); }
     </style>
-    <script type="module" crossorigin src="/ascend/assets/index-EubdvgkS.js"></script>
+    <script type="module" crossorigin src="/ascend/assets/index-j3Wifvow.js"></script>
   </head>
   <body>
     <div id="app">
       <div id="title">⛓ ASCEND <small>— descend to recover the JAM</small></div>
+      <div id="wallet">
+        <button id="connect">Connect Wallet</button>
+        <button id="deposit">Load 20 PAS</button>
+        <span id="wstatus">not connected — shop provisions cost PAS (gasless after one deposit)</span>
+      </div>
       <div id="screen"></div>
       <div id="log"></div>
       <div id="help">
-        Move <b>arrows/hjkl/yubn</b> · pick up <b>,</b> · inventory <b>i</b> · wield <b>w</b> · wear <b>W</b> ·
+        Move <b>arrows/hjkl/yubn</b> · pick up <b>,</b> · <b>p</b> buy · inventory <b>i</b> · wield <b>w</b> · wear <b>W</b> ·
         quaff <b>q</b> · read <b>r</b> · eat <b>e</b> · drop <b>d</b> · descend <b>&gt;</b> · wait <b>.</b> · restart <b>R</b>
       </div>
     </div>
