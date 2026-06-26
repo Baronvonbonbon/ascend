@@ -11,7 +11,8 @@ import { Idents, ITEMS, JAM, pickItemType, ItemType, EffectId, itemById, isGear,
 import { connectWallet, Wallet } from "./chain/wallet";
 import { walletBalancePas, buyDirect } from "./chain/bank";
 import { recordRun, readRecent, RunEntry } from "./chain/ledger";
-import { readGear, mintGear } from "./chain/gear";
+import { readGear, forgeGear, forgePrice } from "./chain/gear";
+import { RARITY } from "./chain/config";
 
 const PRICE: Record<string, number> = { weapon: 6, armor: 5, potion: 4, scroll: 4, food: 2 };
 
@@ -65,7 +66,7 @@ export class Game {
     this.log.add(ROT.RNG.getItem(GREETINGS)!, "sys");
     for (const line of GRAY_PAPER) this.log.add(line, "dim");
     this.log.add("Your nominator (d) pads at your heels — it backs you, and bites for you.", "dim");
-    this.log.add("Keys: move · , pick up · p buy · P pray · z zap · t throw · E engrave · < up · > down · i/w/W/q/r/e/d items.", "dim");
+    this.log.add("Keys: move · , pick up · p buy · F forge relic · P pray · z zap · t throw · E engrave · < up · > down · i/w/W/q/r/e/d items.", "dim");
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
@@ -92,6 +93,41 @@ export class Game {
       this.log.add(`✦ ${added} on-chain relic${added > 1 ? "s" : ""} materialise in your pack (yours forever — tradeable).`, "good");
       this.draw();
     }
+  }
+
+  /** Forge a held piece of gear into a tradeable NFT relic — a direct wallet tx.
+   *  The contract rolls rarity on-chain (Common→Legendary), which lifts the enchant. */
+  async forge(item: Item): Promise<void> {
+    if (this.busy) return;
+    if (!this.wallet) { this.log.add("Connect a wallet to forge a relic.", "bad"); return; }
+    if (!isGear(item.type)) { this.log.add("Only equipment — weapons, armor, rings, wands — can be forged.", "dim"); return; }
+    if (item.relic) { this.log.add(`${cap(this.ident.name(item.type))} is already an on-chain relic.`, "dim"); return; }
+    const base = Math.min(item.enchant ?? 0, 3); // the forge accepts at most +3 of base enchant
+    this.busy = true;
+    let priceWei: bigint;
+    try { priceWei = await forgePrice(base); }
+    catch { this.busy = false; this.log.add("The forge is cold — couldn't read its price.", "bad"); return; }
+    const pricePas = Number(priceWei) / 1e18;
+    if (this.player.pas < pricePas) { this.busy = false; this.log.add(`Not enough PAS to forge — needs ${pricePas}, your wallet holds ${this.player.pas.toFixed(1)}.`, "bad"); return; }
+
+    this.log.add(`You lay ${this.ident.name(item.type)} on the forge. Confirm ${pricePas} PAS in your wallet — the chain rolls its rarity…`, "sys"); this.draw();
+    const r = await forgeGear(this.wallet.provider, item.type.id, base, priceWei, (hash) => {
+      this.log.add(`Forge lit (${hash.slice(0, 10)}…). The chain decides its fate — hold fast…`, "dim"); this.draw();
+    });
+    if (!r.ok) { this.busy = false; this.log.add(`The forge fails — ${r.error}.`, "bad"); this.draw(); return; }
+
+    // The held item *becomes* the forged relic (rarity bonus baked into its enchant).
+    item.relic = true; item.enchant = r.enchant ?? base; item.buc = "blessed"; item.bucKnown = true;
+    if (item === this.player.weapon) this.player.applyWeapon();
+    else if (item === this.player.armor) this.player.ac = (item.type.ac ?? 0) + (item.enchant ?? 0) + bucDelta(item.buc);
+    const tier = RARITY[r.rarity ?? 0] ?? "common";
+    this.log.add(`✦ You forge a ${tier.toUpperCase()} ${this.ident.name(item.type)} +${item.enchant} — minted as a tradeable NFT you own. It returns in future runs.`, (r.rarity ?? 0) >= 2 ? "good" : "sys");
+    // Re-sync owned token ids so loadRelics won't double-add this run.
+    for (const g of await readGear(this.wallet.address)) this.loadedRelics.add(g.tokenId);
+    this.player.pas = await walletBalancePas(this.wallet.address);
+    this.onWallet?.(this.wallet.address, this.player.pas);
+    this.busy = false;
+    this.draw();
   }
 
   private async fetchLeaderboard(): Promise<void> {
@@ -751,8 +787,8 @@ export class Game {
         const x = c.x + dx, y = c.y + dy;
         if (this.level.isPassable(x, y) && !this.level.itemAt(x, y) &&
             this.level.tileAt(x, y) !== "stairsDown" && !(x === this.player.x && y === this.player.y)) {
-          this.level.items.push({ x, y, type: rt, price: 12 + enchant * 4, enchant, relic: true, mintOnBuy: true, buc: "blessed", bucKnown: true });
-          this.log.add("A relic vendor is among them — a tradeable NFT, minted to you on purchase.", "dim");
+          this.level.items.push({ x, y, type: rt, price: 12 + enchant * 4, enchant, buc: "blessed", bucKnown: true });
+          this.log.add("A fine enchanted ware is among the stock — forge it (F) into an NFT relic later.", "dim");
           break;
         }
       }
@@ -799,13 +835,7 @@ export class Game {
     this.onWallet?.(this.wallet.address, this.player.pas);
     const tag = fi.relic ? ` +${fi.enchant ?? 0} ✦` : "";
     this.log.add(`Settled on-chain. You buy ${this.ident.name(fi.type)}${tag} for ${fi.price} PAS. Wallet: ${this.player.pas.toFixed(1)}.`, "good");
-    // A relic ware is also minted to you as a tradeable NFT (gasless — the relay holds the minter role).
-    if (fi.relic && fi.mintOnBuy) {
-      this.log.add("The Marketmaker etches your relic on-chain (gasless mint)…", "sys"); this.draw();
-      const g = await mintGear(this.wallet.provider, this.wallet.address, fi.type.id, fi.enchant ?? 0);
-      if (g.ok) this.log.add("✦ Relic minted — an NFT you own and can trade on any marketplace. It returns in future runs.", "good");
-      else this.log.add(`(relic mint skipped: ${g.error})`, "dim");
-    }
+    if (fi.enchant && isGear(fi.type)) this.log.add("A fine piece — forge it (F) into a tradeable NFT relic when you like.", "dim");
     this.busy = false;
     this.draw();
   }
@@ -828,16 +858,8 @@ export class Game {
       const goodies = ITEMS.filter((i) => isGear(i));
       const prize = ROT.RNG.getItem(goodies)!;
       const enchant = ROT.RNG.getUniformInt(1, 3);
-      if (!this.level.itemAt(m.x, m.y)) this.level.items.push({ x: m.x, y: m.y, type: prize, enchant, relic: true, buc: "blessed", bucKnown: true });
-      this.log.add(`${cap(m.name)} falls! It leaves a relic — ${prize.name} +${enchant}.`, "good");
-      // Etch it on-chain as a tradeable NFT (gasless: you sign, the relay mints).
-      if (this.wallet) {
-        this.log.add("Minting it as an on-chain relic (sign — gasless)…", "sys");
-        void mintGear(this.wallet.provider, this.wallet.address, prize.id, enchant).then((r) => {
-          if (r.ok) this.log.add("✦ Relic minted — it's an NFT now, tradeable on any marketplace. It returns in future runs.", "good");
-          else this.log.add(`(relic mint skipped: ${r.error})`, "dim");
-        });
-      }
+      if (!this.level.itemAt(m.x, m.y)) this.level.items.push({ x: m.x, y: m.y, type: prize, enchant, buc: "blessed", bucKnown: true });
+      this.log.add(`${cap(m.name)} falls! It leaves a prize — ${prize.name} +${enchant}. Forge it (F) into a tradeable NFT relic.`, "good");
     } else {
       this.log.add(`${cap(m.name)} is destroyed.`, "good");
     }

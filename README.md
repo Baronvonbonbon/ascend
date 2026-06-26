@@ -18,13 +18,16 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > **AscendLedger** Hall of Fame (`H` to view), and fallen heroes leave **bones**
 > (`‡` graves) that surface in later descents.
 >
-> **Phase 4b — NFT gear (`✦` relics)** is in: mini-bosses drop, and bazaars in the
-> Parachain Reaches sell, **relics** — enchanted equipment minted to you as **tradeable
-> ERC-721 NFTs** on the **AscendGear** contract (gasless: you sign a Mint authorization,
-> the relay — which holds the minter role — submits and pays gas). Relics are standard
-> ERC-721s with `transfer`/`approve`, so any marketplace (e.g. Datum Tavern) can list and
-> trade them, and your owned relics **materialise in your pack at the start of every run** —
-> real, tradeable meta-progression that outlives permadeath.
+> **Phase 4b — NFT gear (`✦` relics)** is in: take any piece of equipment and **forge** (`F`)
+> it into a **tradeable ERC-721 NFT** on the **AscendGear** contract. Minting is **permissionless
+> and direct** — you pay PAS straight from your wallet (no relay, no trusted minter), and the
+> contract **rolls the relic's rarity on-chain** — *Common → Rare → Epic → Legendary* — which adds
+> to its enchant, so a forge is a gamble. On-chain anti-cheat is enforced by bounds (allowlisted
+> ids, enchant cap), the PAS price (scales with base enchant), and a per-address cooldown; an
+> optional **luck token (WUD)** can tilt the odds toward rarer rolls. Relics are standard ERC-721s
+> with `transfer`/`approve`, so any marketplace (e.g. Datum Tavern) can list and trade them, and
+> your owned relics **materialise in your pack at the start of every run** — real, tradeable
+> meta-progression that outlives permadeath.
 >
 > **Phase 5 (toward parity)** is underway: hidden **traps** (`^` — gas-fee / slashing /
 > reorg), a bigger bestiary including self-replicating **sybils** and the deadlier
@@ -70,8 +73,9 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 **On-chain (Paseo):** `AscendBank` (`0x3D35694e…FcD31`) takes shop payments — each purchase
 is a **direct wallet transaction** in PAS (you confirm in your wallet; the game blocks until
 it's mined). `AscendLedger` (`0x56068D…ccaa5`) is the gasless run record + bones, and
-`AscendGear` (`0xd029ae…B7c3`) is the tradeable ERC-721 relic NFT — both via signature-authorized
-meta-transactions relayed by the Datum relay (gasless for the player).
+`AscendGear` (`0xFbE3c0de…2d7D`) is the tradeable ERC-721 relic NFT — forged **directly from your
+wallet** (permissionless, on-chain rarity roll). `AscendLedger` still records runs gaslessly via the
+Datum relay.
 
 **Mobile:** on touch / narrow screens an on-screen control deck appears — a D-pad (move + wait),
 quick actions (pick / buy / stairs / pack), and a **⌨ more** drawer with the item verbs and an

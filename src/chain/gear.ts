@@ -1,15 +1,16 @@
-// AscendGear — on-chain, tradeable NFT relics. Earn them gaslessly (you sign a
-// Mint authorization; the relay, which holds the minter role, submits + pays gas),
-// own them as standard ERC-721s (listable on any marketplace), and carry them
-// back into Ascend as persistent gear.
+// AscendGear — on-chain, tradeable NFT relics. Minting is permissionless and
+// direct: the player **forges** a relic from their own wallet (no relay, no
+// trusted minter). The contract enforces bounds (allowlisted ids, enchant cap),
+// a PAS price, and a per-address cooldown, and rolls the relic's **rarity**
+// on-chain (Common→Legendary), which adds to its enchant.
 
 import { BrowserProvider, Contract } from "ethers";
-import { CHAIN, GEAR_ABI } from "./config";
+import { CHAIN, GEAR_ABI, TX } from "./config";
 import { readProvider } from "./wallet";
 
-export interface OwnedGear { tokenId: number; itemId: string; enchant: number; }
+export interface OwnedGear { tokenId: number; itemId: string; enchant: number; rarity: number; }
 
-/** Read the player's owned relics (for the loadout + future marketplace sync). */
+/** Read the player's owned relics (for the loadout + marketplace sync). */
 export async function readGear(address: string): Promise<OwnedGear[]> {
   try {
     const c = new Contract(CHAIN.ascendGear, GEAR_ABI, readProvider());
@@ -18,40 +19,47 @@ export async function readGear(address: string): Promise<OwnedGear[]> {
       tokenId: Number(id),
       itemId: r.items[i] as string,
       enchant: Number(r.enchants[i]),
+      rarity: Number(r.rarities[i]),
     }));
   } catch {
     return [];
   }
 }
 
-/** Gasless mint: sign a Mint authorization; the relay mints the relic to you. */
-export async function mintGear(
-  provider: BrowserProvider,
-  address: string,
-  itemId: string,
-  enchant: number,
-): Promise<{ ok: boolean; error?: string }> {
-  const deadline = Math.floor(Date.now() / 1000) + 3600;
-  const signer = await provider.getSigner();
-  const sig = await signer.signTypedData(
-    { name: "AscendGear", version: "1", chainId: BigInt(CHAIN.id), verifyingContract: CHAIN.ascendGear },
-    { Mint: [
-      { name: "player", type: "address" }, { name: "itemId", type: "string" },
-      { name: "enchant", type: "uint8" }, { name: "deadline", type: "uint256" },
-    ] },
-    { player: address, itemId, enchant, deadline },
-  );
+/** The PAS price to forge an item at a given base enchant (read on-chain). */
+export async function forgePrice(baseEnchant: number): Promise<bigint> {
+  const c = new Contract(CHAIN.ascendGear, GEAR_ABI, readProvider());
+  return await c.forgePrice(baseEnchant);
+}
 
-  let res: Response;
+export interface ForgeResult { ok: boolean; hash?: string; enchant?: number; rarity?: number; error?: string; }
+
+/** Forge an item into a tradeable NFT — a direct wallet transaction. Returns the
+ *  on-chain-rolled rarity + final enchant once mined. `onSubmit` fires on broadcast. */
+export async function forgeGear(
+  provider: BrowserProvider,
+  itemId: string,
+  baseEnchant: number,
+  priceWei: bigint,
+  onSubmit?: (hash: string) => void,
+): Promise<ForgeResult> {
   try {
-    res = await fetch(`${CHAIN.relayUrl}/ascend/mint`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ player: address, itemId, enchant, deadline: String(deadline), sig }),
-    });
+    const signer = await provider.getSigner();
+    const gear = new Contract(CHAIN.ascendGear, GEAR_ABI, signer);
+    const tx = await gear.forge(itemId, baseEnchant, { value: priceWei, ...TX, gasLimit: 3_000_000n });
+    onSubmit?.(tx.hash);
+    const receipt = await tx.wait();
+    // Pull the rolled rarity + final enchant out of the Forged event.
+    let enchant = baseEnchant, rarity = 0;
+    for (const log of receipt?.logs ?? []) {
+      try {
+        const parsed = gear.interface.parseLog(log);
+        if (parsed?.name === "Forged") { enchant = Number(parsed.args.enchant); rarity = Number(parsed.args.rarity); break; }
+      } catch { /* not our event */ }
+    }
+    return { ok: true, hash: tx.hash, enchant, rarity };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "relay unreachable" };
+    const msg = e instanceof Error ? e.message : "transaction failed";
+    return { ok: false, error: /reject|denied|user/i.test(msg) ? "you stepped back from the forge" : msg };
   }
-  const body = await res.json().catch(() => ({}));
-  return res.ok ? { ok: true } : { ok: false, error: (body as { error?: string }).error ?? `relay ${res.status}` };
 }

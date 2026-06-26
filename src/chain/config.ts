@@ -7,16 +7,23 @@ export const CHAIN = {
   explorer: "https://blockscout-testnet.polkadot.io/",
   ascendBank: "0x3D35694e11d2D5E3B6977C3Fd2683f52E57FcD31",
   ascendLedger: "0x56068D03943fD76D4D6D86A81e31895b884ccaa5",
-  ascendGear: "0xd029aeecA4493D8753eD6A0d58c7297f4162B7c3",
+  ascendGear: "0xFbE3c0de4C67d19Ea366f2Bf69BC5a4c83492d7D",
   relayUrl: "https://relay.javcon.io",
 };
 
-// AscendGear (ERC-721) — tradeable on-chain relics. Standard transfer/approve so
-// any marketplace can list them; gearOf() is the in-game read.
+// AscendGear (ERC-721) — tradeable on-chain relics. Permissionless direct forge
+// (no relay): the player pays PAS and the contract rolls rarity on-chain. Standard
+// transfer/approve so any marketplace can list them; gearOf() is the in-game read.
 export const GEAR_ABI = [
   "function balanceOf(address) view returns (uint256)",
-  "function gearOf(address) view returns (uint256[] ids, string[] items, uint8[] enchants)",
+  "function gearOf(address) view returns (uint256[] ids, string[] items, uint8[] enchants, uint8[] rarities)",
+  "function forge(string id, uint8 baseEnchant) payable returns (uint256)",
+  "function forgePrice(uint8 baseEnchant) view returns (uint256)",
+  "event Forged(address indexed to, uint256 indexed tokenId, string itemId, uint8 enchant, uint8 rarity)",
 ];
+
+/** Rarity tiers rolled on-chain at forge time. */
+export const RARITY = ["common", "rare", "epic", "legendary"] as const;
 
 export const LEDGER_ABI = [
   "function recordNonce(address) view returns (uint256)",

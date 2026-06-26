@@ -4,12 +4,12 @@ import { COLORS, MonsterDef } from "./data";
 import { Inventory, Item } from "./inventory";
 import { bucDelta, ITEMS, ItemType } from "./items";
 
-type Verb = "wield" | "wear" | "quaff" | "read" | "eat" | "drop" | "zap" | "throw";
+type Verb = "wield" | "wear" | "quaff" | "read" | "eat" | "drop" | "zap" | "throw" | "forge";
 const VERB_PROMPT: Record<Verb, string> = {
   wield: "Wield which weapon?", wear: "Wear/put on which item?",
   quaff: "Quaff which potion?", read: "Read which scroll?",
   eat: "Eat what?", drop: "Drop which item?", zap: "Zap which wand?",
-  throw: "Throw which item?",
+  throw: "Throw which item?", forge: "Forge which piece of gear into an NFT relic?",
 };
 
 export abstract class Entity {
@@ -173,6 +173,7 @@ export class Player extends Entity {
       case "t": return this.startSelect("throw");
       case "T": return this.takeOff();
       case "E": return this.game.engrave() ? this.endTurn() : false;
+      case "F": return this.startSelect("forge");
     }
     return false;
   }
@@ -291,6 +292,8 @@ export class Player extends Entity {
         if (this.isWelded(item)) { item.bucKnown = true; this.game.log.add(`You can't let go of ${ident.name(t)} — it's cursed!`, "bad"); return this.endTurn(); }
         this.inventory.remove(item); this.unequip(item);
         this.game.dropItem(item); this.game.log.add(`You drop ${ident.name(t)}.`); return this.endTurn();
+      case "forge":
+        void this.game.forge(item); return false; // a direct wallet tx — no game turn
     }
     return false;
   }
