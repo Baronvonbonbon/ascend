@@ -47,6 +47,7 @@ export class Player extends Entity {
   weapon: Item | null = null;
   armor: Item | null = null;
   hasJam = false;
+  maxDepthReached = 1;
   prayerCooldown = 0;
   private pending: Verb | null = null;
   private resolveTurn: (() => void) | null = null;
@@ -107,6 +108,7 @@ export class Player extends Entity {
       case "P": return this.tryPray();
       case ",": case "g": return this.game.tryPickup() ? this.endTurn() : false;
       case "p": void this.game.tryBuy(); return false; // shop purchase (async, gasless — no turn)
+      case "H": void this.game.showHallOfFame(); return false;
       case "i": this.game.showInventory(); return false;
       case "w": return this.startSelect("wield");
       case "W": return this.startSelect("wear");
@@ -194,6 +196,8 @@ export class Player extends Entity {
       const nm = this.game.ident.name(here.type);
       this.game.log.add(here.price ? `${nm} — ${here.price} PAS (press p to buy).` : `You see ${nm} here. (, to pick up)`, "dim");
     }
+    const grave = this.game.level.graveAt(this.x, this.y);
+    if (grave) this.game.log.add(`☗ ${grave.label}.`, "dim");
     this.game.draw();
     return this.endTurn();
   }

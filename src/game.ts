@@ -9,6 +9,7 @@ import {
 import { Idents, ITEMS, JAM, pickItemType, ItemType, EffectId } from "./items";
 import { connectWallet, Wallet } from "./chain/wallet";
 import { bankBalancePas, spendPas, depositPas } from "./chain/bank";
+import { recordRun, readRecent, RunEntry } from "./chain/ledger";
 
 const PRICE: Record<string, number> = { weapon: 6, armor: 5, potion: 4, scroll: 4, food: 2 };
 
@@ -27,6 +28,7 @@ export class Game {
   monsters: Monster[] = [];
   wallet: Wallet | null = null;
   onWallet?: (address: string, pas: number) => void;
+  recentRuns: RunEntry[] = []; // leaderboard cache + bones pool
   private scheduler = new ROT.Scheduler.Simple<Entity>();
   private engine!: ROT.Engine;
   private over = false;
@@ -56,6 +58,11 @@ export class Game {
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
+    void this.fetchLeaderboard();
+  }
+
+  private async fetchLeaderboard(): Promise<void> {
+    try { this.recentRuns = await readRecent(12); } catch { /* offline is fine */ }
   }
 
   private giveStartingKit(): void {
@@ -76,6 +83,7 @@ export class Game {
     this.spawnItems();
     this.spawnShop();
     this.placeAltar();
+    this.maybePlaceBones();
     if (this.player.depth >= MAX_DEPTH) this.placeJamAndBoss();
     for (const m of this.monsters) this.scheduler.add(m, true);
     this.level.computeFOV(this.player.x, this.player.y);
@@ -83,6 +91,7 @@ export class Game {
 
   descend(): void {
     this.player.depth++;
+    this.player.maxDepthReached = Math.max(this.player.maxDepthReached, this.player.depth);
     this.level = new Level(W, MAP_H);
     this.player.x = this.level.start.x;
     this.player.y = this.level.start.y;
@@ -158,6 +167,8 @@ export class Game {
     this.log.add("ASCENSION! The chain needs no master. You have won, Seeker.", "sys");
     this.log.add("Press R to begin a new descent.", "dim");
     this.draw();
+    void this.recordResult(true);
+    void this.showHallOfFame();
   }
 
   private gameOver(): void {
@@ -165,8 +176,41 @@ export class Game {
     this.over = true;
     this.player.hp = 0;
     this.log.add(ROT.RNG.getItem(DEATHS)!, "bad");
-    this.log.add(`You fell at depth ${this.player.depth}. Press R to try again.`, "sys");
+    this.log.add(`You fell at depth ${this.player.depth} (deepest ${this.player.maxDepthReached}). Press R to try again.`, "sys");
     this.draw();
+    void this.recordResult(false);
+    void this.showHallOfFame();
+  }
+
+  // ── on-chain persistence (Phase 4) ─────────────────────────────────────────
+  private async recordResult(won: boolean): Promise<void> {
+    if (!this.wallet) { this.log.add("(connect a wallet to etch this run on-chain)", "dim"); return; }
+    const depth = won ? MAX_DEPTH : this.player.maxDepthReached;
+    const r = await recordRun(this.wallet.provider, this.wallet.address, depth, won);
+    if (r.ok) { this.log.add("Your run is etched into the on-chain Hall of Fame (gasless).", "sys"); void this.fetchLeaderboard(); }
+    else this.log.add(`Could not record run: ${r.error}`, "dim");
+  }
+
+  async showHallOfFame(): Promise<void> {
+    if (this.recentRuns.length === 0) await this.fetchLeaderboard();
+    this.log.add("— Hall of Fame (on-chain) —", "sys");
+    if (this.recentRuns.length === 0) { this.log.add("  No runs recorded yet — be the first.", "dim"); return; }
+    const top = [...this.recentRuns]
+      .sort((a, b) => (b.won ? 100 : 0) + b.depth - ((a.won ? 100 : 0) + a.depth))
+      .slice(0, 6);
+    for (const r of top) {
+      const who = `${r.player.slice(0, 6)}…${r.player.slice(-4)}`;
+      this.log.add(`  ${who} — ${r.won ? "★ ASCENDED" : "fell at depth " + r.depth}`, r.won ? "good" : "dim");
+    }
+  }
+
+  private maybePlaceBones(): void {
+    if (this.recentRuns.length === 0 || ROT.RNG.getUniform() > 0.3) return;
+    const r = ROT.RNG.getItem(this.recentRuns)!;
+    const pos = this.level.randomFloor();
+    if (this.level.tileAt(pos.x, pos.y) !== "floor" || this.level.graveAt(pos.x, pos.y)) return;
+    const who = `${r.player.slice(0, 6)}…${r.player.slice(-4)}`;
+    this.level.graves.push({ x: pos.x, y: pos.y, label: r.won ? `${who} ascended from here` : `Here fell ${who}, at depth ${r.depth}` });
   }
 
   // ── combat ─────────────────────────────────────────────────────────────────
@@ -394,6 +438,9 @@ export class Game {
         if (this.level.isVisible(x, y)) this.display.draw(x, y, g.ch, g.fg, COLORS.bg);
         else if (this.level.explored[y][x]) this.display.draw(x, y, g.ch, g.fgDim, COLORS.bg);
       }
+    }
+    for (const g of this.level.graves) {
+      if (this.level.isVisible(g.x, g.y)) this.display.draw(g.x, g.y, "‡", "#b0a890", COLORS.bg);
     }
     for (const fi of this.level.items) {
       if (this.level.isVisible(fi.x, fi.y)) this.display.draw(fi.x, fi.y, fi.type.ch, fi.type.fg, fi.price ? "#2a2208" : COLORS.bg);

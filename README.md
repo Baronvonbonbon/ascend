@@ -13,10 +13,14 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > the Kusama Deeps) to **depth 8**, slay **THE CENSOR**, seize **the JAM**, then
 > climb back to the surface (`<`) to **ASCEND** and win. Plus **Gavin's altars**
 > (`P` to pray → be made whole), the **Gray Paper** intro, and a theming pass.
-> On-chain leaderboards/bones + NFT gear are Phase 4 — see **[DESIGN.md](./DESIGN.md)**.
+> **Phase 4 — persistence & social** is in: when a run ends (death or ASCENSION)
+> it's recorded on-chain **gaslessly** (you sign, the relay submits) into the
+> **AscendLedger** Hall of Fame (`H` to view), and fallen heroes leave **bones**
+> (`‡` graves) that surface in later descents. NFT gear is the remaining Phase 4b.
 
-**On-chain:** `AscendBank` on Paseo (`0x3D35694e…FcD31`) holds your purse; shop
-purchases are gasless `spendBySig` meta-transactions relayed by the Datum relay.
+**On-chain (Paseo):** `AscendBank` (`0x3D35694e…FcD31`) holds your purse for gasless
+shop spends; `AscendLedger` (`0x56068D…ccaa5`) is the gasless run record + bones.
+Both via signature-authorized meta-transactions relayed by the Datum relay.
 
 ## Play it
 

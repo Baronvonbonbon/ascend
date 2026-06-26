@@ -11,6 +11,7 @@ export class Level {
   tiles: TileType[][] = [];
   explored: boolean[][] = [];
   items: FloorItem[] = [];
+  graves: { x: number; y: number; label: string }[] = []; // bones of fallen heroes
   roomCenters: { x: number; y: number }[] = [];
   start = { x: 1, y: 1 };
   stairs = { x: 1, y: 1 };
@@ -89,6 +90,10 @@ export class Level {
 
   itemAt(x: number, y: number): FloorItem | undefined {
     return this.items.find((i) => i.x === x && i.y === y);
+  }
+
+  graveAt(x: number, y: number): { x: number; y: number; label: string } | undefined {
+    return this.graves.find((g) => g.x === x && g.y === y);
   }
 
   revealAll(): void {
