@@ -71,6 +71,7 @@ export interface MonsterDef {
   steals?: boolean;      // a thief — snatches a pack item and flees (the rug pull)
   mimic?: boolean;       // a honeypot — sits disguised as loot, strikes when touched
   fearless?: boolean;    // ignores warding engravings (bosses fear no Gray Paper)
+  keeper?: boolean;      // a shopkeeper — peaceful until you shoplift, then merciless
   boss?: boolean;        // a unique mini-boss — drops a guaranteed prize on death
 }
 
@@ -87,6 +88,11 @@ export const MONSTERS: MonsterDef[] = [
   { name: "an oracle",         ch: "o", fg: "#e0c040", hp: 9,  dmg: [3, 6], ai: "chase",  minDepth: 5, weight: 2, ranged: true },
   { name: "a 51% attacker",    ch: "A", fg: "#e05050", hp: 16, dmg: [4, 8], ai: "chase",  minDepth: 6, weight: 2, speed: 110, inflict: "confuse" },
 ];
+
+/** The Marketmaker — a bazaar shopkeeper. Peaceful while you pay; lethal if you shoplift. */
+export const SHOPKEEPER: MonsterDef = {
+  name: "the Marketmaker", ch: "$", fg: "#e8c84a", hp: 54, dmg: [6, 11], ai: "chase", minDepth: 1, weight: 0, fearless: true, keeper: true,
+};
 
 /** The honeypot — a mimic. Spawned separately (placeMimics), disguised as loot. */
 export const HONEYPOT: MonsterDef = {

@@ -50,6 +50,11 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > Kusama, Moonbeam, Astar, Phala, Interlay, Bifrost, Hydration, Acala — each with its own
 > **difficulty × loot** multipliers (some up, some down from the relay). Climb back (`<`) to the relay.
 
+> **The bazaar has a keeper.** Each shop is tended by **the Marketmaker** (`$`) — peaceful
+> while you pay (stand on a ware, `p`, gasless PAS), but **shoplift** an unpaid ware (or strike it)
+> and it turns lethal and hunts you down. It fears no Gray-Paper ward. Kill it and the stall is
+> yours — but it hits like a boss.
+
 > **Realm mini-bosses** guard the run: **the Forkmaster** (depth 3) and **the Sudo Key**
 > (depth 6) each drop a guaranteed prize when slain, before **THE CENSOR** and the JAM at depth 8.
 

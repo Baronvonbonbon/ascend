@@ -5,7 +5,7 @@ import { Item } from "./inventory";
 import { Log } from "./log";
 import {
   COLORS, TILE_GLYPH, MONSTERS, MonsterDef, DEATHS, GREETINGS,
-  MAX_DEPTH, CENSOR, MINIBOSSES, HONEYPOT, realmName, GRAY_PAPER, ChainDef, CHAINS,
+  MAX_DEPTH, CENSOR, MINIBOSSES, HONEYPOT, SHOPKEEPER, realmName, GRAY_PAPER, ChainDef, CHAINS,
 } from "./data";
 import { Idents, ITEMS, JAM, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
 import { connectWallet, Wallet } from "./chain/wallet";
@@ -132,7 +132,7 @@ export class Game {
   }
 
   adjacentEnemy(x: number, y: number): Monster | undefined {
-    return this.monsters.find((m) => m.alive && Math.max(Math.abs(m.x - x), Math.abs(m.y - y)) === 1);
+    return this.monsters.find((m) => m.alive && !m.peaceful && Math.max(Math.abs(m.x - x), Math.abs(m.y - y)) === 1);
   }
 
   private adjacentFree(x: number, y: number): { x: number; y: number } | null {
@@ -383,6 +383,11 @@ export class Game {
       const lure = d.disguiseType ? this.ident.name(d.disguiseType) : "the loot";
       this.log.add(`${cap(lure)} you reached for lurches alive — it's a honeypot! A mimic.`, "bad");
     }
+    // Striking a peaceful shopkeeper provokes it — now it fights to the death.
+    if (d instanceof Monster && d.def.keeper && d.peaceful) {
+      d.peaceful = false; d.fg = "#ff5030";
+      this.log.add("You strike the Marketmaker — it roars \"Bad debt!\" and turns on you.", "bad");
+    }
     // Fighting on a warded tile scuffs the sigil away faster.
     if (a === this.player) { const e = this.level.engravingAt(this.player.x, this.player.y); if (e) e.life -= 3; }
     const [lo, hi] = a.attackDmg;
@@ -582,11 +587,24 @@ export class Game {
       return true;
     }
     if (this.player.inventory.full) { this.log.add("Your pack is full.", "bad"); return false; }
+    // Lifting an unpaid ware is shoplifting — the Marketmaker takes it personally.
+    if (fi.price) {
+      const k = this.shopkeeper();
+      if (k && k.peaceful) {
+        k.peaceful = false; k.fg = "#ff5030";
+        this.log.add("You pocket the unpaid ware — the Marketmaker bellows \"THIEF!\" and lunges for you.", "bad");
+      }
+    }
     this.giveItem(fi.type, { enchant: fi.enchant, relic: fi.relic, buc: fi.buc, bucKnown: fi.bucKnown });
     this.level.items = this.level.items.filter((i) => i !== fi);
     const tag = fi.relic ? ` +${fi.enchant ?? 0} ✦` : "";
     this.log.add(`You pick up ${this.ident.name(fi.type)}${tag}.`);
     return true;
+  }
+
+  /** The bazaar's shopkeeper on this level, if one is still alive. */
+  shopkeeper(): Monster | undefined {
+    return this.monsters.find((m) => m.alive && m.def.keeper);
   }
 
   dropItem(item: Item): void {
@@ -752,7 +770,25 @@ export class Game {
         }
       }
     }
-    this.log.add("A bazaar glints somewhere on this floor — provisions for PAS (stand on a ware, press p).", "dim");
+    // Post a Marketmaker to mind the stall — peaceful while you pay, lethal if you don't.
+    const ring = [[2, 1], [1, 2], [-2, -1], [-1, -2], [2, -1], [-2, 1], [1, -2], [-1, 2], [2, 0], [-2, 0], [0, 2], [0, -2]];
+    let keeper = false;
+    for (const [dx, dy] of ring) {
+      const x = c.x + dx, y = c.y + dy;
+      if (this.level.isPassable(x, y) && !this.level.itemAt(x, y) && !this.monsterAt(x, y) &&
+          this.level.tileAt(x, y) !== "stairsDown" && this.level.tileAt(x, y) !== "stairsUp" &&
+          !(x === this.player.x && y === this.player.y)) {
+        this.monsters.push(new Monster(this, SHOPKEEPER, x, y));
+        keeper = true;
+        break;
+      }
+    }
+    this.log.add(
+      keeper
+        ? "A bazaar glints on this floor — the Marketmaker ($) tends it. Pay with PAS (stand on a ware, press p); shoplift and it turns lethal."
+        : "A bazaar glints somewhere on this floor — provisions for PAS (stand on a ware, press p).",
+      "dim",
+    );
   }
 
   async tryBuy(): Promise<void> {

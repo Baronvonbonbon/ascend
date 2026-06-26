@@ -382,6 +382,8 @@ export class Player extends Entity {
 export class Monster extends Entity {
   speedMod = 1; // a wand of slowness halves this
   stolen: Item | null = null; // a thief (rug puller) carries what it snatched; drops it on death
+  // A shopkeeper stands peaceful until you steal; then it hunts you down.
+  peaceful = false;
   // A mimic (honeypot) wears an item's glyph until it's touched.
   revealed = false;
   disguiseCh = "*";
@@ -400,6 +402,7 @@ export class Monster extends Entity {
       const look = ROT.RNG.getItem(ITEMS.filter((i) => i.kind !== "amulet"))!;
       this.disguiseCh = look.ch; this.disguiseFg = look.fg; this.disguiseType = look;
     }
+    if (def.keeper) this.peaceful = true; // minds its stall until provoked
   }
 
   getSpeed(): number {
@@ -412,6 +415,9 @@ export class Monster extends Entity {
 
     // A dormant honeypot just waits, wearing its loot disguise, until something touches it.
     if (this.def.mimic && !this.revealed) return;
+
+    // A peaceful shopkeeper minds its stall — it neither chases nor attacks.
+    if (this.peaceful) return;
 
     // A laden thief wants only to escape — it never turns to fight.
     if (this.stolen) { this.fleeStep(p); return; }
