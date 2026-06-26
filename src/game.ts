@@ -28,6 +28,7 @@ export class Game {
   ident!: Idents;
   monsters: Monster[] = [];
   pet: Pet | null = null;
+  private inKusama = false;
   wallet: Wallet | null = null;
   onWallet?: (address: string, pas: number) => void;
   recentRuns: RunEntry[] = []; // leaderboard cache + bones pool
@@ -89,6 +90,7 @@ export class Game {
     this.placeAltar();
     this.maybePlaceBones();
     this.spawnTraps();
+    this.placePortal();
     if (this.player.depth >= MAX_DEPTH) this.placeJamAndBoss();
     for (const m of this.monsters) this.scheduler.add(m, true);
     if (this.pet && this.pet.alive) {
@@ -126,7 +128,47 @@ export class Game {
     this.draw();
   }
 
+  // ── the Kusama rift (a chaos side-branch) ──────────────────────────────────
+  private placePortal(): void {
+    if (this.inKusama || this.player.depth < 3 || this.player.depth > 6 || ROT.RNG.getUniform() > 0.5) return;
+    const centers = this.level.roomCenters.filter(
+      (c) => this.level.tileAt(c.x, c.y) === "floor" && !(c.x === this.player.x && c.y === this.player.y),
+    );
+    if (!centers.length) return;
+    const c = ROT.RNG.getItem(centers)!;
+    this.level.tiles[c.y][c.x] = "portal";
+  }
+
+  enterKusama(): void {
+    this.inKusama = true;
+    this.level = new Level(W, MAP_H);
+    this.player.x = this.level.start.x;
+    this.player.y = this.level.start.y;
+    this.placeUpStair(); // the way back
+    this.enterLevel();
+    const goodies = ITEMS.filter((i) => i.kind === "ring" || i.kind === "wand");
+    for (let i = 0; i < 2; i++) {
+      const pos = this.level.randomFloor();
+      if (this.level.tileAt(pos.x, pos.y) === "floor" && !this.level.itemAt(pos.x, pos.y))
+        this.level.items.push({ x: pos.x, y: pos.y, type: ROT.RNG.getItem(goodies)! });
+    }
+    this.log.add("You step through the Kusama rift. Expect chaos — and reward. (< to return)", "bad");
+    this.draw();
+  }
+
+  private exitKusama(): void {
+    this.inKusama = false;
+    this.level = new Level(W, MAP_H);
+    this.player.x = this.level.stairs.x;
+    this.player.y = this.level.stairs.y;
+    if (this.player.depth > 1) this.placeUpStair();
+    this.enterLevel();
+    this.log.add(`You slip out of Kusama, back to depth ${this.player.depth}.`, "sys");
+    this.draw();
+  }
+
   ascend(): void {
+    if (this.inKusama) { this.exitKusama(); return; }
     const newDepth = this.player.depth - 1;
     if (newDepth < 1) return;
     this.player.depth = newDepth;
@@ -264,7 +306,7 @@ export class Game {
 
   // ── items ──────────────────────────────────────────────────────────────────
   private spawnItems(): void {
-    const count = 3 + Math.floor(this.player.depth * 0.7);
+    const count = 3 + Math.floor(this.player.depth * 0.7) + (this.inKusama ? 4 : 0); // richer loot in the rift
     for (let i = 0; i < count; i++) {
       const type = pickItemType();
       let pos = this.level.randomFloor();
@@ -464,8 +506,8 @@ export class Game {
 
   // ── spawns ─────────────────────────────────────────────────────────────────
   private spawnMonsters(): void {
-    const depth = this.player.depth;
-    const count = 4 + Math.floor(depth * 1.5) + (depth >= 7 ? 4 : 0); // the Kusama Deeps swarm
+    const depth = this.player.depth + (this.inKusama ? 3 : 0); // the rift fields deeper foes
+    const count = 4 + Math.floor(depth * 1.5) + (depth >= 7 ? 4 : 0) + (this.inKusama ? 4 : 0);
     for (let i = 0; i < count; i++) {
       const def = this.pickMonster(depth);
       let pos = this.level.randomFloor();
