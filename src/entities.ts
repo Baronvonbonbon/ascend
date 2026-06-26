@@ -101,6 +101,7 @@ export class Player extends Entity {
       case ".": case "5": this.game.log.add("You wait.", "dim"); return this.endTurn();
       case ">": return this.tryDescend();
       case ",": case "g": return this.game.tryPickup() ? this.endTurn() : false;
+      case "p": void this.game.tryBuy(); return false; // shop purchase (async, gasless — no turn)
       case "i": this.game.showInventory(); return false;
       case "w": return this.startSelect("wield");
       case "W": return this.startSelect("wear");
@@ -184,7 +185,10 @@ export class Player extends Entity {
     this.x = nx; this.y = ny;
     this.game.level.computeFOV(this.x, this.y);
     const here = this.game.level.itemAt(this.x, this.y);
-    if (here) this.game.log.add(`You see ${this.game.ident.name(here.type)} here. (, to pick up)`, "dim");
+    if (here) {
+      const nm = this.game.ident.name(here.type);
+      this.game.log.add(here.price ? `${nm} — ${here.price} PAS (press p to buy).` : `You see ${nm} here. (, to pick up)`, "dim");
+    }
     this.game.draw();
     return this.endTurn();
   }

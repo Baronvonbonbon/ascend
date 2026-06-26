@@ -2,7 +2,7 @@ import * as ROT from "rot-js";
 import type { TileType } from "./data";
 import type { ItemType } from "./items";
 
-export interface FloorItem { x: number; y: number; type: ItemType; }
+export interface FloorItem { x: number; y: number; type: ItemType; price?: number; } // price set = a shop ware
 
 /** One dungeon level: tiles, fog-of-war, FOV, stairs, items, spawn points. */
 export class Level {
@@ -11,6 +11,7 @@ export class Level {
   tiles: TileType[][] = [];
   explored: boolean[][] = [];
   items: FloorItem[] = [];
+  roomCenters: { x: number; y: number }[] = [];
   start = { x: 1, y: 1 };
   stairs = { x: 1, y: 1 };
 
@@ -49,10 +50,9 @@ export class Level {
       });
     }
 
-    const sc = rooms[0].getCenter();
-    this.start = { x: sc[0], y: sc[1] };
-    const ec = rooms[rooms.length - 1].getCenter();
-    this.stairs = { x: ec[0], y: ec[1] };
+    this.roomCenters = rooms.map((r) => { const c = r.getCenter(); return { x: c[0], y: c[1] }; });
+    this.start = { ...this.roomCenters[0] };
+    this.stairs = { ...this.roomCenters[this.roomCenters.length - 1] };
     this.tiles[this.stairs.y][this.stairs.x] = "stairsDown";
   }
 

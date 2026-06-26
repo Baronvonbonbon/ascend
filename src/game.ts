@@ -6,6 +6,10 @@ import {
   COLORS, TILE_GLYPH, MONSTERS, MonsterDef, DEATHS, GREETINGS,
 } from "./data";
 import { Idents, ITEMS, pickItemType, ItemType, EffectId } from "./items";
+import { connectWallet, Wallet } from "./chain/wallet";
+import { bankBalancePas, spendPas, depositPas } from "./chain/bank";
+
+const PRICE: Record<string, number> = { weapon: 6, armor: 5, potion: 4, scroll: 4, food: 2 };
 
 const W = 80;
 const MAP_H = 30;
@@ -20,6 +24,8 @@ export class Game {
   player!: Player;
   ident!: Idents;
   monsters: Monster[] = [];
+  wallet: Wallet | null = null;
+  onWallet?: (address: string, pas: number) => void;
   private scheduler = new ROT.Scheduler.Simple<Entity>();
   private engine!: ROT.Engine;
   private over = false;
@@ -46,6 +52,7 @@ export class Game {
     this.giveStartingKit();
     this.spawnMonsters();
     this.spawnItems();
+    this.spawnShop();
     this.scheduler.add(this.player, true);
     for (const m of this.monsters) this.scheduler.add(m, true);
     this.level.computeFOV(this.player.x, this.player.y);
@@ -75,6 +82,7 @@ export class Game {
     this.scheduler.add(this.player, true);
     this.spawnMonsters();
     this.spawnItems();
+    this.spawnShop();
     for (const m of this.monsters) this.scheduler.add(m, true);
     this.level.computeFOV(this.player.x, this.player.y);
     this.log.add(`You descend to depth ${this.player.depth}. The stack deepens.`, "sys");
@@ -182,6 +190,73 @@ export class Game {
     this.draw();
   }
 
+  // ── wallet + shops (Phase 2: gasless PAS economy) ──────────────────────────
+  async connect(): Promise<void> {
+    try {
+      this.wallet = await connectWallet();
+      this.player.pas = await bankBalancePas(this.wallet.address);
+      const a = this.wallet.address;
+      this.log.add(`Wallet connected: ${a.slice(0, 6)}…${a.slice(-4)} — purse ${this.player.pas} PAS.`, "sys");
+      this.onWallet?.(a, this.player.pas);
+      this.draw();
+    } catch (e) {
+      this.log.add(`Wallet: ${e instanceof Error ? e.message : "failed"}`, "bad");
+    }
+  }
+
+  /** Load PAS into the purse (one on-chain tx); afterward all shopping is gasless. */
+  async deposit(pas = 20): Promise<void> {
+    if (!this.wallet) { this.log.add("Connect a wallet first.", "bad"); return; }
+    try {
+      this.log.add(`Loading ${pas} PAS into your purse (sign one tx)…`, "sys"); this.draw();
+      await depositPas(this.wallet.provider, pas);
+      this.player.pas = await bankBalancePas(this.wallet.address);
+      this.onWallet?.(this.wallet.address, this.player.pas);
+      this.log.add(`Purse loaded: ${this.player.pas} PAS. Shop gaslessly now.`, "good"); this.draw();
+    } catch (e) {
+      this.log.add(`Deposit failed: ${e instanceof Error ? e.message : "?"}`, "bad");
+    }
+  }
+
+  private spawnShop(): void {
+    const centers = this.level.roomCenters.slice(1); // not the start room
+    if (centers.length === 0) return;
+    const c = ROT.RNG.getItem(centers)!;
+    const stock = ["ration", "heal", "vest", "sword", "tele", "crumb"]
+      .map((id) => ITEMS.find((i) => i.id === id))
+      .filter((t): t is ItemType => !!t);
+    const offsets = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1], [2, 0], [-2, 0]];
+    let oi = 0;
+    for (const t of stock) {
+      while (oi < offsets.length) {
+        const [dx, dy] = offsets[oi++];
+        const x = c.x + dx, y = c.y + dy;
+        if (this.level.isPassable(x, y) && !this.level.itemAt(x, y) &&
+            this.level.tileAt(x, y) !== "stairsDown" && !(x === this.player.x && y === this.player.y)) {
+          this.level.items.push({ x, y, type: t, price: PRICE[t.kind] ?? 4 });
+          break;
+        }
+      }
+    }
+    this.log.add("A bazaar glints somewhere on this floor — provisions for PAS (stand on a ware, press p).", "dim");
+  }
+
+  async tryBuy(): Promise<void> {
+    const fi = this.level.itemAt(this.player.x, this.player.y);
+    if (!fi || !fi.price) { this.log.add("There is nothing for sale here.", "dim"); return; }
+    if (!this.wallet) { this.log.add("Connect a wallet (button above) to buy.", "bad"); return; }
+    if (this.player.pas < fi.price) { this.log.add(`Not enough PAS — need ${fi.price}, purse has ${this.player.pas}.`, "bad"); return; }
+    this.log.add(`Paying ${fi.price} PAS (sign — gasless)…`, "sys"); this.draw();
+    const r = await spendPas(this.wallet.provider, this.wallet.address, fi.price);
+    if (!r.ok) { this.log.add(`Purchase failed: ${r.error}`, "bad"); return; }
+    this.player.inventory.add(fi.type);
+    this.level.items = this.level.items.filter((i) => i !== fi);
+    this.player.pas = await bankBalancePas(this.wallet.address);
+    this.onWallet?.(this.wallet.address, this.player.pas);
+    this.log.add(`Bought ${this.ident.name(fi.type)} for ${fi.price} PAS (gasless). Purse: ${this.player.pas}.`, "good");
+    this.draw();
+  }
+
   private kill(d: Entity): void {
     if (d === this.player) { this.gameOver(); return; }
     const m = d as Monster;
@@ -244,7 +319,7 @@ export class Game {
       }
     }
     for (const fi of this.level.items) {
-      if (this.level.isVisible(fi.x, fi.y)) this.display.draw(fi.x, fi.y, fi.type.ch, fi.type.fg, COLORS.bg);
+      if (this.level.isVisible(fi.x, fi.y)) this.display.draw(fi.x, fi.y, fi.type.ch, fi.type.fg, fi.price ? "#2a2208" : COLORS.bg);
     }
     for (const m of this.monsters) {
       if (m.alive && this.level.isVisible(m.x, m.y)) this.display.draw(m.x, m.y, m.ch, m.fg, COLORS.bg);
