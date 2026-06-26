@@ -28,6 +28,19 @@
       #connect:hover { background: #262620; }
       a { color: var(--gold); }
 
+      /* ── co-op lobby ── */
+      #lobby { width: 100%; max-width: 620px; border: 1px solid #2a2620; border-radius: 6px; padding: 8px 10px;
+        background: #0c0c0e; display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
+      .lobby-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+      #lobby select, #lobby button { font-family: inherit; font-size: 12px; color: var(--gold);
+        background: #1c1c20; border: 1px solid var(--gold); border-radius: 4px; padding: 4px 10px; cursor: pointer; }
+      #lobby select { color: var(--ink); border-color: #3a361f; }
+      .lobby-pane { display: flex; flex-direction: column; gap: 5px; border-top: 1px solid #1c1c20; padding-top: 8px; }
+      .lobby-pane label { color: var(--dim); }
+      #lobby textarea { width: 100%; font-family: inherit; font-size: 10px; background: #08080a; color: var(--ink);
+        border: 1px solid #2a2620; border-radius: 4px; resize: vertical; }
+      #lobby-status { color: var(--gold); min-height: 14px; }
+
       /* ── touch controls (shown on touch / narrow screens) ── */
       #touch { display: none; width: 100%; max-width: 520px; flex-direction: column; align-items: center; gap: 8px; user-select: none; }
       #touch button { font-family: inherit; color: var(--gold); background: #15151a; border: 1px solid #3a361f;
@@ -50,7 +63,7 @@
         #log { height: 96px; }
       }
     </style>
-    <script type="module" crossorigin src="/ascend/assets/index-DgCXtOh1.js"></script>
+    <script type="module" crossorigin src="/ascend/assets/index-ESKz_OLV.js"></script>
   </head>
   <body>
     <div id="app">
@@ -58,6 +71,35 @@
       <div id="wallet">
         <button id="connect">Connect Wallet</button>
         <span id="wstatus">not connected — shop provisions are paid directly from your wallet (PAS)</span>
+      </div>
+      <div id="lobby">
+        <div class="lobby-row">
+          <span>Co-op (P2P):</span>
+          <select id="lobby-mode">
+            <option value="coop">Co-op</option>
+            <option value="coop-ff">Co-op + friendly fire</option>
+            <option value="race">Race to the JAM</option>
+          </select>
+          <button id="lobby-host" type="button">Host</button>
+          <button id="lobby-join" type="button">Join</button>
+          <span id="lobby-status"></span>
+        </div>
+        <div id="lobby-host-pane" class="lobby-pane" hidden>
+          <label>1) Send this <b>offer code</b> to your partner:</label>
+          <textarea id="lobby-offer" readonly rows="2"></textarea>
+          <div class="lobby-row"><button id="lobby-copy-offer" type="button">Copy offer</button></div>
+          <label>2) Paste their <b>answer code</b>, then connect:</label>
+          <textarea id="lobby-answer-in" rows="2"></textarea>
+          <div class="lobby-row"><button id="lobby-connect" type="button">Connect</button></div>
+        </div>
+        <div id="lobby-join-pane" class="lobby-pane" hidden>
+          <label>1) Paste the host's <b>offer code</b>:</label>
+          <textarea id="lobby-offer-in" rows="2"></textarea>
+          <div class="lobby-row"><button id="lobby-gen-answer" type="button">Generate answer</button></div>
+          <label>2) Send this <b>answer code</b> back to the host:</label>
+          <textarea id="lobby-answer" readonly rows="2"></textarea>
+          <div class="lobby-row"><button id="lobby-copy-answer" type="button">Copy answer</button></div>
+        </div>
       </div>
       <div id="screen"></div>
       <div id="log"></div>
