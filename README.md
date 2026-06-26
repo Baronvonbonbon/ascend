@@ -41,6 +41,8 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > is loot: **honeypots** (`m`) are **mimics** that sit disguised as an item — a sword, a
 > potion, a ring — and lunge the moment you reach for them. And you
 > start with a **nominator** (`d`) — a loyal pet that follows you and savages adjacent foes.
+> You can **throw** (`t`) too: hurl a dagger down a corridor as a ranged strike (it lands where
+> it falls, ready to retrieve), or lob a **potion of reorg** like a grenade to burst it on a foe.
 > Mid-depth floors hold **XCM portals** (`Ω`): call out (`>`) to a **parachain branch** —
 > Kusama, Moonbeam, Astar, Phala, Interlay, Bifrost, Hydration, Acala — each with its own
 > **difficulty × loot** multipliers (some up, some down from the relay). Climb back (`<`) to the relay.
@@ -69,7 +71,8 @@ npm run dev      # http://localhost:5180
 ```
 
 **Controls:** move **arrows/hjkl/yubn** · pick up `,` · inventory `i` · wield `w` ·
-wear `W` · quaff `q` · read `r` · eat `e` · drop `d` · descend `>` · wait `.` · restart `R`.
+wear `W` · take off `T` · quaff `q` · read `r` · eat `e` · drop `d` · zap `z` · throw `t` ·
+pray `P` · descend `>` · ascend/up `<` · wait `.` · restart `R`.
 
 `npm run build` → typecheck + production bundle in `dist/`.
 

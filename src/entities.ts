@@ -4,11 +4,12 @@ import { COLORS, MonsterDef } from "./data";
 import { Inventory, Item } from "./inventory";
 import { bucDelta, ITEMS, ItemType } from "./items";
 
-type Verb = "wield" | "wear" | "quaff" | "read" | "eat" | "drop" | "zap";
+type Verb = "wield" | "wear" | "quaff" | "read" | "eat" | "drop" | "zap" | "throw";
 const VERB_PROMPT: Record<Verb, string> = {
   wield: "Wield which weapon?", wear: "Wear/put on which item?",
   quaff: "Quaff which potion?", read: "Read which scroll?",
   eat: "Eat what?", drop: "Drop which item?", zap: "Zap which wand?",
+  throw: "Throw which item?",
 };
 
 export abstract class Entity {
@@ -87,6 +88,7 @@ export class Player extends Entity {
   }
   private pending: Verb | null = null;
   private pendingDir: Item | null = null; // a wand awaiting a zap direction
+  private pendingThrow: Item | null = null; // an item awaiting a throw direction
   private resolveTurn: (() => void) | null = null;
 
   constructor(game: Game, x: number, y: number) {
@@ -147,6 +149,7 @@ export class Player extends Entity {
   /** Returns true if a turn was consumed (a key the engine should act on). */
   handleKey(e: KeyboardEvent): boolean {
     if (this.pendingDir) return this.resolveZapDir(e);
+    if (this.pendingThrow) return this.resolveThrowDir(e);
     if (this.pending) return this.resolveSelection(e);
     const mv = MOVES[e.key];
     if (mv) return this.tryMove(mv[0], mv[1]);
@@ -166,6 +169,7 @@ export class Player extends Entity {
       case "e": return this.startSelect("eat");
       case "d": return this.startSelect("drop");
       case "z": return this.startSelect("zap");
+      case "t": return this.startSelect("throw");
       case "T": return this.takeOff();
     }
     return false;
@@ -192,7 +196,25 @@ export class Player extends Entity {
       this.game.log.add("Zap in which direction? (a move key, Esc to cancel)", "sys");
       return false;
     }
+    if (verb === "throw") {
+      if (item.type.kind !== "weapon" && item.type.kind !== "potion") { this.game.log.add("You can't throw that to any effect.", "dim"); return false; }
+      if (this.isWelded(item)) { item.bucKnown = true; this.game.log.add(`You can't release ${this.game.ident.name(item.type)} — it's cursed!`, "bad"); return false; }
+      this.pendingThrow = item;
+      this.game.log.add("Throw in which direction? (a move key, Esc to cancel)", "sys");
+      return false;
+    }
     return this.doVerb(verb, item);
+  }
+
+  private resolveThrowDir(e: KeyboardEvent): boolean {
+    const item = this.pendingThrow!;
+    this.pendingThrow = null;
+    if (e.key === "Escape") { this.game.log.add("Never mind.", "dim"); return false; }
+    const mv = MOVES[e.key];
+    if (!mv) { this.game.log.add("That is not a direction.", "dim"); return false; }
+    this.unequip(item); this.inventory.remove(item);
+    this.game.throwItem(item, mv[0], mv[1]);
+    return this.endTurn();
   }
 
   private resolveZapDir(e: KeyboardEvent): boolean {

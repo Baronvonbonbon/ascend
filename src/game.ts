@@ -7,7 +7,7 @@ import {
   COLORS, TILE_GLYPH, MONSTERS, MonsterDef, DEATHS, GREETINGS,
   MAX_DEPTH, CENSOR, MINIBOSSES, HONEYPOT, realmName, GRAY_PAPER, ChainDef, CHAINS,
 } from "./data";
-import { Idents, ITEMS, JAM, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc } from "./items";
+import { Idents, ITEMS, JAM, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
 import { connectWallet, Wallet } from "./chain/wallet";
 import { bankBalancePas, spendPas, depositPas } from "./chain/bank";
 import { recordRun, readRecent, RunEntry } from "./chain/ledger";
@@ -64,7 +64,7 @@ export class Game {
     this.log.add(ROT.RNG.getItem(GREETINGS)!, "sys");
     for (const line of GRAY_PAPER) this.log.add(line, "dim");
     this.log.add("Your nominator (d) pads at your heels — it backs you, and bites for you.", "dim");
-    this.log.add("Keys: move · , pick up · p buy · P pray · z zap · < up · > down · i/w/W/q/r/e/d items.", "dim");
+    this.log.add("Keys: move · , pick up · p buy · P pray · z zap · t throw · < up · > down · i/w/W/q/r/e/d items.", "dim");
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
@@ -450,6 +450,58 @@ export class Game {
     it.buc = opts?.buc ?? rollBuc();
     it.bucKnown = opts?.bucKnown ?? false;
     return it;
+  }
+
+  /** Hurl an item in a direction: a weapon strikes the first foe (and lands, retrievable);
+   *  a potion shatters on it. The item has already been removed from the pack. */
+  throwItem(item: Item, dx: number, dy: number): void {
+    const t = item.type;
+    let x = this.player.x, y = this.player.y;
+    let lx = x, ly = y; // last open tile the projectile passed over
+    let hit: Monster | undefined;
+    for (let step = 0; step < 8; step++) {
+      x += dx; y += dy;
+      if (!this.level.isPassable(x, y)) break; // hit a wall — stops short
+      const m = this.monsterAt(x, y);
+      if (m) { hit = m; break; }
+      lx = x; ly = y;
+    }
+
+    if (t.kind === "potion") {
+      // A potion shatters on impact. A reorg/harm draught is a grenade; finality wasted on a foe heals it.
+      if (hit) {
+        this.ident.learn(t);
+        if (t.effect === "harm") {
+          const d = ROT.RNG.getUniformInt(6, 12); hit.hp -= d;
+          this.log.add(`The ${t.name} bursts on ${hit.name} — a reorg tears it for ${d}.`, "good");
+          if (hit.hp <= 0) this.kill(hit);
+        } else if (t.effect === "heal") {
+          hit.hp = Math.min(hit.maxHp, hit.hp + ROT.RNG.getUniformInt(8, 14));
+          this.log.add(`The ${t.name} splashes ${hit.name} — you mend it by mistake!`, "bad");
+        } else {
+          this.log.add(`The ${t.name} shatters against ${hit.name} to no effect.`, "dim");
+        }
+      } else {
+        this.log.add(`The ${t.name} shatters on the ground.`, "dim");
+      }
+      return; // consumed
+    }
+
+    // A weapon (or anything else): deal weapon damage on a hit, then it falls to the floor.
+    if (hit) {
+      const b = (item.enchant ?? 0) + bucDelta(item.buc);
+      const [lo, hi] = t.dmg ?? [1, 2];
+      const dmg = Math.max(1, ROT.RNG.getUniformInt(lo, hi) + b);
+      hit.hp -= dmg;
+      this.log.add(`You hurl ${this.ident.name(t)} — it strikes ${hit.name} for ${dmg}.`, "good");
+      if (hit.hp <= 0) this.kill(hit);
+      lx = hit.x; ly = hit.y; // the weapon drops where the target stood
+    } else {
+      this.log.add(`You hurl ${this.ident.name(t)}. It clatters to the ground.`, "dim");
+    }
+    if (!this.level.itemAt(lx, ly) && this.level.isPassable(lx, ly)) {
+      this.level.items.push({ x: lx, y: ly, type: t, enchant: item.enchant, relic: item.relic, buc: item.buc, bucKnown: item.bucKnown });
+    }
   }
 
   /** Fire a wand in a direction. */
