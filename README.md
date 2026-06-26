@@ -25,7 +25,8 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > resilience (+max HP), regeneration, and privacy (a ZK cloak: monsters can't track you),
 > and charged **wands** (`z` to zap in a direction — a bolt of finality, or banishment).
 > **Status effects** add bite: gas wraiths **poison** (damage over time), censor imps and
-> 51% attackers **confuse** (you stagger) — cured by prayer or a healing potion.
+> 51% attackers **confuse** (you stagger) — cured by prayer or a healing potion. And you
+> start with a **nominator** (`d`) — a loyal pet that follows you and savages adjacent foes.
 
 **On-chain (Paseo):** `AscendBank` (`0x3D35694e…FcD31`) holds your purse for gasless
 shop spends; `AscendLedger` (`0x56068D…ccaa5`) is the gasless run record + bones.

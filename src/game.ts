@@ -1,6 +1,6 @@
 import * as ROT from "rot-js";
 import { Level, Trap, TrapKind } from "./level";
-import { Entity, Player, Monster } from "./entities";
+import { Entity, Player, Monster, Pet } from "./entities";
 import { Item } from "./inventory";
 import { Log } from "./log";
 import {
@@ -27,6 +27,7 @@ export class Game {
   player!: Player;
   ident!: Idents;
   monsters: Monster[] = [];
+  pet: Pet | null = null;
   wallet: Wallet | null = null;
   onWallet?: (address: string, pas: number) => void;
   recentRuns: RunEntry[] = []; // leaderboard cache + bones pool
@@ -52,10 +53,12 @@ export class Game {
     this.level = new Level(W, MAP_H);
     this.player = new Player(this, this.level.start.x, this.level.start.y);
     this.giveStartingKit();
+    this.pet = new Pet(this, this.level.start.x, this.level.start.y);
     this.enterLevel();
     this.log.add(ROT.RNG.getItem(GREETINGS)!, "sys");
     for (const line of GRAY_PAPER) this.log.add(line, "dim");
-    this.log.add("Keys: move · , pick up · p buy · P pray · < up · > down · i/w/W/q/r/e/d items.", "dim");
+    this.log.add("Your nominator (d) pads at your heels — it backs you, and bites for you.", "dim");
+    this.log.add("Keys: move · , pick up · p buy · P pray · z zap · < up · > down · i/w/W/q/r/e/d items.", "dim");
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
@@ -88,7 +91,25 @@ export class Game {
     this.spawnTraps();
     if (this.player.depth >= MAX_DEPTH) this.placeJamAndBoss();
     for (const m of this.monsters) this.scheduler.add(m, true);
+    if (this.pet && this.pet.alive) {
+      const spot = this.adjacentFree(this.player.x, this.player.y);
+      if (spot) { this.pet.x = spot.x; this.pet.y = spot.y; }
+      this.scheduler.add(this.pet, true);
+    }
     this.level.computeFOV(this.player.x, this.player.y);
+  }
+
+  adjacentEnemy(x: number, y: number): Monster | undefined {
+    return this.monsters.find((m) => m.alive && Math.max(Math.abs(m.x - x), Math.abs(m.y - y)) === 1);
+  }
+
+  private adjacentFree(x: number, y: number): { x: number; y: number } | null {
+    const offs = ROT.RNG.shuffle([[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]] as [number, number][]);
+    for (const [dx, dy] of offs) {
+      const nx = x + dx, ny = y + dy;
+      if (this.level.isPassable(nx, ny) && !this.monsterAt(nx, ny)) return { x: nx, y: ny };
+    }
+    return null;
   }
 
   descend(): void {
@@ -227,6 +248,8 @@ export class Game {
       this.log.add(`${cap(a.name)} hits you for ${dmg}.`, "bad");
       if (a instanceof Monster && a.def.inflict && d.hp > 0 && ROT.RNG.getUniform() < 0.3) this.applyStatus(a.def.inflict);
     }
+    else if (a === this.pet) this.log.add(`Your nominator savages ${d.name} for ${dmg}.`, "good");
+    else if (d === this.pet) this.log.add(`${cap(a.name)} mauls your nominator for ${dmg}.`, "bad");
     if (d.hp <= 0) this.kill(d);
   }
 
@@ -432,6 +455,7 @@ export class Game {
 
   private kill(d: Entity): void {
     if (d === this.player) { this.gameOver(); return; }
+    if (d === this.pet) { this.log.add("Your nominator falls. You descend alone.", "bad"); this.scheduler.remove(this.pet); return; }
     const m = d as Monster;
     this.monsters = this.monsters.filter((x) => x !== m);
     this.scheduler.remove(m);
@@ -549,6 +573,9 @@ export class Game {
     }
     for (const m of this.monsters) {
       if (m.alive && this.level.isVisible(m.x, m.y)) this.display.draw(m.x, m.y, m.ch, m.fg, COLORS.bg);
+    }
+    if (this.pet && this.pet.alive && this.level.isVisible(this.pet.x, this.pet.y)) {
+      this.display.draw(this.pet.x, this.pet.y, this.pet.ch, this.pet.fg, COLORS.bg);
     }
     this.display.draw(this.player.x, this.player.y, this.player.ch, this.player.fg, COLORS.bg);
 

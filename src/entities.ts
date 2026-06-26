@@ -327,6 +327,10 @@ export class Monster extends Entity {
     const dist = Math.max(Math.abs(this.x - p.x), Math.abs(this.y - p.y));
     if (dist === 1) { this.game.attack(this, p); return; }
 
+    // If the player's nominator is at our side, swat it.
+    const pet = this.game.pet;
+    if (pet && pet.alive && Math.max(Math.abs(this.x - pet.x), Math.abs(this.y - pet.y)) === 1) { this.game.attack(this, pet); return; }
+
     // Chase only what the player can see — unless they're cloaked (ring of privacy).
     if (this.def.ai === "chase" && !p.stealth && this.game.level.isVisible(this.x, this.y) && dist <= 9) {
       const dij = new ROT.Path.Dijkstra(p.x, p.y, (x, y) => this.game.level.isPassable(x, y), { topology: 8 });
@@ -346,6 +350,39 @@ export class Monster extends Entity {
     const nx = this.x + d[0], ny = this.y + d[1];
     if (this.game.level.isPassable(nx, ny) && !this.game.monsterAt(nx, ny) && !(nx === p.x && ny === p.y)) {
       this.x = nx; this.y = ny;
+    }
+  }
+}
+
+/** The player's loyal nominator — follows, and savages adjacent enemies. */
+export class Pet extends Entity {
+  constructor(game: Game, x: number, y: number) {
+    super(game);
+    this.x = x; this.y = y;
+    this.ch = "d"; this.fg = "#80d080"; this.name = "your nominator";
+    this.hp = this.maxHp = 14;
+    this.attackDmg = [2, 4];
+  }
+
+  getSpeed(): number { return 110; } // keeps pace with you
+
+  act(): void {
+    if (!this.alive) return;
+    const p = this.game.player;
+
+    const foe = this.game.adjacentEnemy(this.x, this.y);
+    if (foe) { this.game.attack(this, foe); return; }
+
+    const dist = Math.max(Math.abs(this.x - p.x), Math.abs(this.y - p.y));
+    if (dist > 1) {
+      const dij = new ROT.Path.Dijkstra(p.x, p.y, (x, y) => this.game.level.isPassable(x, y), { topology: 8 });
+      const path: [number, number][] = [];
+      dij.compute(this.x, this.y, (x, y) => path.push([x, y]));
+      path.shift();
+      if (path.length) {
+        const [nx, ny] = path[0];
+        if (!(nx === p.x && ny === p.y) && !this.game.monsterAt(nx, ny)) { this.x = nx; this.y = ny; }
+      }
     }
   }
 }
