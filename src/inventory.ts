@@ -1,6 +1,6 @@
 import type { ItemType } from "./items";
 
-export interface Item { type: ItemType; charges?: number; } // charges for wands
+export interface Item { type: ItemType; charges?: number; enchant?: number; relic?: boolean; } // charges for wands; enchant/relic for NFT gear
 
 /** Letter-indexed pack (a, b, c, …). */
 export class Inventory {

@@ -7,10 +7,11 @@ import {
   COLORS, TILE_GLYPH, MONSTERS, MonsterDef, DEATHS, GREETINGS,
   MAX_DEPTH, CENSOR, MINIBOSSES, realmName, GRAY_PAPER, ChainDef, CHAINS,
 } from "./data";
-import { Idents, ITEMS, JAM, pickItemType, ItemType, EffectId } from "./items";
+import { Idents, ITEMS, JAM, pickItemType, ItemType, EffectId, itemById, isGear } from "./items";
 import { connectWallet, Wallet } from "./chain/wallet";
 import { bankBalancePas, spendPas, depositPas } from "./chain/bank";
 import { recordRun, readRecent, RunEntry } from "./chain/ledger";
+import { readGear, mintGear } from "./chain/gear";
 
 const PRICE: Record<string, number> = { weapon: 6, armor: 5, potion: 4, scroll: 4, food: 2 };
 
@@ -30,6 +31,7 @@ export class Game {
   pet: Pet | null = null;
   private currentChain: ChainDef | null = null; // null = the main relay-chain dungeon
   private defeatedBosses = new Set<number>();    // relay depths whose mini-boss is slain
+  private loadedRelics = new Set<number>();      // NFT relic tokenIds already pulled into this run's pack
   wallet: Wallet | null = null;
   onWallet?: (address: string, pas: number) => void;
   recentRuns: RunEntry[] = []; // leaderboard cache + bones pool
@@ -52,6 +54,7 @@ export class Game {
   newGame(): void {
     this.over = false;
     this.defeatedBosses.clear();
+    this.loadedRelics.clear();
     this.ident = new Idents();
     this.level = new Level(W, MAP_H);
     this.player = new Player(this, this.level.start.x, this.level.start.y);
@@ -66,6 +69,28 @@ export class Game {
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
     void this.fetchLeaderboard();
+    if (this.wallet) void this.loadRelics(); // carry owned NFT gear into the new run
+  }
+
+  /** Pull the player's owned NFT relics into the pack — persistent, tradeable gear
+   *  that survives permadeath and rides into every descent. */
+  private async loadRelics(): Promise<void> {
+    if (!this.wallet) return;
+    const owned = await readGear(this.wallet.address);
+    let added = 0;
+    for (const g of owned) {
+      if (this.loadedRelics.has(g.tokenId)) continue;
+      const type = itemById(g.itemId);
+      if (!type || !isGear(type)) continue;
+      if (this.player.inventory.full) break;
+      this.giveItem(type, { enchant: g.enchant, relic: true });
+      this.loadedRelics.add(g.tokenId);
+      added++;
+    }
+    if (added > 0) {
+      this.log.add(`✦ ${added} on-chain relic${added > 1 ? "s" : ""} materialise in your pack (yours forever — tradeable).`, "good");
+      this.draw();
+    }
   }
 
   private async fetchLeaderboard(): Promise<void> {
@@ -373,10 +398,12 @@ export class Game {
     }
   }
 
-  /** Add an item to the pack, rolling wand charges. */
-  giveItem(type: ItemType): Item {
+  /** Add an item to the pack, rolling wand charges. NFT relics carry enchant + a relic mark. */
+  giveItem(type: ItemType, opts?: { enchant?: number; relic?: boolean }): Item {
     const it = this.player.inventory.add(type);
     if (type.kind === "wand") it.charges = ROT.RNG.getUniformInt(3, 6);
+    if (opts?.enchant) it.enchant = opts.enchant;
+    if (opts?.relic) it.relic = true;
     return it;
   }
 
@@ -434,9 +461,10 @@ export class Game {
       return true;
     }
     if (this.player.inventory.full) { this.log.add("Your pack is full.", "bad"); return false; }
-    this.giveItem(fi.type);
+    this.giveItem(fi.type, { enchant: fi.enchant, relic: fi.relic });
     this.level.items = this.level.items.filter((i) => i !== fi);
-    this.log.add(`You pick up ${this.ident.name(fi.type)}.`);
+    const tag = fi.relic ? ` +${fi.enchant ?? 0} ✦` : "";
+    this.log.add(`You pick up ${this.ident.name(fi.type)}${tag}.`);
     return true;
   }
 
@@ -451,7 +479,8 @@ export class Game {
     inv.items.forEach((it, i) => {
       const eq = it === this.player.weapon ? " (wielded)" : it === this.player.armor ? " (worn)" : it === this.player.ring ? " (on hand)" : "";
       const ch = it.charges != null ? ` [${it.charges}]` : "";
-      this.log.add(`  ${inv.letter(i)}) ${this.ident.name(it.type)}${ch}${eq}`, "dim");
+      const relic = it.relic ? ` +${it.enchant ?? 0} ✦` : "";
+      this.log.add(`  ${inv.letter(i)}) ${this.ident.name(it.type)}${relic}${ch}${eq}`, it.relic ? "sys" : "dim");
     });
   }
 
@@ -511,6 +540,7 @@ export class Game {
       this.log.add(`Wallet connected: ${a.slice(0, 6)}…${a.slice(-4)} — purse ${this.player.pas} PAS.`, "sys");
       this.onWallet?.(a, this.player.pas);
       this.draw();
+      void this.loadRelics(); // bring any owned NFT relics into the current pack
     } catch (e) {
       this.log.add(`Wallet: ${e instanceof Error ? e.message : "failed"}`, "bad");
     }
@@ -550,6 +580,23 @@ export class Game {
         }
       }
     }
+    // From the Parachain Reaches on, the bazaar may carry a relic — an NFT ware
+    // that mints to you (gasless) on purchase and persists across runs.
+    if (this.player.depth >= 4 && ROT.RNG.getUniform() < 0.5) {
+      const relicTypes = ITEMS.filter((i) => isGear(i));
+      const rt = ROT.RNG.getItem(relicTypes)!;
+      const enchant = ROT.RNG.getUniformInt(1, 2);
+      while (oi < offsets.length) {
+        const [dx, dy] = offsets[oi++];
+        const x = c.x + dx, y = c.y + dy;
+        if (this.level.isPassable(x, y) && !this.level.itemAt(x, y) &&
+            this.level.tileAt(x, y) !== "stairsDown" && !(x === this.player.x && y === this.player.y)) {
+          this.level.items.push({ x, y, type: rt, price: 12 + enchant * 4, enchant, relic: true, mintOnBuy: true });
+          this.log.add("A relic vendor is among them — a tradeable NFT, minted to you on purchase.", "dim");
+          break;
+        }
+      }
+    }
     this.log.add("A bazaar glints somewhere on this floor — provisions for PAS (stand on a ware, press p).", "dim");
   }
 
@@ -561,11 +608,19 @@ export class Game {
     this.log.add(`Paying ${fi.price} PAS (sign — gasless)…`, "sys"); this.draw();
     const r = await spendPas(this.wallet.provider, this.wallet.address, fi.price);
     if (!r.ok) { this.log.add(`Purchase failed: ${r.error}`, "bad"); return; }
-    this.giveItem(fi.type);
+    this.giveItem(fi.type, { enchant: fi.enchant, relic: fi.relic });
     this.level.items = this.level.items.filter((i) => i !== fi);
     this.player.pas = await bankBalancePas(this.wallet.address);
     this.onWallet?.(this.wallet.address, this.player.pas);
-    this.log.add(`Bought ${this.ident.name(fi.type)} for ${fi.price} PAS (gasless). Purse: ${this.player.pas}.`, "good");
+    const tag = fi.relic ? ` +${fi.enchant ?? 0} ✦` : "";
+    this.log.add(`Bought ${this.ident.name(fi.type)}${tag} for ${fi.price} PAS (gasless). Purse: ${this.player.pas}.`, "good");
+    // A relic ware mints an NFT to you (the floor item is the same relic for this run).
+    if (fi.relic && fi.mintOnBuy) {
+      this.log.add("Minting your relic on-chain (sign — gasless)…", "sys"); this.draw();
+      const g = await mintGear(this.wallet.provider, this.wallet.address, fi.type.id, fi.enchant ?? 0);
+      if (g.ok) this.log.add("✦ Relic minted — an NFT you own and can trade on any marketplace. It returns in future runs.", "good");
+      else this.log.add(`(relic mint skipped: ${g.error})`, "dim");
+    }
     this.draw();
   }
 
@@ -577,9 +632,20 @@ export class Game {
     this.scheduler.remove(m);
     if (m.def.boss) {
       this.defeatedBosses.add(this.player.depth);
-      const goodies = ITEMS.filter((i) => i.kind === "ring" || i.kind === "wand");
-      if (!this.level.itemAt(m.x, m.y)) this.level.items.push({ x: m.x, y: m.y, type: ROT.RNG.getItem(goodies)! });
-      this.log.add(`${cap(m.name)} falls! It leaves a prize.`, "good");
+      // A boss drops a relic-grade prize: an enchanted piece of equipment.
+      const goodies = ITEMS.filter((i) => isGear(i));
+      const prize = ROT.RNG.getItem(goodies)!;
+      const enchant = ROT.RNG.getUniformInt(1, 3);
+      if (!this.level.itemAt(m.x, m.y)) this.level.items.push({ x: m.x, y: m.y, type: prize, enchant, relic: true });
+      this.log.add(`${cap(m.name)} falls! It leaves a relic — ${prize.name} +${enchant}.`, "good");
+      // Etch it on-chain as a tradeable NFT (gasless: you sign, the relay mints).
+      if (this.wallet) {
+        this.log.add("Minting it as an on-chain relic (sign — gasless)…", "sys");
+        void mintGear(this.wallet.provider, this.wallet.address, prize.id, enchant).then((r) => {
+          if (r.ok) this.log.add("✦ Relic minted — it's an NFT now, tradeable on any marketplace. It returns in future runs.", "good");
+          else this.log.add(`(relic mint skipped: ${r.error})`, "dim");
+        });
+      }
     } else {
       this.log.add(`${cap(m.name)} is destroyed.`, "good");
     }

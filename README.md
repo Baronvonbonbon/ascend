@@ -16,7 +16,15 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > **Phase 4 — persistence & social** is in: when a run ends (death or ASCENSION)
 > it's recorded on-chain **gaslessly** (you sign, the relay submits) into the
 > **AscendLedger** Hall of Fame (`H` to view), and fallen heroes leave **bones**
-> (`‡` graves) that surface in later descents. NFT gear is the remaining Phase 4b.
+> (`‡` graves) that surface in later descents.
+>
+> **Phase 4b — NFT gear (`✦` relics)** is in: mini-bosses drop, and bazaars in the
+> Parachain Reaches sell, **relics** — enchanted equipment minted to you as **tradeable
+> ERC-721 NFTs** on the **AscendGear** contract (gasless: you sign a Mint authorization,
+> the relay — which holds the minter role — submits and pays gas). Relics are standard
+> ERC-721s with `transfer`/`approve`, so any marketplace (e.g. Datum Tavern) can list and
+> trade them, and your owned relics **materialise in your pack at the start of every run** —
+> real, tradeable meta-progression that outlives permadeath.
 >
 > **Phase 5 (toward parity)** is underway: hidden **traps** (`^` — gas-fee / slashing /
 > reorg), a bigger bestiary including self-replicating **sybils** and the deadlier
@@ -37,8 +45,9 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > (depth 6) each drop a guaranteed prize when slain, before **THE CENSOR** and the JAM at depth 8.
 
 **On-chain (Paseo):** `AscendBank` (`0x3D35694e…FcD31`) holds your purse for gasless
-shop spends; `AscendLedger` (`0x56068D…ccaa5`) is the gasless run record + bones.
-Both via signature-authorized meta-transactions relayed by the Datum relay.
+shop spends; `AscendLedger` (`0x56068D…ccaa5`) is the gasless run record + bones;
+`AscendGear` (`0xd029ae…B7c3`) is the tradeable ERC-721 relic NFT. All three via
+signature-authorized meta-transactions relayed by the Datum relay (gasless for the player).
 
 ## Play it
 
@@ -64,7 +73,7 @@ No framework in the engine; the chain layer reuses the Datum relay.
 1. **Core systems** — inventory, items, hunger, identification, depth.
 2. **Web3 economy** — wallet connect, gasless PAS shops, earn↔spend.
 3. **Mythology & endgame** — full theming, the JAM, altars (Gavin), the Censor, ascension.
-4. **Persistence & social** — on-chain runs/leaderboard, bones, NFT gear.
+4. **Persistence & social** — on-chain runs/leaderboard, bones, **tradeable NFT gear** ✓.
 5. **Toward parity** — spells, traps, pets, alignment, special levels.
 
 Full design + theming bible in **[DESIGN.md](./DESIGN.md)**.

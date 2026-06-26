@@ -63,8 +63,10 @@ export class Player extends Entity {
 
   /** Recompute attack damage from the wielded weapon (or fists) + enchant bonus. */
   applyWeapon(): void {
-    if (this.weapon) this.attackDmg = [this.weapon.type.dmg![0] + this.weaponBonus, this.weapon.type.dmg![1] + this.weaponBonus];
-    else this.attackDmg = [1, 3];
+    if (this.weapon) {
+      const b = this.weaponBonus + (this.weapon.enchant ?? 0); // scroll enchant + relic enchant
+      this.attackDmg = [this.weapon.type.dmg![0] + b, this.weapon.type.dmg![1] + b];
+    } else this.attackDmg = [1, 3];
   }
 
   /** Apply (on=true) or revert a worn ring's passive effect. */
@@ -205,7 +207,7 @@ export class Player extends Entity {
         this.game.log.add(`You wield ${ident.name(t)}.`, "good"); return this.endTurn();
       case "wear":
         if (t.kind === "armor") {
-          this.armor = item; this.ac = t.ac!;
+          this.armor = item; this.ac = t.ac! + (item.enchant ?? 0);
           this.game.log.add(`You don ${ident.name(t)}.`, "good"); return this.endTurn();
         }
         if (t.kind === "ring") {
