@@ -308,6 +308,33 @@ export class Game {
     else { this.player.confused = Math.max(this.player.confused, 5); this.log.add("Your head spins — you're confused!", "bad"); }
   }
 
+  /** A ranged foe zaps the player (armor half-soaks; can still inflict status). */
+  rangedAttack(a: Monster): void {
+    const p = this.player;
+    const [lo, hi] = a.attackDmg;
+    let dmg = ROT.RNG.getUniformInt(lo, hi);
+    if (p.ac > 0) dmg = Math.max(1, dmg - Math.floor(p.ac / 2));
+    p.hp -= dmg;
+    this.log.add(`${cap(a.name)} zaps you from afar for ${dmg}!`, "bad");
+    if (a.def.inflict && p.hp > 0 && ROT.RNG.getUniform() < 0.3) this.applyStatus(a.def.inflict);
+    if (p.hp <= 0) this.kill(p);
+  }
+
+  /** Bresenham line-of-sight: clear if no wall lies between the two cells. */
+  hasLineOfSight(x0: number, y0: number, x1: number, y1: number): boolean {
+    const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+    let err = dx - dy, x = x0, y = y0;
+    for (let guard = 0; guard < 100; guard++) {
+      if (x === x1 && y === y1) return true;
+      if (!(x === x0 && y === y0) && !this.level.isPassable(x, y)) return false;
+      const e2 = 2 * err;
+      if (e2 > -dy) { err -= dy; x += sx; }
+      if (e2 < dx) { err += dx; y += sy; }
+    }
+    return false;
+  }
+
   killPlayer(): void {
     this.gameOver();
   }

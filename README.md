@@ -25,7 +25,8 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > resilience (+max HP), regeneration, and privacy (a ZK cloak: monsters can't track you),
 > and charged **wands** (`z` to zap in a direction — a bolt of finality, or banishment).
 > **Status effects** add bite: gas wraiths **poison** (damage over time), censor imps and
-> 51% attackers **confuse** (you stagger) — cured by prayer or a healing potion. And you
+> 51% attackers **confuse** (you stagger), and **oracles** (`o`) **zap you from afar**
+> with line-of-sight — cured by prayer or a healing potion. And you
 > start with a **nominator** (`d`) — a loyal pet that follows you and savages adjacent foes.
 > Mid-depth floors hold **XCM portals** (`Ω`): call out (`>`) to a **parachain branch** —
 > Kusama, Moonbeam, Astar, Phala, Interlay, Bifrost, Hydration, Acala — each with its own

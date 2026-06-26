@@ -340,6 +340,12 @@ export class Monster extends Entity {
     const pet = this.game.pet;
     if (pet && pet.alive && Math.max(Math.abs(this.x - pet.x), Math.abs(this.y - pet.y)) === 1) { this.game.attack(this, pet); return; }
 
+    // Ranged foes (oracles) zap the player from a distance with line-of-sight.
+    if (this.def.ranged && !p.stealth && dist >= 2 && dist <= 6 && this.game.level.isVisible(this.x, this.y) && this.game.hasLineOfSight(this.x, this.y, p.x, p.y)) {
+      this.game.rangedAttack(this);
+      return;
+    }
+
     // Chase only what the player can see — unless they're cloaked (ring of privacy).
     if (this.def.ai === "chase" && !p.stealth && this.game.level.isVisible(this.x, this.y) && dist <= 9) {
       const dij = new ROT.Path.Dijkstra(p.x, p.y, (x, y) => this.game.level.isPassable(x, y), { topology: 8 });

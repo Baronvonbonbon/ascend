@@ -67,6 +67,7 @@ export interface MonsterDef {
   splits?: boolean;      // a sybil — occasionally replicates (the Sybil attack)
   speed?: number;        // turn speed (100 = normal; higher acts more often)
   inflict?: "poison" | "confuse"; // status applied on a hit (30% chance)
+  ranged?: boolean;      // fires at the player from a distance with line-of-sight
 }
 
 // Themed bestiary — the centralised legacy stack fights back.
@@ -79,6 +80,7 @@ export const MONSTERS: MonsterDef[] = [
   { name: "a rug puller",      ch: "r", fg: "#d08040", hp: 5,  dmg: [3, 6], ai: "chase",  minDepth: 4, weight: 2, speed: 115 },
   { name: "a censor imp",      ch: "i", fg: "#d05c5c", hp: 8,  dmg: [3, 5], ai: "chase",  minDepth: 4, weight: 2, inflict: "confuse" },
   { name: "a whale",           ch: "O", fg: "#4090c0", hp: 24, dmg: [3, 6], ai: "chase",  minDepth: 5, weight: 2, speed: 60 },
+  { name: "an oracle",         ch: "o", fg: "#e0c040", hp: 9,  dmg: [3, 6], ai: "chase",  minDepth: 5, weight: 2, ranged: true },
   { name: "a 51% attacker",    ch: "A", fg: "#e05050", hp: 16, dmg: [4, 8], ai: "chase",  minDepth: 6, weight: 2, speed: 110, inflict: "confuse" },
 ];
 
