@@ -269,14 +269,20 @@ export class Player extends Entity {
     if (grave) this.game.log.add(`☗ ${grave.label}.`, "dim");
     const trap = this.game.level.trapAt(this.x, this.y);
     if (trap) this.game.triggerTrap(trap);
-    if (this.game.level.tileAt(this.x, this.y) === "portal") this.game.log.add("A Kusama rift swirls here. (> to enter — chaos and reward await)", "sys");
+    if (this.game.level.tileAt(this.x, this.y) === "portal") {
+      const pr = this.game.level.portalAt(this.x, this.y);
+      if (pr) this.game.log.add(`XCM portal → ${pr.chain.name} (difficulty ×${pr.chain.difficulty}, loot ×${pr.chain.loot}). Press > to call.`, "sys");
+    }
     this.game.draw();
     return this.endTurn();
   }
 
   private tryDescend(): boolean {
     const t = this.game.level.tileAt(this.x, this.y);
-    if (t === "portal") { this.game.enterKusama(); return this.endTurn(); }
+    if (t === "portal") {
+      const pr = this.game.level.portalAt(this.x, this.y);
+      if (pr) { this.game.enterChain(pr.chain); return this.endTurn(); }
+    }
     if (t !== "stairsDown") {
       this.game.log.add("There are no stairs down here.", "dim");
       return false;

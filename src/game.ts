@@ -5,7 +5,7 @@ import { Item } from "./inventory";
 import { Log } from "./log";
 import {
   COLORS, TILE_GLYPH, MONSTERS, MonsterDef, DEATHS, GREETINGS,
-  MAX_DEPTH, CENSOR, realmName, GRAY_PAPER,
+  MAX_DEPTH, CENSOR, realmName, GRAY_PAPER, ChainDef, CHAINS,
 } from "./data";
 import { Idents, ITEMS, JAM, pickItemType, ItemType, EffectId } from "./items";
 import { connectWallet, Wallet } from "./chain/wallet";
@@ -28,7 +28,7 @@ export class Game {
   ident!: Idents;
   monsters: Monster[] = [];
   pet: Pet | null = null;
-  private inKusama = false;
+  private currentChain: ChainDef | null = null; // null = the main relay-chain dungeon
   wallet: Wallet | null = null;
   onWallet?: (address: string, pas: number) => void;
   recentRuns: RunEntry[] = []; // leaderboard cache + bones pool
@@ -90,8 +90,8 @@ export class Game {
     this.placeAltar();
     this.maybePlaceBones();
     this.spawnTraps();
-    this.placePortal();
-    if (this.player.depth >= MAX_DEPTH) this.placeJamAndBoss();
+    this.placePortals();
+    if (!this.currentChain && this.player.depth >= MAX_DEPTH) this.placeJamAndBoss();
     for (const m of this.monsters) this.scheduler.add(m, true);
     if (this.pet && this.pet.alive) {
       const spot = this.adjacentFree(this.player.x, this.player.y);
@@ -128,47 +128,55 @@ export class Game {
     this.draw();
   }
 
-  // ── the Kusama rift (a chaos side-branch) ──────────────────────────────────
-  private placePortal(): void {
-    if (this.inKusama || this.player.depth < 3 || this.player.depth > 6 || ROT.RNG.getUniform() > 0.5) return;
-    const centers = this.level.roomCenters.filter(
-      (c) => this.level.tileAt(c.x, c.y) === "floor" && !(c.x === this.player.x && c.y === this.player.y),
-    );
-    if (!centers.length) return;
-    const c = ROT.RNG.getItem(centers)!;
-    this.level.tiles[c.y][c.x] = "portal";
+  // ── XCM: parachain side-branches (each scales difficulty × loot) ────────────
+  private placePortals(): void {
+    if (this.currentChain || this.player.depth < 2 || this.player.depth > 7) return;
+    const n = ROT.RNG.getUniform() < 0.7 ? (ROT.RNG.getUniform() < 0.3 ? 2 : 1) : 0;
+    for (let i = 0; i < n; i++) {
+      const centers = this.level.roomCenters.filter(
+        (c) => this.level.tileAt(c.x, c.y) === "floor" && !(c.x === this.player.x && c.y === this.player.y) && !this.level.portalAt(c.x, c.y),
+      );
+      if (!centers.length) break;
+      const c = ROT.RNG.getItem(centers)!;
+      const chain = ROT.RNG.getItem(CHAINS)!;
+      this.level.tiles[c.y][c.x] = "portal";
+      this.level.portals.push({ x: c.x, y: c.y, chain });
+    }
   }
 
-  enterKusama(): void {
-    this.inKusama = true;
+  /** XCM call: hop to a parachain branch (its multipliers shape spawns + loot). */
+  enterChain(chain: ChainDef): void {
+    this.currentChain = chain;
     this.level = new Level(W, MAP_H);
     this.player.x = this.level.start.x;
     this.player.y = this.level.start.y;
-    this.placeUpStair(); // the way back
+    this.placeUpStair(); // the way back to the relay
     this.enterLevel();
     const goodies = ITEMS.filter((i) => i.kind === "ring" || i.kind === "wand");
-    for (let i = 0; i < 2; i++) {
+    const cacheN = Math.max(0, Math.round(2 * chain.loot));
+    for (let i = 0; i < cacheN; i++) {
       const pos = this.level.randomFloor();
       if (this.level.tileAt(pos.x, pos.y) === "floor" && !this.level.itemAt(pos.x, pos.y))
         this.level.items.push({ x: pos.x, y: pos.y, type: ROT.RNG.getItem(goodies)! });
     }
-    this.log.add("You step through the Kusama rift. Expect chaos — and reward. (< to return)", "bad");
+    this.log.add(`XCM → ${chain.name}: difficulty ×${chain.difficulty}, loot ×${chain.loot}. (< to return to the relay)`, chain.difficulty >= 1 ? "bad" : "sys");
     this.draw();
   }
 
-  private exitKusama(): void {
-    this.inKusama = false;
+  private exitChain(): void {
+    const from = this.currentChain?.name ?? "the branch";
+    this.currentChain = null;
     this.level = new Level(W, MAP_H);
     this.player.x = this.level.stairs.x;
     this.player.y = this.level.stairs.y;
     if (this.player.depth > 1) this.placeUpStair();
     this.enterLevel();
-    this.log.add(`You slip out of Kusama, back to depth ${this.player.depth}.`, "sys");
+    this.log.add(`XCM ← you return from ${from} to the relay at depth ${this.player.depth}.`, "sys");
     this.draw();
   }
 
   ascend(): void {
-    if (this.inKusama) { this.exitKusama(); return; }
+    if (this.currentChain) { this.exitChain(); return; }
     const newDepth = this.player.depth - 1;
     if (newDepth < 1) return;
     this.player.depth = newDepth;
@@ -306,7 +314,8 @@ export class Game {
 
   // ── items ──────────────────────────────────────────────────────────────────
   private spawnItems(): void {
-    const count = 3 + Math.floor(this.player.depth * 0.7) + (this.inKusama ? 4 : 0); // richer loot in the rift
+    const loot = this.currentChain?.loot ?? 1;
+    const count = Math.round((3 + this.player.depth * 0.7) * loot);
     for (let i = 0; i < count; i++) {
       const type = pickItemType();
       let pos = this.level.randomFloor();
@@ -506,10 +515,12 @@ export class Game {
 
   // ── spawns ─────────────────────────────────────────────────────────────────
   private spawnMonsters(): void {
-    const depth = this.player.depth + (this.inKusama ? 3 : 0); // the rift fields deeper foes
-    const count = 4 + Math.floor(depth * 1.5) + (depth >= 7 ? 4 : 0) + (this.inKusama ? 4 : 0);
+    const diff = this.currentChain?.difficulty ?? 1;
+    // A chain's difficulty shifts the monster pool deeper/shallower and scales the count.
+    const poolDepth = Math.max(1, this.player.depth + Math.round((diff - 1) * 4));
+    const count = Math.round((4 + this.player.depth * 1.5) * diff) + (this.player.depth >= 7 ? 4 : 0);
     for (let i = 0; i < count; i++) {
-      const def = this.pickMonster(depth);
+      const def = this.pickMonster(poolDepth);
       let pos = this.level.randomFloor();
       let tries = 0;
       while (
@@ -610,6 +621,9 @@ export class Game {
     for (const t of this.level.traps) {
       if (t.revealed && this.level.isVisible(t.x, t.y)) this.display.draw(t.x, t.y, "^", "#d06060", COLORS.bg);
     }
+    for (const pr of this.level.portals) {
+      if (this.level.isVisible(pr.x, pr.y)) this.display.draw(pr.x, pr.y, "Ω", pr.chain.color, COLORS.bg);
+    }
     for (const fi of this.level.items) {
       if (this.level.isVisible(fi.x, fi.y)) this.display.draw(fi.x, fi.y, fi.type.ch, fi.type.fg, fi.price ? "#2a2208" : COLORS.bg);
     }
@@ -627,6 +641,7 @@ export class Game {
     this.display.drawText(
       1, MAP_H + 1,
       `%c{${COLORS.dim}}HP %c{${hpCol}}${p.hp}%c{${COLORS.dim}}/${p.maxHp}  Depth %c{${COLORS.gold}}${p.depth}` +
+      (this.currentChain ? `%c{${COLORS.dim}} @%c{${this.currentChain.color}}${this.currentChain.name}` : `%c{${COLORS.dim}} @%c{${COLORS.dim}}Relay`) +
       `%c{${COLORS.dim}}  AC %c{${COLORS.good}}${p.ac}` +
       `%c{${COLORS.dim}}  PAS %c{${COLORS.gold}}${p.pas}` +
       (hunger ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}${hunger}` : "") +

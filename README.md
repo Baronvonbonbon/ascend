@@ -27,8 +27,9 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > **Status effects** add bite: gas wraiths **poison** (damage over time), censor imps and
 > 51% attackers **confuse** (you stagger) — cured by prayer or a healing potion. And you
 > start with a **nominator** (`d`) — a loyal pet that follows you and savages adjacent foes.
-> Mid-depth floors may hold a **Kusama rift** (`Ω`): step in (`>`) for a deadlier, loot-rich
-> chaos branch, and climb back out (`<`) when you've taken what you can survive.
+> Mid-depth floors hold **XCM portals** (`Ω`): call out (`>`) to a **parachain branch** —
+> Kusama, Moonbeam, Astar, Phala, Interlay, Bifrost, Hydration, Acala — each with its own
+> **difficulty × loot** multipliers (some up, some down from the relay). Climb back (`<`) to the relay.
 
 **On-chain (Paseo):** `AscendBank` (`0x3D35694e…FcD31`) holds your purse for gasless
 shop spends; `AscendLedger` (`0x56068D…ccaa5`) is the gasless run record + bones.

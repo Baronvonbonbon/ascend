@@ -29,6 +29,19 @@ export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: strin
 
 export const MAX_DEPTH = 8; // the JAM lies on the deepest floor
 
+/** XCM destinations: each parachain branch scales difficulty + loot vs. the relay. */
+export interface ChainDef { id: string; name: string; difficulty: number; loot: number; color: string; }
+export const CHAINS: ChainDef[] = [
+  { id: "kusama",    name: "Kusama",    difficulty: 1.6, loot: 1.6, color: "#e060d0" }, // chaos, high risk/reward
+  { id: "moonbeam",  name: "Moonbeam",  difficulty: 1.3, loot: 1.4, color: "#53cbc9" },
+  { id: "astar",     name: "Astar",     difficulty: 1.2, loot: 1.3, color: "#1b6dff" },
+  { id: "phala",     name: "Phala",     difficulty: 1.1, loot: 1.2, color: "#cdfa50" }, // privacy/compute
+  { id: "interlay",  name: "Interlay",  difficulty: 1.0, loot: 1.5, color: "#f7931a" }, // treasure (BTC bridge)
+  { id: "bifrost",   name: "Bifrost",   difficulty: 0.9, loot: 1.0, color: "#5a25f0" },
+  { id: "hydration", name: "Hydration", difficulty: 0.8, loot: 1.1, color: "#f6297c" }, // calmer, liquid loot
+  { id: "acala",     name: "Acala",     difficulty: 0.6, loot: 0.8, color: "#e40c5b" }, // safe DeFi haven
+];
+
 /** Realms deepen and grow chaotic — a nod to Polkadot → Kusama. */
 export function realmName(depth: number): string {
   if (depth >= 7) return "the Kusama Deeps";

@@ -1,6 +1,8 @@
 import * as ROT from "rot-js";
-import type { TileType } from "./data";
+import type { TileType, ChainDef } from "./data";
 import type { ItemType } from "./items";
+
+export interface Portal { x: number; y: number; chain: ChainDef; }
 
 export interface FloorItem { x: number; y: number; type: ItemType; price?: number; } // price set = a shop ware
 export type TrapKind = "gas" | "reorg" | "slash";
@@ -15,6 +17,7 @@ export class Level {
   items: FloorItem[] = [];
   graves: { x: number; y: number; label: string }[] = []; // bones of fallen heroes
   traps: Trap[] = [];
+  portals: Portal[] = []; // XCM portals to parachain branches
   roomCenters: { x: number; y: number }[] = [];
   start = { x: 1, y: 1 };
   stairs = { x: 1, y: 1 };
@@ -101,6 +104,10 @@ export class Level {
 
   trapAt(x: number, y: number): Trap | undefined {
     return this.traps.find((t) => t.x === x && t.y === y);
+  }
+
+  portalAt(x: number, y: number): Portal | undefined {
+    return this.portals.find((p) => p.x === x && p.y === y);
   }
 
   revealAll(): void {
