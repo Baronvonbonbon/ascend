@@ -314,6 +314,7 @@ export class Player extends Entity {
 
 export class Monster extends Entity {
   speedMod = 1; // a wand of slowness halves this
+  stolen: Item | null = null; // a thief (rug puller) carries what it snatched; drops it on death
   constructor(game: Game, public def: MonsterDef, x: number, y: number) {
     super(game);
     this.x = x;
@@ -333,10 +334,25 @@ export class Monster extends Entity {
     const p = this.game.player;
     if (!p.alive || !this.alive) return;
 
+    // A laden thief wants only to escape — it never turns to fight.
+    if (this.stolen) { this.fleeStep(p); return; }
+
     // The Sybil attack: occasionally a sybil spends its turn replicating.
     if (this.def.splits && ROT.RNG.getUniform() < 0.1 && this.game.spawnSybilNear(this.x, this.y)) return;
 
     const dist = Math.max(Math.abs(this.x - p.x), Math.abs(this.y - p.y));
+    // The rug pull: a thief adjacent to you snatches a pack item and blinks away.
+    if (this.def.steals && dist === 1) {
+      const loot = this.game.stealItem();
+      if (loot) {
+        this.stolen = loot;
+        const who = this.name.charAt(0).toUpperCase() + this.name.slice(1);
+        this.game.log.add(`${who} rugs you — it rips ${this.game.ident.name(loot.type)} from your pack and bolts!`, "bad");
+        this.blinkAway(p);
+        return;
+      }
+      // nothing to take — fall through and just attack
+    }
     if (dist === 1) { this.game.attack(this, p); return; }
 
     // If the player's nominator is at our side, swat it.
@@ -368,6 +384,27 @@ export class Monster extends Entity {
     const nx = this.x + d[0], ny = this.y + d[1];
     if (this.game.level.isPassable(nx, ny) && !this.game.monsterAt(nx, ny) && !(nx === p.x && ny === p.y)) {
       this.x = nx; this.y = ny;
+    }
+  }
+
+  /** Step to the neighbouring tile that puts the most distance between us and the player. */
+  private fleeStep(p: Player): void {
+    let best: [number, number] | null = null, bestD = -1;
+    for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [1, 1], [-1, -1], [1, -1], [-1, 1]] as [number, number][]) {
+      const nx = this.x + dx, ny = this.y + dy;
+      if (!this.game.level.isPassable(nx, ny) || this.game.monsterAt(nx, ny) || (nx === p.x && ny === p.y)) continue;
+      const d = Math.max(Math.abs(nx - p.x), Math.abs(ny - p.y));
+      if (d > bestD) { bestD = d; best = [nx, ny]; }
+    }
+    if (best) { this.x = best[0]; this.y = best[1]; }
+  }
+
+  /** Vanish to a far corner of the level — the thief's getaway. */
+  private blinkAway(p: Player): void {
+    for (let i = 0; i < 30; i++) {
+      const pos = this.game.level.randomFloor();
+      const d = Math.max(Math.abs(pos.x - p.x), Math.abs(pos.y - p.y));
+      if (d >= 8 && !this.game.monsterAt(pos.x, pos.y) && !(pos.x === p.x && pos.y === p.y)) { this.x = pos.x; this.y = pos.y; return; }
     }
   }
 }

@@ -398,6 +398,18 @@ export class Game {
     }
   }
 
+  /** A thief snatches a random pack item (unequipping it if worn/wielded). Returns it, or null if the pack is bare. */
+  stealItem(): Item | null {
+    const p = this.player;
+    if (p.inventory.items.length === 0) return null;
+    const it = ROT.RNG.getItem(p.inventory.items)!;
+    if (p.weapon === it) { p.weapon = null; p.applyWeapon(); }
+    if (p.armor === it) { p.armor = null; p.ac = 0; }
+    if (p.ring === it) { p.applyRing(it, false); p.ring = null; }
+    p.inventory.remove(it);
+    return it;
+  }
+
   /** Add an item to the pack, rolling wand charges. NFT relics carry enchant + a relic mark. */
   giveItem(type: ItemType, opts?: { enchant?: number; relic?: boolean }): Item {
     const it = this.player.inventory.add(type);
@@ -630,6 +642,12 @@ export class Game {
     const m = d as Monster;
     this.monsters = this.monsters.filter((x) => x !== m);
     this.scheduler.remove(m);
+    // A slain thief disgorges whatever it stole — reclaim it where it fell.
+    if (m.stolen && !this.level.itemAt(m.x, m.y)) {
+      this.level.items.push({ x: m.x, y: m.y, type: m.stolen.type, enchant: m.stolen.enchant, relic: m.stolen.relic });
+      this.log.add(`${cap(m.name)} drops ${this.ident.name(m.stolen.type)} as it dies.`, "good");
+      m.stolen = null;
+    }
     if (m.def.boss) {
       this.defeatedBosses.add(this.player.depth);
       // A boss drops a relic-grade prize: an enchanted piece of equipment.

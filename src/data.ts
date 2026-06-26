@@ -68,6 +68,7 @@ export interface MonsterDef {
   speed?: number;        // turn speed (100 = normal; higher acts more often)
   inflict?: "poison" | "confuse"; // status applied on a hit (30% chance)
   ranged?: boolean;      // fires at the player from a distance with line-of-sight
+  steals?: boolean;      // a thief — snatches a pack item and flees (the rug pull)
   boss?: boolean;        // a unique mini-boss — drops a guaranteed prize on death
 }
 
@@ -78,7 +79,7 @@ export const MONSTERS: MonsterDef[] = [
   { name: "a validator golem", ch: "V", fg: "#5c8ad0", hp: 12, dmg: [2, 4], ai: "chase",  minDepth: 2, weight: 3, speed: 85 },
   { name: "a fork daemon",     ch: "f", fg: "#d0a0d0", hp: 7,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 3, speed: 120 },
   { name: "a gas wraith",      ch: "w", fg: "#c08adf", hp: 6,  dmg: [2, 3], ai: "chase",  minDepth: 3, weight: 3, inflict: "poison" },
-  { name: "a rug puller",      ch: "r", fg: "#d08040", hp: 5,  dmg: [3, 6], ai: "chase",  minDepth: 4, weight: 2, speed: 115 },
+  { name: "a rug puller",      ch: "r", fg: "#d08040", hp: 5,  dmg: [3, 6], ai: "chase",  minDepth: 4, weight: 2, speed: 115, steals: true },
   { name: "a censor imp",      ch: "i", fg: "#d05c5c", hp: 8,  dmg: [3, 5], ai: "chase",  minDepth: 4, weight: 2, inflict: "confuse" },
   { name: "a whale",           ch: "O", fg: "#4090c0", hp: 24, dmg: [3, 6], ai: "chase",  minDepth: 5, weight: 2, speed: 60 },
   { name: "an oracle",         ch: "o", fg: "#e0c040", hp: 9,  dmg: [3, 6], ai: "chase",  minDepth: 5, weight: 2, ranged: true },
