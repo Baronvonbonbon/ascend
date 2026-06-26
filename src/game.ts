@@ -9,7 +9,7 @@ import {
 } from "./data";
 import { Idents, ITEMS, JAM, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
 import { connectWallet, Wallet } from "./chain/wallet";
-import { bankBalancePas, spendPas, depositPas } from "./chain/bank";
+import { walletBalancePas, buyDirect } from "./chain/bank";
 import { recordRun, readRecent, RunEntry } from "./chain/ledger";
 import { readGear, mintGear } from "./chain/gear";
 
@@ -38,6 +38,7 @@ export class Game {
   private scheduler = new ROT.Scheduler.Speed<Entity>(); // fast/slow actors act more/less often
   private engine!: ROT.Engine;
   private over = false;
+  private busy = false; // a wallet transaction is in flight — input is frozen
 
   constructor(screen: HTMLElement, logEl: HTMLElement) {
     this.display = new ROT.Display({
@@ -708,28 +709,14 @@ export class Game {
   async connect(): Promise<void> {
     try {
       this.wallet = await connectWallet();
-      this.player.pas = await bankBalancePas(this.wallet.address);
+      this.player.pas = await walletBalancePas(this.wallet.address);
       const a = this.wallet.address;
-      this.log.add(`Wallet connected: ${a.slice(0, 6)}…${a.slice(-4)} — purse ${this.player.pas} PAS.`, "sys");
+      this.log.add(`Wallet connected: ${a.slice(0, 6)}…${a.slice(-4)} — ${this.player.pas.toFixed(1)} PAS. Shops charge your wallet directly.`, "sys");
       this.onWallet?.(a, this.player.pas);
       this.draw();
       void this.loadRelics(); // bring any owned NFT relics into the current pack
     } catch (e) {
       this.log.add(`Wallet: ${e instanceof Error ? e.message : "failed"}`, "bad");
-    }
-  }
-
-  /** Load PAS into the purse (one on-chain tx); afterward all shopping is gasless. */
-  async deposit(pas = 20): Promise<void> {
-    if (!this.wallet) { this.log.add("Connect a wallet first.", "bad"); return; }
-    try {
-      this.log.add(`Loading ${pas} PAS into your purse (sign one tx)…`, "sys"); this.draw();
-      await depositPas(this.wallet.provider, pas);
-      this.player.pas = await bankBalancePas(this.wallet.address);
-      this.onWallet?.(this.wallet.address, this.player.pas);
-      this.log.add(`Purse loaded: ${this.player.pas} PAS. Shop gaslessly now.`, "good"); this.draw();
-    } catch (e) {
-      this.log.add(`Deposit failed: ${e instanceof Error ? e.message : "?"}`, "bad");
     }
   }
 
@@ -792,26 +779,34 @@ export class Game {
   }
 
   async tryBuy(): Promise<void> {
+    if (this.busy) return;
     const fi = this.level.itemAt(this.player.x, this.player.y);
     if (!fi || !fi.price) { this.log.add("There is nothing for sale here.", "dim"); return; }
     if (!this.wallet) { this.log.add("Connect a wallet (button above) to buy.", "bad"); return; }
-    if (this.player.pas < fi.price) { this.log.add(`Not enough PAS — need ${fi.price}, purse has ${this.player.pas}.`, "bad"); return; }
-    this.log.add(`Paying ${fi.price} PAS (sign — gasless)…`, "sys"); this.draw();
-    const r = await spendPas(this.wallet.provider, this.wallet.address, fi.price);
-    if (!r.ok) { this.log.add(`Purchase failed: ${r.error}`, "bad"); return; }
+    if (this.player.pas < fi.price) { this.log.add(`Not enough PAS — ${this.ident.name(fi.type)} costs ${fi.price}, your wallet holds ${this.player.pas.toFixed(1)}.`, "bad"); return; }
+
+    // A direct wallet transaction — the game halts until it confirms on-chain.
+    this.busy = true;
+    this.log.add(`The Marketmaker slides a terminal across the counter. Confirm ${fi.price} PAS in your wallet…`, "sys"); this.draw();
+    const r = await buyDirect(this.wallet.provider, fi.price, (hash) => {
+      this.log.add(`Payment broadcast (${hash.slice(0, 10)}…). Settling on the chain — hold fast…`, "dim"); this.draw();
+    });
+    if (!r.ok) { this.busy = false; this.log.add(`The deal falls through — ${r.error}.`, "bad"); this.draw(); return; }
+
     this.giveItem(fi.type, { enchant: fi.enchant, relic: fi.relic, buc: fi.buc, bucKnown: fi.bucKnown });
     this.level.items = this.level.items.filter((i) => i !== fi);
-    this.player.pas = await bankBalancePas(this.wallet.address);
+    this.player.pas = await walletBalancePas(this.wallet.address);
     this.onWallet?.(this.wallet.address, this.player.pas);
     const tag = fi.relic ? ` +${fi.enchant ?? 0} ✦` : "";
-    this.log.add(`Bought ${this.ident.name(fi.type)}${tag} for ${fi.price} PAS (gasless). Purse: ${this.player.pas}.`, "good");
-    // A relic ware mints an NFT to you (the floor item is the same relic for this run).
+    this.log.add(`Settled on-chain. You buy ${this.ident.name(fi.type)}${tag} for ${fi.price} PAS. Wallet: ${this.player.pas.toFixed(1)}.`, "good");
+    // A relic ware is also minted to you as a tradeable NFT (gasless — the relay holds the minter role).
     if (fi.relic && fi.mintOnBuy) {
-      this.log.add("Minting your relic on-chain (sign — gasless)…", "sys"); this.draw();
+      this.log.add("The Marketmaker etches your relic on-chain (gasless mint)…", "sys"); this.draw();
       const g = await mintGear(this.wallet.provider, this.wallet.address, fi.type.id, fi.enchant ?? 0);
       if (g.ok) this.log.add("✦ Relic minted — an NFT you own and can trade on any marketplace. It returns in future runs.", "good");
       else this.log.add(`(relic mint skipped: ${g.error})`, "dim");
     }
+    this.busy = false;
     this.draw();
   }
 
@@ -932,6 +927,7 @@ export class Game {
 
   // ── input + render ───────────────────────────────────────────────────────
   private onKey(e: KeyboardEvent): void {
+    if (this.busy) { e.preventDefault(); return; } // frozen while a wallet tx settles
     if (this.over) {
       if (e.key === "r" || e.key === "R") this.newGame();
       return;
@@ -983,7 +979,7 @@ export class Game {
       `%c{${COLORS.dim}}HP %c{${hpCol}}${p.hp}%c{${COLORS.dim}}/${p.maxHp}  Depth %c{${COLORS.gold}}${p.depth}` +
       (this.currentChain ? `%c{${COLORS.dim}} @%c{${this.currentChain.color}}${this.currentChain.name}` : `%c{${COLORS.dim}} @%c{${COLORS.dim}}Relay`) +
       `%c{${COLORS.dim}}  AC %c{${COLORS.good}}${p.ac}` +
-      `%c{${COLORS.dim}}  PAS %c{${COLORS.gold}}${p.pas}` +
+      `%c{${COLORS.dim}}  PAS %c{${COLORS.gold}}${p.pas.toFixed(1)}` +
       (hunger ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}${hunger}` : "") +
       (p.poison > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Psn` : "") +
       (p.confused > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Cfz` : "") +

@@ -6,14 +6,29 @@ if (screen && logEl) {
   const game = new Game(screen, logEl);
 
   const connect = document.getElementById("connect") as HTMLButtonElement | null;
-  const deposit = document.getElementById("deposit") as HTMLButtonElement | null;
   const wstatus = document.getElementById("wstatus");
   if (connect) connect.onclick = () => { void game.connect(); };
-  if (deposit) deposit.onclick = () => { void game.deposit(20); };
   game.onWallet = (addr, pas) => {
-    if (wstatus) wstatus.textContent = `${addr.slice(0, 6)}…${addr.slice(-4)} · purse ${pas} PAS`;
+    if (wstatus) wstatus.textContent = `${addr.slice(0, 6)}…${addr.slice(-4)} · ${pas.toFixed(1)} PAS`;
     if (connect) connect.textContent = "Wallet ✓";
   };
+
+  // On-screen touch controls: each button carries a data-key; tapping it drives the
+  // game through the very same keyboard path (synthetic keydown on window).
+  const touch = document.getElementById("touch");
+  if (touch) {
+    const fire = (key: string) => window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+    touch.addEventListener("click", (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLElement>("[data-key]");
+      if (!btn) return;
+      e.preventDefault();
+      fire(btn.dataset.key!);
+    });
+    // A "⌨" toggle reveals the letter strip + verb deck for inventory selections.
+    const more = document.getElementById("touch-more");
+    const deck = document.getElementById("touch-deck");
+    if (more && deck) more.addEventListener("click", () => deck.classList.toggle("open"));
+  }
 } else {
   document.body.textContent = "Ascend failed to find its mount points.";
 }

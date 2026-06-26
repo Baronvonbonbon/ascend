@@ -51,7 +51,8 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > **difficulty × loot** multipliers (some up, some down from the relay). Climb back (`<`) to the relay.
 
 > **The bazaar has a keeper.** Each shop is tended by **the Marketmaker** (`$`) — peaceful
-> while you pay (stand on a ware, `p`, gasless PAS), but **shoplift** an unpaid ware (or strike it)
+> while you pay (stand on a ware, `p` — a **direct wallet transaction** in PAS; the game
+> freezes with flavor text until it confirms on-chain), but **shoplift** an unpaid ware (or strike it)
 > and it turns lethal and hunts you down. It fears no Gray-Paper ward. Kill it and the stall is
 > yours — but it hits like a boss.
 
@@ -66,10 +67,15 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > risk equipping it. To break a curse, **pray** at an altar (`P`) or read a **scroll of formal
 > verification** (audit) — relics and shop wares come pre-audited.
 
-**On-chain (Paseo):** `AscendBank` (`0x3D35694e…FcD31`) holds your purse for gasless
-shop spends; `AscendLedger` (`0x56068D…ccaa5`) is the gasless run record + bones;
-`AscendGear` (`0xd029ae…B7c3`) is the tradeable ERC-721 relic NFT. All three via
-signature-authorized meta-transactions relayed by the Datum relay (gasless for the player).
+**On-chain (Paseo):** `AscendBank` (`0x3D35694e…FcD31`) takes shop payments — each purchase
+is a **direct wallet transaction** in PAS (you confirm in your wallet; the game blocks until
+it's mined). `AscendLedger` (`0x56068D…ccaa5`) is the gasless run record + bones, and
+`AscendGear` (`0xd029ae…B7c3`) is the tradeable ERC-721 relic NFT — both via signature-authorized
+meta-transactions relayed by the Datum relay (gasless for the player).
+
+**Mobile:** on touch / narrow screens an on-screen control deck appears — a D-pad (move + wait),
+quick actions (pick / buy / stairs / pack), and a **⌨ more** drawer with the item verbs and an
+a–t letter strip for inventory selections. The canvas scales to fit.
 
 ## Play it
 
@@ -94,7 +100,7 @@ No framework in the engine; the chain layer reuses the Datum relay.
 
 0. **Foundation** *(now)* — dungeon, FOV, monsters, combat, permadeath.
 1. **Core systems** — inventory, items, hunger, identification, depth.
-2. **Web3 economy** — wallet connect, gasless PAS shops, earn↔spend.
+2. **Web3 economy** — wallet connect, direct-wallet PAS shop payments, earn↔spend.
 3. **Mythology & endgame** — full theming, the JAM, altars (Gavin), the Censor, ascension.
 4. **Persistence & social** — on-chain runs/leaderboard, bones, **tradeable NFT gear** ✓.
 5. **Toward parity** — spells, traps, pets, alignment, special levels.
