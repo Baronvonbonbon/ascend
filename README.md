@@ -33,6 +33,9 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > Kusama, Moonbeam, Astar, Phala, Interlay, Bifrost, Hydration, Acala — each with its own
 > **difficulty × loot** multipliers (some up, some down from the relay). Climb back (`<`) to the relay.
 
+> **Realm mini-bosses** guard the run: **the Forkmaster** (depth 3) and **the Sudo Key**
+> (depth 6) each drop a guaranteed prize when slain, before **THE CENSOR** and the JAM at depth 8.
+
 **On-chain (Paseo):** `AscendBank` (`0x3D35694e…FcD31`) holds your purse for gasless
 shop spends; `AscendLedger` (`0x56068D…ccaa5`) is the gasless run record + bones.
 Both via signature-authorized meta-transactions relayed by the Datum relay.

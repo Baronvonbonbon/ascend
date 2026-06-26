@@ -68,6 +68,7 @@ export interface MonsterDef {
   speed?: number;        // turn speed (100 = normal; higher acts more often)
   inflict?: "poison" | "confuse"; // status applied on a hit (30% chance)
   ranged?: boolean;      // fires at the player from a distance with line-of-sight
+  boss?: boolean;        // a unique mini-boss — drops a guaranteed prize on death
 }
 
 // Themed bestiary — the centralised legacy stack fights back.
@@ -87,6 +88,12 @@ export const MONSTERS: MonsterDef[] = [
 /** The Censor — a unique boss guarding the JAM on the deepest floor. */
 export const CENSOR: MonsterDef = {
   name: "THE CENSOR", ch: "C", fg: "#ff3b3b", hp: 48, dmg: [6, 11], ai: "chase", minDepth: 99, weight: 0,
+};
+
+/** Realm mini-bosses — one guards a specific depth and drops a prize when slain. */
+export const MINIBOSSES: Record<number, MonsterDef> = {
+  3: { name: "the Forkmaster", ch: "F", fg: "#ff80ff", hp: 30, dmg: [4, 7], ai: "chase", minDepth: 99, weight: 0, boss: true, splits: true },
+  6: { name: "the Sudo Key",   ch: "K", fg: "#ffd040", hp: 44, dmg: [5, 9], ai: "chase", minDepth: 99, weight: 0, boss: true, speed: 90 },
 };
 
 export const DEATHS = [

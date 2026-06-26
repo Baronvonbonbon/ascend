@@ -5,7 +5,7 @@ import { Item } from "./inventory";
 import { Log } from "./log";
 import {
   COLORS, TILE_GLYPH, MONSTERS, MonsterDef, DEATHS, GREETINGS,
-  MAX_DEPTH, CENSOR, realmName, GRAY_PAPER, ChainDef, CHAINS,
+  MAX_DEPTH, CENSOR, MINIBOSSES, realmName, GRAY_PAPER, ChainDef, CHAINS,
 } from "./data";
 import { Idents, ITEMS, JAM, pickItemType, ItemType, EffectId } from "./items";
 import { connectWallet, Wallet } from "./chain/wallet";
@@ -29,6 +29,7 @@ export class Game {
   monsters: Monster[] = [];
   pet: Pet | null = null;
   private currentChain: ChainDef | null = null; // null = the main relay-chain dungeon
+  private defeatedBosses = new Set<number>();    // relay depths whose mini-boss is slain
   wallet: Wallet | null = null;
   onWallet?: (address: string, pas: number) => void;
   recentRuns: RunEntry[] = []; // leaderboard cache + bones pool
@@ -50,6 +51,7 @@ export class Game {
   // ── lifecycle ──────────────────────────────────────────────────────────────
   newGame(): void {
     this.over = false;
+    this.defeatedBosses.clear();
     this.ident = new Idents();
     this.level = new Level(W, MAP_H);
     this.player = new Player(this, this.level.start.x, this.level.start.y);
@@ -91,6 +93,7 @@ export class Game {
     this.maybePlaceBones();
     this.spawnTraps();
     this.placePortals();
+    this.placeMiniboss();
     if (!this.currentChain && this.player.depth >= MAX_DEPTH) this.placeJamAndBoss();
     for (const m of this.monsters) this.scheduler.add(m, true);
     if (this.pet && this.pet.alive) {
@@ -207,6 +210,19 @@ export class Game {
         break;
       }
     }
+  }
+
+  private placeMiniboss(): void {
+    if (this.currentChain) return;
+    const def = MINIBOSSES[this.player.depth];
+    if (!def || this.defeatedBosses.has(this.player.depth)) return;
+    const centers = this.level.roomCenters.filter(
+      (c) => this.level.tileAt(c.x, c.y) === "floor" && !(c.x === this.player.x && c.y === this.player.y) && !this.monsterAt(c.x, c.y),
+    );
+    if (!centers.length) return;
+    const c = ROT.RNG.getItem(centers)!;
+    this.monsters.push(new Monster(this, def, c.x, c.y));
+    this.log.add(`A mighty presence stirs on this floor — ${def.name}.`, "bad");
   }
 
   private placeAltar(): void {
@@ -559,7 +575,14 @@ export class Game {
     const m = d as Monster;
     this.monsters = this.monsters.filter((x) => x !== m);
     this.scheduler.remove(m);
-    this.log.add(`${cap(m.name)} is destroyed.`, "good");
+    if (m.def.boss) {
+      this.defeatedBosses.add(this.player.depth);
+      const goodies = ITEMS.filter((i) => i.kind === "ring" || i.kind === "wand");
+      if (!this.level.itemAt(m.x, m.y)) this.level.items.push({ x: m.x, y: m.y, type: ROT.RNG.getItem(goodies)! });
+      this.log.add(`${cap(m.name)} falls! It leaves a prize.`, "good");
+    } else {
+      this.log.add(`${cap(m.name)} is destroyed.`, "good");
+    }
   }
 
   // ── spawns ─────────────────────────────────────────────────────────────────
