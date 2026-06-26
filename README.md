@@ -23,7 +23,8 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > **Kusama Deeps** swarm, **scrolls of enchantment**, a **speed system** (fast/slow
 > monsters act more/less often), natural **HP regeneration**, and **rings** —
 > resilience (+max HP), regeneration, and privacy (a ZK cloak: monsters can't track you),
-> and charged **wands** (`z` to zap in a direction — a bolt of finality, or banishment).
+> and charged **wands** (`z` to zap in a direction — a bolt of finality, banishment,
+> **slowness**, or **digging** to tunnel through walls), plus a **scroll of cleansing** (cure status).
 > **Status effects** add bite: gas wraiths **poison** (damage over time), censor imps and
 > 51% attackers **confuse** (you stagger), and **oracles** (`o`) **zap you from afar**
 > with line-of-sight — cured by prayer or a healing potion. And you

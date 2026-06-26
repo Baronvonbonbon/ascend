@@ -20,7 +20,7 @@ export interface ItemType {
   weight: number;          // spawn weight
 }
 
-export type EffectId = "heal" | "harm" | "strength" | "teleport" | "map" | "identify" | "enchant";
+export type EffectId = "heal" | "harm" | "strength" | "teleport" | "map" | "identify" | "enchant" | "cure";
 
 export const ITEMS: ItemType[] = [
   // ── weapons ── )
@@ -43,6 +43,7 @@ export const ITEMS: ItemType[] = [
   { id: "map",    kind: "scroll", name: "a scroll of light client", ch: "?", fg: "#9ac0e0", effect: "map",      weight: 4 },
   { id: "ident",  kind: "scroll", name: "a scroll of identify",     ch: "?", fg: "#c0e0c0", effect: "identify", weight: 4 },
   { id: "ench",   kind: "scroll", name: "a scroll of enchantment",  ch: "?", fg: "#e0d090", effect: "enchant",  weight: 3 },
+  { id: "cure",   kind: "scroll", name: "a scroll of cleansing",    ch: "?", fg: "#c0e0e0", effect: "cure",     weight: 3 },
   // ── rings ── = (passive while worn; put on with W)
   { id: "ring_res",   kind: "ring", name: "a ring of resilience",    ch: "=", fg: "#c0a0e0", weight: 2 },
   { id: "ring_regen", kind: "ring", name: "a ring of regeneration",  ch: "=", fg: "#a0e0a0", weight: 2 },
@@ -50,6 +51,8 @@ export const ITEMS: ItemType[] = [
   // ── wands ── / (directional, charged; zap with z)
   { id: "wand_bolt",   kind: "wand", name: "a wand of finality",     ch: "/", fg: "#90d0e0", weight: 2 },
   { id: "wand_banish", kind: "wand", name: "a wand of banishment",   ch: "/", fg: "#d090d0", weight: 2 },
+  { id: "wand_slow",   kind: "wand", name: "a wand of slowness",     ch: "/", fg: "#80a0d0", weight: 2 },
+  { id: "wand_dig",    kind: "wand", name: "a wand of digging",      ch: "/", fg: "#c0a060", weight: 2 },
 ];
 
 const POTION_LOOKS = ["a fizzy potion", "a murky potion", "a glowing vial", "a smoking flask", "a bubbling phial"];

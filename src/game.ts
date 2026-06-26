@@ -364,29 +364,46 @@ export class Game {
     return it;
   }
 
-  /** Fire a wand in a direction: a bolt travels until it hits a monster or wall. */
+  /** Fire a wand in a direction. */
   zapWand(item: Item, dx: number, dy: number): void {
     if (!item.charges || item.charges <= 0) { this.log.add("The wand is spent.", "dim"); return; }
     item.charges--;
-    let x = this.player.x, y = this.player.y;
-    let hit: Monster | undefined;
-    for (let step = 0; step < 10; step++) {
-      x += dx; y += dy;
-      if (!this.level.isPassable(x, y)) break;
-      const m = this.monsterAt(x, y); if (m) { hit = m; break; }
+
+    if (item.type.id === "wand_dig") {
+      let x = this.player.x, y = this.player.y, dug = 0;
+      for (let step = 0; step < 8 && dug < 4; step++) {
+        x += dx; y += dy;
+        if (x < 1 || y < 1 || x >= W - 1 || y >= MAP_H - 1) break; // keep the border intact
+        if (this.level.tileAt(x, y) === "wall") { this.level.tiles[y][x] = "floor"; dug++; }
+      }
+      this.log.add(dug ? `You bore through ${dug} wall${dug > 1 ? "s" : ""}.` : "The wand of digging finds no wall.", dug ? "good" : "dim");
+      this.level.computeFOV(this.player.x, this.player.y);
+    } else {
+      let x = this.player.x, y = this.player.y;
+      let hit: Monster | undefined;
+      for (let step = 0; step < 10; step++) {
+        x += dx; y += dy;
+        if (!this.level.isPassable(x, y)) break;
+        const m = this.monsterAt(x, y); if (m) { hit = m; break; }
+      }
+      if (!hit) {
+        this.log.add(`The ${item.type.name} fizzles into the dark.`, "dim");
+      } else if (item.type.id === "wand_bolt") {
+        const d = ROT.RNG.getUniformInt(8, 14); hit.hp -= d;
+        this.log.add(`A bolt of finality strikes ${hit.name} for ${d}.`, "good");
+        if (hit.hp <= 0) this.kill(hit);
+      } else if (item.type.id === "wand_banish") {
+        let pos = this.level.randomFloor(), t = 0;
+        while (t < 40 && (this.monsterAt(pos.x, pos.y) || (pos.x === this.player.x && pos.y === this.player.y))) { pos = this.level.randomFloor(); t++; }
+        hit.x = pos.x; hit.y = pos.y;
+        this.log.add(`${cap(hit.name)} is banished across the chain.`, "good");
+      } else if (item.type.id === "wand_slow") {
+        hit.speedMod = 0.5;
+        this.scheduler.remove(hit); this.scheduler.add(hit, true); // re-time at the slower speed
+        this.log.add(`${cap(hit.name)} slows to a crawl.`, "good");
+      }
     }
-    if (!hit) {
-      this.log.add(`The ${item.type.name} fizzles into the dark.`, "dim");
-    } else if (item.type.id === "wand_bolt") {
-      const d = ROT.RNG.getUniformInt(8, 14); hit.hp -= d;
-      this.log.add(`A bolt of finality strikes ${hit.name} for ${d}.`, "good");
-      if (hit.hp <= 0) this.kill(hit);
-    } else if (item.type.id === "wand_banish") {
-      let pos = this.level.randomFloor(), t = 0;
-      while (t < 40 && (this.monsterAt(pos.x, pos.y) || (pos.x === this.player.x && pos.y === this.player.y))) { pos = this.level.randomFloor(); t++; }
-      hit.x = pos.x; hit.y = pos.y;
-      this.log.add(`${cap(hit.name)} is banished across the chain.`, "good");
-    }
+
     if (item.charges <= 0) { this.player.inventory.remove(item); this.log.add(`The ${item.type.name} crumbles to dust.`, "dim"); }
     this.draw();
   }
@@ -457,6 +474,11 @@ export class Game {
       case "enchant": {
         if (p.weapon) { p.weaponBonus++; p.applyWeapon(); this.log.add(`Your ${p.weapon.type.name} thrums with finality. (+${p.weaponBonus})`, "good"); }
         else this.log.add("You have no weapon to enchant.", "dim");
+        break;
+      }
+      case "cure": {
+        if (p.poison > 0 || p.confused > 0) { p.poison = 0; p.confused = 0; this.log.add("A cleansing light — your afflictions lift.", "good"); }
+        else this.log.add("You feel briefly cleansed.", "dim");
         break;
       }
     }

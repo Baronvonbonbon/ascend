@@ -311,6 +311,7 @@ export class Player extends Entity {
 }
 
 export class Monster extends Entity {
+  speedMod = 1; // a wand of slowness halves this
   constructor(game: Game, public def: MonsterDef, x: number, y: number) {
     super(game);
     this.x = x;
@@ -323,7 +324,7 @@ export class Monster extends Entity {
   }
 
   getSpeed(): number {
-    return this.def.speed ?? 100;
+    return Math.max(20, Math.round((this.def.speed ?? 100) * this.speedMod));
   }
 
   act(): void {
