@@ -310,7 +310,7 @@ export class Game {
     if (e) { e.life = LIFE; this.log.add("You re-scratch the Gray-Paper sigil — its lines sharpen.", "sys"); }
     else {
       this.level.engravings.push({ x: p.x, y: p.y, life: LIFE });
-      this.log.add("You scratch a clause of the Gray Paper into the dust: 'trust no single node.' Foes shrink from it.", "good");
+      this.log.add("You scratch a clause of the Gray Paper into the dust: 'less trust, more truth.' Foes shrink from it.", "good");
     }
     return true;
   }
