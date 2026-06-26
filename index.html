@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Ascend — a roguelike on Polkadot</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛓️</text></svg>" />
     <style>
@@ -10,9 +10,10 @@
       * { box-sizing: border-box; }
       html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font-family: "Courier New", monospace; }
       #app { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px; min-height: 100%; }
-      #title { color: var(--gold); letter-spacing: 2px; font-size: 13px; }
+      #title { color: var(--gold); letter-spacing: 2px; font-size: 13px; text-align: center; }
       #title small { color: var(--dim); letter-spacing: 0; }
-      #screen { line-height: 0; box-shadow: 0 0 0 1px #222, 0 0 40px rgba(224,185,77,.08); }
+      #screen { line-height: 0; width: 100%; max-width: 920px; box-shadow: 0 0 0 1px #222, 0 0 40px rgba(224,185,77,.08); }
+      #screen canvas { max-width: 100%; height: auto; display: block; margin: 0 auto; }
       #log {
         width: 100%; max-width: 960px; height: 120px; overflow-y: auto;
         background: #08080a; border: 1px solid #1c1c20; padding: 6px 10px;
@@ -21,27 +22,91 @@
       #log .msg--good { color: #76c66a; } #log .msg--bad { color: #c75c5c; }
       #log .msg--sys  { color: var(--gold); } #log .msg--dim { color: var(--dim); }
       #help { color: var(--dim); font-size: 12px; max-width: 960px; }
-      #wallet { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--dim); }
-      #connect, #deposit { font-family: inherit; font-size: 12px; background: #1c1c20; color: var(--gold);
+      #wallet { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--dim); flex-wrap: wrap; justify-content: center; }
+      #connect { font-family: inherit; font-size: 12px; background: #1c1c20; color: var(--gold);
         border: 1px solid var(--gold); border-radius: 4px; padding: 4px 10px; cursor: pointer; }
-      #connect:hover, #deposit:hover { background: #262620; }
+      #connect:hover { background: #262620; }
       a { color: var(--gold); }
+
+      /* ── touch controls (shown on touch / narrow screens) ── */
+      #touch { display: none; width: 100%; max-width: 520px; flex-direction: column; align-items: center; gap: 8px; user-select: none; }
+      #touch button { font-family: inherit; color: var(--gold); background: #15151a; border: 1px solid #3a361f;
+        border-radius: 8px; touch-action: manipulation; -webkit-tap-highlight-color: transparent; cursor: pointer; }
+      #touch button:active { background: #2a2616; }
+      #dpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; width: 210px; }
+      #dpad button { height: 56px; font-size: 22px; }
+      #dpad button[data-key="."] { color: var(--dim); font-size: 26px; }
+      #pad-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+      #pad-actions button { min-width: 56px; height: 42px; font-size: 13px; padding: 0 8px; }
+      #touch-deck { display: none; flex-direction: column; gap: 6px; width: 100%; }
+      #touch-deck.open { display: flex; }
+      .deck-row { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; }
+      .deck-row button { min-width: 40px; height: 38px; font-size: 12px; padding: 0 7px; }
+      .deck-row.letters button { min-width: 32px; width: 32px; height: 34px; font-size: 13px; padding: 0; }
+
+      @media (pointer: coarse), (max-width: 860px) {
+        #touch { display: flex; }
+        #help { display: none; }
+        #log { height: 96px; }
+      }
     </style>
-    <script type="module" crossorigin src="/ascend/assets/index-BD592eVN.js"></script>
+    <script type="module" crossorigin src="/ascend/assets/index-BWGJoPRg.js"></script>
   </head>
   <body>
     <div id="app">
       <div id="title">⛓ ASCEND <small>— descend to recover the JAM</small></div>
       <div id="wallet">
         <button id="connect">Connect Wallet</button>
-        <button id="deposit">Load 20 PAS</button>
-        <span id="wstatus">not connected — shop provisions cost PAS (gasless after one deposit)</span>
+        <span id="wstatus">not connected — shop provisions are paid directly from your wallet (PAS)</span>
       </div>
       <div id="screen"></div>
       <div id="log"></div>
+
+      <div id="touch">
+        <div id="dpad">
+          <button data-key="y" aria-label="up-left">↖</button>
+          <button data-key="k" aria-label="up">↑</button>
+          <button data-key="u" aria-label="up-right">↗</button>
+          <button data-key="h" aria-label="left">←</button>
+          <button data-key="." aria-label="wait">·</button>
+          <button data-key="l" aria-label="right">→</button>
+          <button data-key="b" aria-label="down-left">↙</button>
+          <button data-key="j" aria-label="down">↓</button>
+          <button data-key="n" aria-label="down-right">↘</button>
+        </div>
+        <div id="pad-actions">
+          <button data-key=",">pick</button>
+          <button data-key="p">buy</button>
+          <button data-key=">">down ▾</button>
+          <button data-key="<">up ▴</button>
+          <button data-key="i">pack</button>
+          <button id="touch-more" type="button">⌨ more</button>
+        </div>
+        <div id="touch-deck">
+          <div class="deck-row">
+            <button data-key="w">wield</button><button data-key="W">wear</button>
+            <button data-key="q">quaff</button><button data-key="r">read</button>
+            <button data-key="e">eat</button><button data-key="d">drop</button>
+            <button data-key="z">zap</button><button data-key="t">throw</button>
+            <button data-key="T">off</button><button data-key="E">engrave</button>
+            <button data-key="P">pray</button><button data-key="H">hall</button>
+            <button data-key="R">restart</button><button data-key="Escape">esc</button>
+          </div>
+          <div class="deck-row letters">
+            <button data-key="a">a</button><button data-key="b">b</button><button data-key="c">c</button>
+            <button data-key="d">d</button><button data-key="e">e</button><button data-key="f">f</button>
+            <button data-key="g">g</button><button data-key="h">h</button><button data-key="i">i</button>
+            <button data-key="j">j</button><button data-key="k">k</button><button data-key="l">l</button>
+            <button data-key="m">m</button><button data-key="n">n</button><button data-key="o">o</button>
+            <button data-key="p">p</button><button data-key="q">q</button><button data-key="r">r</button>
+            <button data-key="s">s</button><button data-key="t">t</button>
+          </div>
+        </div>
+      </div>
+
       <div id="help">
         Move <b>arrows/hjkl/yubn</b> · pick up <b>,</b> · <b>p</b> buy · pray <b>P</b> · descend <b>&gt;</b> · ascend <b>&lt;</b> ·
-        inventory <b>i</b> · hall of fame <b>H</b> · wield <b>w</b> · wear <b>W</b> · zap wand <b>z</b> · quaff <b>q</b> · read <b>r</b> · eat <b>e</b> · drop <b>d</b> · wait <b>.</b> · restart <b>R</b>
+        inventory <b>i</b> · hall of fame <b>H</b> · wield <b>w</b> · wear <b>W</b> · zap <b>z</b> · throw <b>t</b> · engrave <b>E</b> · quaff <b>q</b> · read <b>r</b> · eat <b>e</b> · drop <b>d</b> · wait <b>.</b> · restart <b>R</b>
       </div>
     </div>
   </body>
