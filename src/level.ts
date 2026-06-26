@@ -4,7 +4,7 @@ import type { ItemType } from "./items";
 
 export interface Portal { x: number; y: number; chain: ChainDef; }
 
-export interface FloorItem { x: number; y: number; type: ItemType; price?: number; enchant?: number; relic?: boolean; mintOnBuy?: boolean; } // price set = a shop ware; relic/enchant/mintOnBuy = NFT gear
+export interface FloorItem { x: number; y: number; type: ItemType; price?: number; enchant?: number; relic?: boolean; mintOnBuy?: boolean; buc?: import("./items").Buc; bucKnown?: boolean; } // price set = a shop ware; relic/enchant/mintOnBuy = NFT gear; buc = sanctity
 export type TrapKind = "gas" | "reorg" | "slash";
 export interface Trap { x: number; y: number; kind: TrapKind; revealed: boolean; }
 

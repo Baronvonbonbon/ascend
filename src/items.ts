@@ -4,6 +4,22 @@ import * as ROT from "rot-js";
 
 export type ItemKind = "weapon" | "armor" | "food" | "potion" | "scroll" | "amulet" | "ring" | "wand";
 
+/** Blessed / uncursed / cursed — an item's hidden sanctity. Cursed gear welds on. */
+export type Buc = "blessed" | "uncursed" | "cursed";
+
+/** Roll a fresh item's BUC: mostly uncursed, a dangerous minority cursed, a few blessed. */
+export function rollBuc(): Buc {
+  const r = ROT.RNG.getUniform();
+  if (r < 0.12) return "cursed";
+  if (r < 0.22) return "blessed";
+  return "uncursed";
+}
+
+/** The ±1 swing a known BUC lends to weapon damage, armor AC, etc. */
+export function bucDelta(buc?: Buc): number {
+  return buc === "blessed" ? 1 : buc === "cursed" ? -1 : 0;
+}
+
 /** The JAM — the Amulet of Yendor of this world. Unique; never randomly spawned. */
 export const JAM: ItemType = { id: "jam", kind: "amulet", name: "the JAM", ch: "*", fg: "#f4e89a", weight: 0 };
 
@@ -20,7 +36,7 @@ export interface ItemType {
   weight: number;          // spawn weight
 }
 
-export type EffectId = "heal" | "harm" | "strength" | "teleport" | "map" | "identify" | "enchant" | "cure";
+export type EffectId = "heal" | "harm" | "strength" | "teleport" | "map" | "identify" | "enchant" | "cure" | "uncurse";
 
 export const ITEMS: ItemType[] = [
   // ── weapons ── )
@@ -44,6 +60,7 @@ export const ITEMS: ItemType[] = [
   { id: "ident",  kind: "scroll", name: "a scroll of identify",     ch: "?", fg: "#c0e0c0", effect: "identify", weight: 4 },
   { id: "ench",   kind: "scroll", name: "a scroll of enchantment",  ch: "?", fg: "#e0d090", effect: "enchant",  weight: 3 },
   { id: "cure",   kind: "scroll", name: "a scroll of cleansing",    ch: "?", fg: "#c0e0e0", effect: "cure",     weight: 3 },
+  { id: "uncurse",kind: "scroll", name: "a scroll of formal verification", ch: "?", fg: "#d0f0c0", effect: "uncurse", weight: 3 },
   // ── rings ── = (passive while worn; put on with W)
   { id: "ring_res",   kind: "ring", name: "a ring of resilience",    ch: "=", fg: "#c0a0e0", weight: 2 },
   { id: "ring_regen", kind: "ring", name: "a ring of regeneration",  ch: "=", fg: "#a0e0a0", weight: 2 },
@@ -56,7 +73,7 @@ export const ITEMS: ItemType[] = [
 ];
 
 const POTION_LOOKS = ["a fizzy potion", "a murky potion", "a glowing vial", "a smoking flask", "a bubbling phial"];
-const SCROLL_LOOKS = ["a scroll labeled XYZZY", "a scroll labeled ELBERETH", "a scroll labeled HODL", "a scroll labeled WAGMI", "a scroll labeled GM"];
+const SCROLL_LOOKS = ["a scroll labeled XYZZY", "a scroll labeled ELBERETH", "a scroll labeled HODL", "a scroll labeled WAGMI", "a scroll labeled GM", "a scroll labeled DYOR"];
 
 /** Per-game randomised appearances + which item *types* the player has identified. */
 export class Idents {

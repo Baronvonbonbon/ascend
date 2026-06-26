@@ -7,7 +7,7 @@ import {
   COLORS, TILE_GLYPH, MONSTERS, MonsterDef, DEATHS, GREETINGS,
   MAX_DEPTH, CENSOR, MINIBOSSES, realmName, GRAY_PAPER, ChainDef, CHAINS,
 } from "./data";
-import { Idents, ITEMS, JAM, pickItemType, ItemType, EffectId, itemById, isGear } from "./items";
+import { Idents, ITEMS, JAM, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc } from "./items";
 import { connectWallet, Wallet } from "./chain/wallet";
 import { bankBalancePas, spendPas, depositPas } from "./chain/bank";
 import { recordRun, readRecent, RunEntry } from "./chain/ledger";
@@ -83,7 +83,7 @@ export class Game {
       const type = itemById(g.itemId);
       if (!type || !isGear(type)) continue;
       if (this.player.inventory.full) break;
-      this.giveItem(type, { enchant: g.enchant, relic: true });
+      this.giveItem(type, { enchant: g.enchant, relic: true, buc: "blessed", bucKnown: true });
       this.loadedRelics.add(g.tokenId);
       added++;
     }
@@ -101,9 +101,10 @@ export class Game {
     const dagger = ITEMS.find((i) => i.id === "dagger")!;
     const ration = ITEMS.find((i) => i.id === "ration")!;
     const wielded = this.player.inventory.add(dagger);
+    wielded.buc = "uncursed"; wielded.bucKnown = true;
     this.player.weapon = wielded;
     this.player.attackDmg = dagger.dmg!;
-    this.player.inventory.add(ration);
+    const r = this.player.inventory.add(ration); r.buc = "uncursed"; r.bucKnown = true;
   }
 
   /** Populate the current level and (re)build the turn schedule. */
@@ -268,6 +269,13 @@ export class Game {
     p.nutrition = Math.max(p.nutrition, 600);
     p.poison = 0; p.confused = 0;
     this.log.add("Gavin, the Architect, hears you. You are made whole.", "good");
+    // Gavin lifts the curses binding your worn gear.
+    const bound = [p.weapon, p.armor, p.ring].filter((it): it is Item => !!it && it.buc === "cursed");
+    if (bound.length) {
+      for (const it of bound) { it.buc = "uncursed"; it.bucKnown = true; }
+      p.applyWeapon();
+      this.log.add("Welds loosen — the curses on your gear are lifted.", "good");
+    }
     if (ROT.RNG.getUniform() < 0.4) {
       for (const it of p.inventory.items) this.ident.learn(it.type);
       this.log.add("Truth is revealed — your pack is identified.", "sys");
@@ -394,7 +402,7 @@ export class Game {
           (pos.x === this.player.x && pos.y === this.player.y) ||
           this.level.tileAt(pos.x, pos.y) === "stairsDown")
       ) { pos = this.level.randomFloor(); tries++; }
-      this.level.items.push({ x: pos.x, y: pos.y, type });
+      this.level.items.push({ x: pos.x, y: pos.y, type, buc: rollBuc() });
     }
   }
 
@@ -410,12 +418,14 @@ export class Game {
     return it;
   }
 
-  /** Add an item to the pack, rolling wand charges. NFT relics carry enchant + a relic mark. */
-  giveItem(type: ItemType, opts?: { enchant?: number; relic?: boolean }): Item {
+  /** Add an item to the pack, rolling wand charges. NFT relics carry enchant + a relic mark; every item gets a BUC. */
+  giveItem(type: ItemType, opts?: { enchant?: number; relic?: boolean; buc?: Buc; bucKnown?: boolean }): Item {
     const it = this.player.inventory.add(type);
     if (type.kind === "wand") it.charges = ROT.RNG.getUniformInt(3, 6);
     if (opts?.enchant) it.enchant = opts.enchant;
     if (opts?.relic) it.relic = true;
+    it.buc = opts?.buc ?? rollBuc();
+    it.bucKnown = opts?.bucKnown ?? false;
     return it;
   }
 
@@ -473,15 +483,24 @@ export class Game {
       return true;
     }
     if (this.player.inventory.full) { this.log.add("Your pack is full.", "bad"); return false; }
-    this.giveItem(fi.type, { enchant: fi.enchant, relic: fi.relic });
+    this.giveItem(fi.type, { enchant: fi.enchant, relic: fi.relic, buc: fi.buc, bucKnown: fi.bucKnown });
     this.level.items = this.level.items.filter((i) => i !== fi);
     const tag = fi.relic ? ` +${fi.enchant ?? 0} ✦` : "";
     this.log.add(`You pick up ${this.ident.name(fi.type)}${tag}.`);
     return true;
   }
 
-  dropItem(type: ItemType): void {
-    this.level.items.push({ x: this.player.x, y: this.player.y, type });
+  dropItem(item: Item): void {
+    const x = this.player.x, y = this.player.y;
+    const fi = { x, y, type: item.type, enchant: item.enchant, relic: item.relic, buc: item.buc, bucKnown: item.bucKnown };
+    // Gavin's altar reveals an item's sanctity when you set it down upon it.
+    if (this.level.tileAt(x, y) === "altar") {
+      fi.bucKnown = true;
+      const b = item.buc ?? "uncursed";
+      const glow = b === "blessed" ? "an amber glow" : b === "cursed" ? "a black flicker" : "no glow at all";
+      this.log.add(`The ${this.ident.name(item.type)} rests on the altar — ${glow}. It is ${b}.`, b === "cursed" ? "bad" : "sys");
+    }
+    this.level.items.push(fi);
   }
 
   showInventory(): void {
@@ -489,19 +508,24 @@ export class Game {
     if (inv.items.length === 0) { this.log.add("Your pack is empty.", "dim"); return; }
     this.log.add("— Inventory —", "sys");
     inv.items.forEach((it, i) => {
-      const eq = it === this.player.weapon ? " (wielded)" : it === this.player.armor ? " (worn)" : it === this.player.ring ? " (on hand)" : "";
+      const welded = this.player.isWelded(it);
+      const eq = welded ? " (welded)" : it === this.player.weapon ? " (wielded)" : it === this.player.armor ? " (worn)" : it === this.player.ring ? " (on hand)" : "";
       const ch = it.charges != null ? ` [${it.charges}]` : "";
       const relic = it.relic ? ` +${it.enchant ?? 0} ✦` : "";
-      this.log.add(`  ${inv.letter(i)}) ${this.ident.name(it.type)}${relic}${ch}${eq}`, it.relic ? "sys" : "dim");
+      const buc = it.bucKnown && it.buc ? `${it.buc} ` : "";
+      const tone = it.bucKnown && it.buc === "cursed" ? "bad" : it.bucKnown && it.buc === "blessed" ? "good" : it.relic ? "sys" : "dim";
+      this.log.add(`  ${inv.letter(i)}) ${buc}${this.ident.name(it.type)}${relic}${ch}${eq}`, tone);
     });
   }
 
-  applyEffect(effect: EffectId): void {
+  applyEffect(effect: EffectId, buc: Buc = "uncursed"): void {
     const p = this.player;
     switch (effect) {
       case "heal": {
-        p.hp = Math.min(p.maxHp, p.hp + ROT.RNG.getUniformInt(10, 16));
-        if (p.poison > 0) { p.poison = 0; this.log.add("The poison is purged.", "good"); }
+        // Blessed finality mends more; a cursed draught barely closes the wound.
+        const amt = buc === "blessed" ? ROT.RNG.getUniformInt(16, 24) : buc === "cursed" ? ROT.RNG.getUniformInt(4, 8) : ROT.RNG.getUniformInt(10, 16);
+        p.hp = Math.min(p.maxHp, p.hp + amt);
+        if (p.poison > 0 && buc !== "cursed") { p.poison = 0; this.log.add("The poison is purged.", "good"); }
         this.log.add("Finality washes over you — your wounds seal.", "good"); break;
       }
       case "harm": {
@@ -523,19 +547,39 @@ export class Game {
         this.log.add("A light client reveals the whole level.", "sys"); break;
       }
       case "identify": {
-        const unk = p.inventory.items.find((it) => !this.ident.isKnown(it.type));
-        if (unk) { this.ident.learn(unk.type); this.log.add(`It is ${unk.type.name}.`, "good"); }
-        else this.log.add("You have nothing to identify.", "dim");
+        // Identify reveals an item's true name *and* its sanctity (BUC).
+        const target = p.inventory.items.find((it) => !this.ident.isKnown(it.type)) ?? p.inventory.items.find((it) => !it.bucKnown);
+        if (target) {
+          this.ident.learn(target.type); target.bucKnown = true;
+          this.log.add(`It is ${target.buc ? target.buc + " " : ""}${target.type.name}.`, "good");
+        } else this.log.add("You have nothing to identify.", "dim");
         break;
       }
       case "enchant": {
-        if (p.weapon) { p.weaponBonus++; p.applyWeapon(); this.log.add(`Your ${p.weapon.type.name} thrums with finality. (+${p.weaponBonus})`, "good"); }
-        else this.log.add("You have no weapon to enchant.", "dim");
+        // A cursed scroll degrades the blade instead of tempering it.
+        if (p.weapon) {
+          const d = buc === "blessed" ? 2 : buc === "cursed" ? -1 : 1;
+          p.weaponBonus += d; p.applyWeapon();
+          if (d > 0) this.log.add(`Your ${p.weapon.type.name} thrums with finality. (+${p.weaponBonus})`, "good");
+          else this.log.add(`Your ${p.weapon.type.name} corrodes — a malformed enchantment! (${p.weaponBonus >= 0 ? "+" : ""}${p.weaponBonus})`, "bad");
+        } else this.log.add("You have no weapon to enchant.", "dim");
         break;
       }
       case "cure": {
         if (p.poison > 0 || p.confused > 0) { p.poison = 0; p.confused = 0; this.log.add("A cleansing light — your afflictions lift.", "good"); }
         else this.log.add("You feel briefly cleansed.", "dim");
+        break;
+      }
+      case "uncurse": {
+        // A formal-verification pass clears every curse you carry and reveals sanctity.
+        const wash = buc === "blessed"; // blessed verification also blesses the cleansed items
+        let n = 0;
+        for (const it of p.inventory.items) {
+          if (it.buc === "cursed") { it.buc = wash ? "blessed" : "uncursed"; n++; }
+          it.bucKnown = true;
+        }
+        p.applyWeapon();
+        this.log.add(n > 0 ? `Verification passes — ${n} curse${n > 1 ? "s" : ""} lifted; your pack is audited.` : "Verification passes — your gear is clean.", "good");
         break;
       }
     }
@@ -587,7 +631,7 @@ export class Game {
         const x = c.x + dx, y = c.y + dy;
         if (this.level.isPassable(x, y) && !this.level.itemAt(x, y) &&
             this.level.tileAt(x, y) !== "stairsDown" && !(x === this.player.x && y === this.player.y)) {
-          this.level.items.push({ x, y, type: t, price: PRICE[t.kind] ?? 4 });
+          this.level.items.push({ x, y, type: t, price: PRICE[t.kind] ?? 4, buc: "uncursed", bucKnown: true });
           break;
         }
       }
@@ -603,7 +647,7 @@ export class Game {
         const x = c.x + dx, y = c.y + dy;
         if (this.level.isPassable(x, y) && !this.level.itemAt(x, y) &&
             this.level.tileAt(x, y) !== "stairsDown" && !(x === this.player.x && y === this.player.y)) {
-          this.level.items.push({ x, y, type: rt, price: 12 + enchant * 4, enchant, relic: true, mintOnBuy: true });
+          this.level.items.push({ x, y, type: rt, price: 12 + enchant * 4, enchant, relic: true, mintOnBuy: true, buc: "blessed", bucKnown: true });
           this.log.add("A relic vendor is among them — a tradeable NFT, minted to you on purchase.", "dim");
           break;
         }
@@ -620,7 +664,7 @@ export class Game {
     this.log.add(`Paying ${fi.price} PAS (sign — gasless)…`, "sys"); this.draw();
     const r = await spendPas(this.wallet.provider, this.wallet.address, fi.price);
     if (!r.ok) { this.log.add(`Purchase failed: ${r.error}`, "bad"); return; }
-    this.giveItem(fi.type, { enchant: fi.enchant, relic: fi.relic });
+    this.giveItem(fi.type, { enchant: fi.enchant, relic: fi.relic, buc: fi.buc, bucKnown: fi.bucKnown });
     this.level.items = this.level.items.filter((i) => i !== fi);
     this.player.pas = await bankBalancePas(this.wallet.address);
     this.onWallet?.(this.wallet.address, this.player.pas);
@@ -644,7 +688,7 @@ export class Game {
     this.scheduler.remove(m);
     // A slain thief disgorges whatever it stole — reclaim it where it fell.
     if (m.stolen && !this.level.itemAt(m.x, m.y)) {
-      this.level.items.push({ x: m.x, y: m.y, type: m.stolen.type, enchant: m.stolen.enchant, relic: m.stolen.relic });
+      this.level.items.push({ x: m.x, y: m.y, type: m.stolen.type, enchant: m.stolen.enchant, relic: m.stolen.relic, buc: m.stolen.buc, bucKnown: m.stolen.bucKnown });
       this.log.add(`${cap(m.name)} drops ${this.ident.name(m.stolen.type)} as it dies.`, "good");
       m.stolen = null;
     }
@@ -654,7 +698,7 @@ export class Game {
       const goodies = ITEMS.filter((i) => isGear(i));
       const prize = ROT.RNG.getItem(goodies)!;
       const enchant = ROT.RNG.getUniformInt(1, 3);
-      if (!this.level.itemAt(m.x, m.y)) this.level.items.push({ x: m.x, y: m.y, type: prize, enchant, relic: true });
+      if (!this.level.itemAt(m.x, m.y)) this.level.items.push({ x: m.x, y: m.y, type: prize, enchant, relic: true, buc: "blessed", bucKnown: true });
       this.log.add(`${cap(m.name)} falls! It leaves a relic — ${prize.name} +${enchant}.`, "good");
       // Etch it on-chain as a tradeable NFT (gasless: you sign, the relay mints).
       if (this.wallet) {

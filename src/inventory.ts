@@ -1,6 +1,6 @@
-import type { ItemType } from "./items";
+import type { ItemType, Buc } from "./items";
 
-export interface Item { type: ItemType; charges?: number; enchant?: number; relic?: boolean; } // charges for wands; enchant/relic for NFT gear
+export interface Item { type: ItemType; charges?: number; enchant?: number; relic?: boolean; buc?: Buc; bucKnown?: boolean; } // charges for wands; enchant/relic for NFT gear; buc = blessed/uncursed/cursed
 
 /** Letter-indexed pack (a, b, c, …). */
 export class Inventory {

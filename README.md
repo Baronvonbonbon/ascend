@@ -46,6 +46,14 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > **Realm mini-bosses** guard the run: **the Forkmaster** (depth 3) and **the Sudo Key**
 > (depth 6) each drop a guaranteed prize when slain, before **THE CENSOR** and the JAM at depth 8.
 
+> **Sanctity (BUC):** every item is secretly **blessed**, **uncursed**, or **cursed**. Blessed
+> gear hits / guards / heals harder; **cursed** gear is a trap — wield or wear it and it
+> **welds on** (you can't unequip or drop it until it's cleansed), a cursed ring betrays you,
+> and a cursed scroll of enchantment *corrodes* your blade. You don't know an item's sanctity
+> until you learn it: set it on **Gavin's altar** (`_`) to read the glow, **identify** it, or just
+> risk equipping it. To break a curse, **pray** at an altar (`P`) or read a **scroll of formal
+> verification** (audit) — relics and shop wares come pre-audited.
+
 **On-chain (Paseo):** `AscendBank` (`0x3D35694e…FcD31`) holds your purse for gasless
 shop spends; `AscendLedger` (`0x56068D…ccaa5`) is the gasless run record + bones;
 `AscendGear` (`0xd029ae…B7c3`) is the tradeable ERC-721 relic NFT. All three via

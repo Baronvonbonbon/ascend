@@ -2,6 +2,7 @@ import * as ROT from "rot-js";
 import type { Game } from "./game";
 import { COLORS, MonsterDef } from "./data";
 import { Inventory, Item } from "./inventory";
+import { bucDelta } from "./items";
 
 type Verb = "wield" | "wear" | "quaff" | "read" | "eat" | "drop" | "zap";
 const VERB_PROMPT: Record<Verb, string> = {
@@ -64,17 +65,24 @@ export class Player extends Entity {
   /** Recompute attack damage from the wielded weapon (or fists) + enchant bonus. */
   applyWeapon(): void {
     if (this.weapon) {
-      const b = this.weaponBonus + (this.weapon.enchant ?? 0); // scroll enchant + relic enchant
+      const b = this.weaponBonus + (this.weapon.enchant ?? 0) + bucDelta(this.weapon.buc); // scroll enchant + relic enchant + sanctity
       this.attackDmg = [this.weapon.type.dmg![0] + b, this.weapon.type.dmg![1] + b];
     } else this.attackDmg = [1, 3];
   }
 
-  /** Apply (on=true) or revert a worn ring's passive effect. */
+  /** Apply (on=true) or revert a worn ring's passive effect. A cursed ring betrays you. */
   applyRing(item: Item, on: boolean): void {
+    const cursed = item.buc === "cursed";
     switch (item.type.id) {
-      case "ring_res": this.maxHp += on ? 6 : -6; if (on) this.hp += 6; this.hp = Math.min(this.hp, this.maxHp); break;
-      case "ring_regen": this.regenFast = on; break;
-      case "ring_priv": this.stealth = on; break;
+      case "ring_res": {
+        const amt = cursed ? -4 : 6; // cursed resilience saps your max HP instead
+        this.maxHp += on ? amt : -amt;
+        if (on && amt > 0) this.hp += amt;
+        this.hp = Math.max(1, Math.min(this.hp, this.maxHp));
+        break;
+      }
+      case "ring_regen": this.regenFast = on && !cursed; break; // cursed: no regen
+      case "ring_priv": this.stealth = on && !cursed; break;    // cursed: cloak fails
     }
   }
   private pending: Verb | null = null;
@@ -203,17 +211,41 @@ export class Player extends Entity {
     switch (verb) {
       case "wield":
         if (t.kind !== "weapon") { this.game.log.add("That is not a weapon.", "dim"); return false; }
+        if (item === this.weapon) { this.game.log.add("You're already wielding that.", "dim"); return false; }
+        if (this.weapon && this.weapon.buc === "cursed") {
+          this.weapon.bucKnown = true;
+          this.game.log.add(`You can't release ${ident.name(this.weapon.type)} — it's cursed, welded to your grip!`, "bad");
+          return this.endTurn();
+        }
         this.weapon = item; this.applyWeapon();
-        this.game.log.add(`You wield ${ident.name(t)}.`, "good"); return this.endTurn();
+        this.game.log.add(`You wield ${ident.name(t)}.`, "good");
+        if (item.buc === "cursed") { item.bucKnown = true; this.game.log.add(`The ${t.name} welds itself to your hand. It's cursed!`, "bad"); }
+        return this.endTurn();
       case "wear":
         if (t.kind === "armor") {
-          this.armor = item; this.ac = t.ac! + (item.enchant ?? 0);
-          this.game.log.add(`You don ${ident.name(t)}.`, "good"); return this.endTurn();
+          if (item === this.armor) { this.game.log.add("You're already wearing that.", "dim"); return false; }
+          if (this.armor && this.armor.buc === "cursed") {
+            this.armor.bucKnown = true;
+            this.game.log.add(`You'd have to remove ${ident.name(this.armor.type)} first — but it's welded on, cursed!`, "bad");
+            return this.endTurn();
+          }
+          this.armor = item; this.ac = t.ac! + (item.enchant ?? 0) + bucDelta(item.buc);
+          this.game.log.add(`You don ${ident.name(t)}.`, "good");
+          if (item.buc === "cursed") { item.bucKnown = true; this.game.log.add(`The ${t.name} clamps shut around you. It's cursed!`, "bad"); }
+          return this.endTurn();
         }
         if (t.kind === "ring") {
+          if (item === this.ring) { this.game.log.add("That ring is already on your hand.", "dim"); return false; }
+          if (this.ring && this.ring.buc === "cursed") {
+            this.ring.bucKnown = true;
+            this.game.log.add(`You can't remove ${ident.name(this.ring.type)} — it's cursed, fused to your finger!`, "bad");
+            return this.endTurn();
+          }
           if (this.ring) this.applyRing(this.ring, false);
           this.ring = item; this.applyRing(item, true);
-          this.game.log.add(`You put on ${ident.name(t)}.`, "good"); return this.endTurn();
+          this.game.log.add(`You put on ${ident.name(t)}.`, "good");
+          if (item.buc === "cursed") { item.bucKnown = true; this.game.log.add(`The ${t.name} tightens around your finger. It's cursed!`, "bad"); }
+          return this.endTurn();
         }
         this.game.log.add("You can't wear that.", "dim"); return false;
       case "eat":
@@ -225,15 +257,16 @@ export class Player extends Entity {
         if (t.kind !== "potion") { this.game.log.add("You can't drink that.", "dim"); return false; }
         ident.learn(t); this.game.log.add(`You drink ${t.name}.`);
         this.inventory.remove(item); this.unequip(item);
-        this.game.applyEffect(t.effect!); return this.endTurn();
+        this.game.applyEffect(t.effect!, item.buc); return this.endTurn();
       case "read":
         if (t.kind !== "scroll") { this.game.log.add("There is nothing to read.", "dim"); return false; }
         ident.learn(t); this.game.log.add(`You read ${t.name}.`);
         this.inventory.remove(item); this.unequip(item);
-        this.game.applyEffect(t.effect!); return this.endTurn();
+        this.game.applyEffect(t.effect!, item.buc); return this.endTurn();
       case "drop":
+        if (this.isWelded(item)) { item.bucKnown = true; this.game.log.add(`You can't let go of ${ident.name(t)} — it's cursed!`, "bad"); return this.endTurn(); }
         this.inventory.remove(item); this.unequip(item);
-        this.game.dropItem(t); this.game.log.add(`You drop ${ident.name(t)}.`); return this.endTurn();
+        this.game.dropItem(item); this.game.log.add(`You drop ${ident.name(t)}.`); return this.endTurn();
     }
     return false;
   }
@@ -244,8 +277,18 @@ export class Player extends Entity {
     if (this.ring === item) { this.applyRing(item, false); this.ring = null; }
   }
 
+  /** A cursed item that's currently equipped is welded — it can't be removed or dropped. */
+  isWelded(item: Item): boolean {
+    return item.buc === "cursed" && (item === this.weapon || item === this.armor || item === this.ring);
+  }
+
   private takeOff(): boolean {
     if (!this.armor) { this.game.log.add("You aren't wearing armor.", "dim"); return false; }
+    if (this.armor.buc === "cursed") {
+      this.armor.bucKnown = true;
+      this.game.log.add(`Your ${this.game.ident.name(this.armor.type)} is welded on — it's cursed. Uncurse it first.`, "bad");
+      return this.endTurn();
+    }
     this.game.log.add(`You take off ${this.game.ident.name(this.armor.type)}.`);
     this.armor = null; this.ac = 0; return this.endTurn();
   }
