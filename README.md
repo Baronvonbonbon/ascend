@@ -22,7 +22,8 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > reorg), a bigger bestiary including self-replicating **sybils** and the deadlier
 > **Kusama Deeps** swarm, **scrolls of enchantment**, a **speed system** (fast/slow
 > monsters act more/less often), natural **HP regeneration**, and **rings** —
-> resilience (+max HP), regeneration, and privacy (a ZK cloak: monsters can't track you).
+> resilience (+max HP), regeneration, and privacy (a ZK cloak: monsters can't track you),
+> and charged **wands** (`z` to zap in a direction — a bolt of finality, or banishment).
 
 **On-chain (Paseo):** `AscendBank` (`0x3D35694e…FcD31`) holds your purse for gasless
 shop spends; `AscendLedger` (`0x56068D…ccaa5`) is the gasless run record + bones.

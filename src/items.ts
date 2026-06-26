@@ -2,7 +2,7 @@
 
 import * as ROT from "rot-js";
 
-export type ItemKind = "weapon" | "armor" | "food" | "potion" | "scroll" | "amulet" | "ring";
+export type ItemKind = "weapon" | "armor" | "food" | "potion" | "scroll" | "amulet" | "ring" | "wand";
 
 /** The JAM — the Amulet of Yendor of this world. Unique; never randomly spawned. */
 export const JAM: ItemType = { id: "jam", kind: "amulet", name: "the JAM", ch: "*", fg: "#f4e89a", weight: 0 };
@@ -47,6 +47,9 @@ export const ITEMS: ItemType[] = [
   { id: "ring_res",   kind: "ring", name: "a ring of resilience",    ch: "=", fg: "#c0a0e0", weight: 2 },
   { id: "ring_regen", kind: "ring", name: "a ring of regeneration",  ch: "=", fg: "#a0e0a0", weight: 2 },
   { id: "ring_priv",  kind: "ring", name: "a ring of privacy",       ch: "=", fg: "#a0c0e0", weight: 2 },
+  // ── wands ── / (directional, charged; zap with z)
+  { id: "wand_bolt",   kind: "wand", name: "a wand of finality",     ch: "/", fg: "#90d0e0", weight: 2 },
+  { id: "wand_banish", kind: "wand", name: "a wand of banishment",   ch: "/", fg: "#d090d0", weight: 2 },
 ];
 
 const POTION_LOOKS = ["a fizzy potion", "a murky potion", "a glowing vial", "a smoking flask", "a bubbling phial"];

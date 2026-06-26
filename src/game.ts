@@ -1,6 +1,7 @@
 import * as ROT from "rot-js";
 import { Level, Trap, TrapKind } from "./level";
 import { Entity, Player, Monster } from "./entities";
+import { Item } from "./inventory";
 import { Log } from "./log";
 import {
   COLORS, TILE_GLYPH, MONSTERS, MonsterDef, DEATHS, GREETINGS,
@@ -246,6 +247,40 @@ export class Game {
     }
   }
 
+  /** Add an item to the pack, rolling wand charges. */
+  giveItem(type: ItemType): Item {
+    const it = this.player.inventory.add(type);
+    if (type.kind === "wand") it.charges = ROT.RNG.getUniformInt(3, 6);
+    return it;
+  }
+
+  /** Fire a wand in a direction: a bolt travels until it hits a monster or wall. */
+  zapWand(item: Item, dx: number, dy: number): void {
+    if (!item.charges || item.charges <= 0) { this.log.add("The wand is spent.", "dim"); return; }
+    item.charges--;
+    let x = this.player.x, y = this.player.y;
+    let hit: Monster | undefined;
+    for (let step = 0; step < 10; step++) {
+      x += dx; y += dy;
+      if (!this.level.isPassable(x, y)) break;
+      const m = this.monsterAt(x, y); if (m) { hit = m; break; }
+    }
+    if (!hit) {
+      this.log.add(`The ${item.type.name} fizzles into the dark.`, "dim");
+    } else if (item.type.id === "wand_bolt") {
+      const d = ROT.RNG.getUniformInt(8, 14); hit.hp -= d;
+      this.log.add(`A bolt of finality strikes ${hit.name} for ${d}.`, "good");
+      if (hit.hp <= 0) this.kill(hit);
+    } else if (item.type.id === "wand_banish") {
+      let pos = this.level.randomFloor(), t = 0;
+      while (t < 40 && (this.monsterAt(pos.x, pos.y) || (pos.x === this.player.x && pos.y === this.player.y))) { pos = this.level.randomFloor(); t++; }
+      hit.x = pos.x; hit.y = pos.y;
+      this.log.add(`${cap(hit.name)} is banished across the chain.`, "good");
+    }
+    if (item.charges <= 0) { this.player.inventory.remove(item); this.log.add(`The ${item.type.name} crumbles to dust.`, "dim"); }
+    this.draw();
+  }
+
   tryPickup(): boolean {
     const fi = this.level.itemAt(this.player.x, this.player.y);
     if (!fi) { this.log.add("There is nothing here to pick up.", "dim"); return false; }
@@ -256,7 +291,7 @@ export class Game {
       return true;
     }
     if (this.player.inventory.full) { this.log.add("Your pack is full.", "bad"); return false; }
-    this.player.inventory.add(fi.type);
+    this.giveItem(fi.type);
     this.level.items = this.level.items.filter((i) => i !== fi);
     this.log.add(`You pick up ${this.ident.name(fi.type)}.`);
     return true;
@@ -272,7 +307,8 @@ export class Game {
     this.log.add("— Inventory —", "sys");
     inv.items.forEach((it, i) => {
       const eq = it === this.player.weapon ? " (wielded)" : it === this.player.armor ? " (worn)" : it === this.player.ring ? " (on hand)" : "";
-      this.log.add(`  ${inv.letter(i)}) ${this.ident.name(it.type)}${eq}`, "dim");
+      const ch = it.charges != null ? ` [${it.charges}]` : "";
+      this.log.add(`  ${inv.letter(i)}) ${this.ident.name(it.type)}${ch}${eq}`, "dim");
     });
   }
 
@@ -376,7 +412,7 @@ export class Game {
     this.log.add(`Paying ${fi.price} PAS (sign — gasless)…`, "sys"); this.draw();
     const r = await spendPas(this.wallet.provider, this.wallet.address, fi.price);
     if (!r.ok) { this.log.add(`Purchase failed: ${r.error}`, "bad"); return; }
-    this.player.inventory.add(fi.type);
+    this.giveItem(fi.type);
     this.level.items = this.level.items.filter((i) => i !== fi);
     this.player.pas = await bankBalancePas(this.wallet.address);
     this.onWallet?.(this.wallet.address, this.player.pas);

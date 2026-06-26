@@ -1,6 +1,6 @@
 import type { ItemType } from "./items";
 
-export interface Item { type: ItemType; }
+export interface Item { type: ItemType; charges?: number; } // charges for wands
 
 /** Letter-indexed pack (a, b, c, …). */
 export class Inventory {

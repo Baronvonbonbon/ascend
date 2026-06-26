@@ -3,11 +3,11 @@ import type { Game } from "./game";
 import { COLORS, MonsterDef } from "./data";
 import { Inventory, Item } from "./inventory";
 
-type Verb = "wield" | "wear" | "quaff" | "read" | "eat" | "drop";
+type Verb = "wield" | "wear" | "quaff" | "read" | "eat" | "drop" | "zap";
 const VERB_PROMPT: Record<Verb, string> = {
-  wield: "Wield which weapon?", wear: "Wear which armor?",
+  wield: "Wield which weapon?", wear: "Wear/put on which item?",
   quaff: "Quaff which potion?", read: "Read which scroll?",
-  eat: "Eat what?", drop: "Drop which item?",
+  eat: "Eat what?", drop: "Drop which item?", zap: "Zap which wand?",
 };
 
 export abstract class Entity {
@@ -74,6 +74,7 @@ export class Player extends Entity {
     }
   }
   private pending: Verb | null = null;
+  private pendingDir: Item | null = null; // a wand awaiting a zap direction
   private resolveTurn: (() => void) | null = null;
 
   constructor(game: Game, x: number, y: number) {
@@ -126,6 +127,7 @@ export class Player extends Entity {
 
   /** Returns true if a turn was consumed (a key the engine should act on). */
   handleKey(e: KeyboardEvent): boolean {
+    if (this.pendingDir) return this.resolveZapDir(e);
     if (this.pending) return this.resolveSelection(e);
     const mv = MOVES[e.key];
     if (mv) return this.tryMove(mv[0], mv[1]);
@@ -144,6 +146,7 @@ export class Player extends Entity {
       case "r": return this.startSelect("read");
       case "e": return this.startSelect("eat");
       case "d": return this.startSelect("drop");
+      case "z": return this.startSelect("zap");
       case "T": return this.takeOff();
     }
     return false;
@@ -164,7 +167,23 @@ export class Player extends Entity {
     if (e.key === "Escape") { this.game.log.add("Never mind.", "dim"); return false; }
     const item = /^[a-z]$/.test(e.key) ? this.inventory.byLetter(e.key) : undefined;
     if (!item) { this.game.log.add("No such item.", "dim"); return false; }
+    if (verb === "zap") {
+      if (item.type.kind !== "wand") { this.game.log.add("That is not a wand.", "dim"); return false; }
+      this.pendingDir = item;
+      this.game.log.add("Zap in which direction? (a move key, Esc to cancel)", "sys");
+      return false;
+    }
     return this.doVerb(verb, item);
+  }
+
+  private resolveZapDir(e: KeyboardEvent): boolean {
+    const wand = this.pendingDir!;
+    this.pendingDir = null;
+    if (e.key === "Escape") { this.game.log.add("Never mind.", "dim"); return false; }
+    const mv = MOVES[e.key];
+    if (!mv) { this.game.log.add("That is not a direction.", "dim"); return false; }
+    this.game.zapWand(wand, mv[0], mv[1]);
+    return this.endTurn();
   }
 
   private doVerb(verb: Verb, item: Item): boolean {
