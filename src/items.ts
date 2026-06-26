@@ -2,7 +2,7 @@
 
 import * as ROT from "rot-js";
 
-export type ItemKind = "weapon" | "armor" | "food" | "potion" | "scroll" | "amulet";
+export type ItemKind = "weapon" | "armor" | "food" | "potion" | "scroll" | "amulet" | "ring";
 
 /** The JAM — the Amulet of Yendor of this world. Unique; never randomly spawned. */
 export const JAM: ItemType = { id: "jam", kind: "amulet", name: "the JAM", ch: "*", fg: "#f4e89a", weight: 0 };
@@ -43,6 +43,10 @@ export const ITEMS: ItemType[] = [
   { id: "map",    kind: "scroll", name: "a scroll of light client", ch: "?", fg: "#9ac0e0", effect: "map",      weight: 4 },
   { id: "ident",  kind: "scroll", name: "a scroll of identify",     ch: "?", fg: "#c0e0c0", effect: "identify", weight: 4 },
   { id: "ench",   kind: "scroll", name: "a scroll of enchantment",  ch: "?", fg: "#e0d090", effect: "enchant",  weight: 3 },
+  // ── rings ── = (passive while worn; put on with W)
+  { id: "ring_res",   kind: "ring", name: "a ring of resilience",    ch: "=", fg: "#c0a0e0", weight: 2 },
+  { id: "ring_regen", kind: "ring", name: "a ring of regeneration",  ch: "=", fg: "#a0e0a0", weight: 2 },
+  { id: "ring_priv",  kind: "ring", name: "a ring of privacy",       ch: "=", fg: "#a0c0e0", weight: 2 },
 ];
 
 const POTION_LOOKS = ["a fizzy potion", "a murky potion", "a glowing vial", "a smoking flask", "a bubbling phial"];

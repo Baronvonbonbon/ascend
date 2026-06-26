@@ -26,6 +26,10 @@ export abstract class Entity {
     return this.hp > 0;
   }
 
+  getSpeed(): number {
+    return 100;
+  }
+
   abstract act(): void | Promise<void>;
 }
 
@@ -46,6 +50,10 @@ export class Player extends Entity {
   inventory = new Inventory();
   weapon: Item | null = null;
   armor: Item | null = null;
+  ring: Item | null = null;
+  stealth = false;     // ring of privacy — monsters can't track you
+  regenFast = false;   // ring of regeneration
+  private regenTimer = 0;
   hasJam = false;
   maxDepthReached = 1;
   weaponBonus = 0; // from scrolls of enchantment
@@ -55,6 +63,15 @@ export class Player extends Entity {
   applyWeapon(): void {
     if (this.weapon) this.attackDmg = [this.weapon.type.dmg![0] + this.weaponBonus, this.weapon.type.dmg![1] + this.weaponBonus];
     else this.attackDmg = [1, 3];
+  }
+
+  /** Apply (on=true) or revert a worn ring's passive effect. */
+  applyRing(item: Item, on: boolean): void {
+    switch (item.type.id) {
+      case "ring_res": this.maxHp += on ? 6 : -6; if (on) this.hp += 6; this.hp = Math.min(this.hp, this.maxHp); break;
+      case "ring_regen": this.regenFast = on; break;
+      case "ring_priv": this.stealth = on; break;
+    }
   }
   private pending: Verb | null = null;
   private resolveTurn: (() => void) | null = null;
@@ -78,6 +95,10 @@ export class Player extends Entity {
   private endTurn(): boolean {
     this.tickHunger();
     if (this.prayerCooldown > 0) this.prayerCooldown--;
+    // Natural regeneration (faster with a ring of regeneration; not while starving).
+    if (this.hp < this.maxHp && this.nutrition > 0 && ++this.regenTimer >= (this.regenFast ? 5 : 14)) {
+      this.regenTimer = 0; this.hp++;
+    }
     const r = this.resolveTurn;
     this.resolveTurn = null;
     if (r) r();
@@ -155,9 +176,16 @@ export class Player extends Entity {
         this.weapon = item; this.applyWeapon();
         this.game.log.add(`You wield ${ident.name(t)}.`, "good"); return this.endTurn();
       case "wear":
-        if (t.kind !== "armor") { this.game.log.add("You can't wear that.", "dim"); return false; }
-        this.armor = item; this.ac = t.ac!;
-        this.game.log.add(`You don ${ident.name(t)}.`, "good"); return this.endTurn();
+        if (t.kind === "armor") {
+          this.armor = item; this.ac = t.ac!;
+          this.game.log.add(`You don ${ident.name(t)}.`, "good"); return this.endTurn();
+        }
+        if (t.kind === "ring") {
+          if (this.ring) this.applyRing(this.ring, false);
+          this.ring = item; this.applyRing(item, true);
+          this.game.log.add(`You put on ${ident.name(t)}.`, "good"); return this.endTurn();
+        }
+        this.game.log.add("You can't wear that.", "dim"); return false;
       case "eat":
         if (t.kind !== "food") { this.game.log.add("That isn't food.", "dim"); return false; }
         this.nutrition += t.nutrition!;
@@ -183,6 +211,7 @@ export class Player extends Entity {
   private unequip(item: Item): void {
     if (this.weapon === item) { this.weapon = null; this.applyWeapon(); }
     if (this.armor === item) { this.armor = null; this.ac = 0; }
+    if (this.ring === item) { this.applyRing(item, false); this.ring = null; }
   }
 
   private takeOff(): boolean {
@@ -251,6 +280,10 @@ export class Monster extends Entity {
     this.attackDmg = def.dmg;
   }
 
+  getSpeed(): number {
+    return this.def.speed ?? 100;
+  }
+
   act(): void {
     const p = this.game.player;
     if (!p.alive || !this.alive) return;
@@ -261,8 +294,8 @@ export class Monster extends Entity {
     const dist = Math.max(Math.abs(this.x - p.x), Math.abs(this.y - p.y));
     if (dist === 1) { this.game.attack(this, p); return; }
 
-    // Chase only what the player can see (symmetric awareness).
-    if (this.def.ai === "chase" && this.game.level.isVisible(this.x, this.y) && dist <= 9) {
+    // Chase only what the player can see — unless they're cloaked (ring of privacy).
+    if (this.def.ai === "chase" && !p.stealth && this.game.level.isVisible(this.x, this.y) && dist <= 9) {
       const dij = new ROT.Path.Dijkstra(p.x, p.y, (x, y) => this.game.level.isPassable(x, y), { topology: 8 });
       const path: [number, number][] = [];
       dij.compute(this.x, this.y, (x, y) => path.push([x, y]));

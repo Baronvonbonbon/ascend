@@ -29,7 +29,7 @@ export class Game {
   wallet: Wallet | null = null;
   onWallet?: (address: string, pas: number) => void;
   recentRuns: RunEntry[] = []; // leaderboard cache + bones pool
-  private scheduler = new ROT.Scheduler.Simple<Entity>();
+  private scheduler = new ROT.Scheduler.Speed<Entity>(); // fast/slow actors act more/less often
   private engine!: ROT.Engine;
   private over = false;
 
@@ -271,7 +271,7 @@ export class Game {
     if (inv.items.length === 0) { this.log.add("Your pack is empty.", "dim"); return; }
     this.log.add("— Inventory —", "sys");
     inv.items.forEach((it, i) => {
-      const eq = it === this.player.weapon ? " (wielded)" : it === this.player.armor ? " (worn)" : "";
+      const eq = it === this.player.weapon ? " (wielded)" : it === this.player.armor ? " (worn)" : it === this.player.ring ? " (on hand)" : "";
       this.log.add(`  ${inv.letter(i)}) ${this.ident.name(it.type)}${eq}`, "dim");
     });
   }
