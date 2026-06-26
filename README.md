@@ -43,6 +43,9 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > start with a **nominator** (`d`) — a loyal pet that follows you and savages adjacent foes.
 > You can **throw** (`t`) too: hurl a dagger down a corridor as a ranged strike (it lands where
 > it falls, ready to retrieve), or lob a **potion of reorg** like a grenade to burst it on a foe.
+> Cornered? **Engrave** (`E`) a clause of the Gray Paper in the dust (`§`): ordinary foes shrink
+> from the warded tile and won't attack while you stand on it — a breather that scuffs away with
+> time and faster if you fight on it. Bosses and **THE CENSOR** fear no scripture.
 > Mid-depth floors hold **XCM portals** (`Ω`): call out (`>`) to a **parachain branch** —
 > Kusama, Moonbeam, Astar, Phala, Interlay, Bifrost, Hydration, Acala — each with its own
 > **difficulty × loot** multipliers (some up, some down from the relay). Climb back (`<`) to the relay.
@@ -72,7 +75,7 @@ npm run dev      # http://localhost:5180
 
 **Controls:** move **arrows/hjkl/yubn** · pick up `,` · inventory `i` · wield `w` ·
 wear `W` · take off `T` · quaff `q` · read `r` · eat `e` · drop `d` · zap `z` · throw `t` ·
-pray `P` · descend `>` · ascend/up `<` · wait `.` · restart `R`.
+engrave `E` · pray `P` · descend `>` · ascend/up `<` · wait `.` · restart `R`.
 
 `npm run build` → typecheck + production bundle in `dist/`.
 

@@ -70,6 +70,7 @@ export interface MonsterDef {
   ranged?: boolean;      // fires at the player from a distance with line-of-sight
   steals?: boolean;      // a thief — snatches a pack item and flees (the rug pull)
   mimic?: boolean;       // a honeypot — sits disguised as loot, strikes when touched
+  fearless?: boolean;    // ignores warding engravings (bosses fear no Gray Paper)
   boss?: boolean;        // a unique mini-boss — drops a guaranteed prize on death
 }
 
@@ -94,7 +95,7 @@ export const HONEYPOT: MonsterDef = {
 
 /** The Censor — a unique boss guarding the JAM on the deepest floor. */
 export const CENSOR: MonsterDef = {
-  name: "THE CENSOR", ch: "C", fg: "#ff3b3b", hp: 48, dmg: [6, 11], ai: "chase", minDepth: 99, weight: 0,
+  name: "THE CENSOR", ch: "C", fg: "#ff3b3b", hp: 48, dmg: [6, 11], ai: "chase", minDepth: 99, weight: 0, fearless: true,
 };
 
 /** Realm mini-bosses — one guards a specific depth and drops a prize when slain. */

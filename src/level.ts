@@ -7,6 +7,8 @@ export interface Portal { x: number; y: number; chain: ChainDef; }
 export interface FloorItem { x: number; y: number; type: ItemType; price?: number; enchant?: number; relic?: boolean; mintOnBuy?: boolean; buc?: import("./items").Buc; bucKnown?: boolean; } // price set = a shop ware; relic/enchant/mintOnBuy = NFT gear; buc = sanctity
 export type TrapKind = "gas" | "reorg" | "slash";
 export interface Trap { x: number; y: number; kind: TrapKind; revealed: boolean; }
+/** A sigil scratched in the dust (the Gray Paper) that wards monsters from the tile; it scuffs away. */
+export interface Engraving { x: number; y: number; life: number; }
 
 /** One dungeon level: tiles, fog-of-war, FOV, stairs, items, spawn points. */
 export class Level {
@@ -17,6 +19,7 @@ export class Level {
   items: FloorItem[] = [];
   graves: { x: number; y: number; label: string }[] = []; // bones of fallen heroes
   traps: Trap[] = [];
+  engravings: Engraving[] = []; // Gray-Paper wards scratched in the dust
   portals: Portal[] = []; // XCM portals to parachain branches
   roomCenters: { x: number; y: number }[] = [];
   start = { x: 1, y: 1 };
@@ -108,6 +111,10 @@ export class Level {
 
   portalAt(x: number, y: number): Portal | undefined {
     return this.portals.find((p) => p.x === x && p.y === y);
+  }
+
+  engravingAt(x: number, y: number): Engraving | undefined {
+    return this.engravings.find((e) => e.x === x && e.y === y && e.life > 0);
   }
 
   revealAll(): void {

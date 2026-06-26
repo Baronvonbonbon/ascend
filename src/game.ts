@@ -64,7 +64,7 @@ export class Game {
     this.log.add(ROT.RNG.getItem(GREETINGS)!, "sys");
     for (const line of GRAY_PAPER) this.log.add(line, "dim");
     this.log.add("Your nominator (d) pads at your heels — it backs you, and bites for you.", "dim");
-    this.log.add("Keys: move · , pick up · p buy · P pray · z zap · t throw · < up · > down · i/w/W/q/r/e/d items.", "dim");
+    this.log.add("Keys: move · , pick up · p buy · P pray · z zap · t throw · E engrave · < up · > down · i/w/W/q/r/e/d items.", "dim");
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
@@ -300,6 +300,28 @@ export class Game {
     this.draw();
   }
 
+  /** Scratch a warding sigil (a Gray-Paper clause) at your feet; ordinary foes shrink from the tile. */
+  engrave(): boolean {
+    const p = this.player;
+    const t = this.level.tileAt(p.x, p.y);
+    if (t !== "floor" && t !== "door") { this.log.add("There's no dust here to scratch a sigil into.", "dim"); return false; }
+    const LIFE = 14;
+    const e = this.level.engravingAt(p.x, p.y);
+    if (e) { e.life = LIFE; this.log.add("You re-scratch the Gray-Paper sigil — its lines sharpen.", "sys"); }
+    else {
+      this.level.engravings.push({ x: p.x, y: p.y, life: LIFE });
+      this.log.add("You scratch a clause of the Gray Paper into the dust: 'trust no single node.' Foes shrink from it.", "good");
+    }
+    return true;
+  }
+
+  /** Engravings scuff away over time (and faster when you fight on them). */
+  tickEngravings(): void {
+    if (this.level.engravings.length === 0) return;
+    for (const e of this.level.engravings) e.life--;
+    this.level.engravings = this.level.engravings.filter((e) => e.life > 0);
+  }
+
   private win(): void {
     if (this.over) return;
     this.over = true;
@@ -361,6 +383,8 @@ export class Game {
       const lure = d.disguiseType ? this.ident.name(d.disguiseType) : "the loot";
       this.log.add(`${cap(lure)} you reached for lurches alive — it's a honeypot! A mimic.`, "bad");
     }
+    // Fighting on a warded tile scuffs the sigil away faster.
+    if (a === this.player) { const e = this.level.engravingAt(this.player.x, this.player.y); if (e) e.life -= 3; }
     const [lo, hi] = a.attackDmg;
     let dmg = ROT.RNG.getUniformInt(lo, hi);
     if (d === this.player && this.player.ac > 0) dmg = Math.max(1, dmg - this.player.ac); // armor soaks
@@ -898,6 +922,9 @@ export class Game {
     }
     for (const pr of this.level.portals) {
       if (this.level.isVisible(pr.x, pr.y)) this.display.draw(pr.x, pr.y, "Ω", pr.chain.color, COLORS.bg);
+    }
+    for (const e of this.level.engravings) {
+      if (this.level.isVisible(e.x, e.y)) this.display.draw(e.x, e.y, "§", "#b0a060", COLORS.bg); // later layers (items/actors) cover it
     }
     for (const fi of this.level.items) {
       if (this.level.isVisible(fi.x, fi.y)) this.display.draw(fi.x, fi.y, fi.type.ch, fi.type.fg, fi.price ? "#2a2208" : COLORS.bg);

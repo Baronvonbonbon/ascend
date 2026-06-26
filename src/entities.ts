@@ -109,6 +109,7 @@ export class Player extends Entity {
 
   private endTurn(): boolean {
     this.tickHunger();
+    this.game.tickEngravings();
     if (this.prayerCooldown > 0) this.prayerCooldown--;
     // Poison: damage over time. Confusion: just counts down.
     if (this.poison > 0) {
@@ -171,6 +172,7 @@ export class Player extends Entity {
       case "z": return this.startSelect("zap");
       case "t": return this.startSelect("throw");
       case "T": return this.takeOff();
+      case "E": return this.game.engrave() ? this.endTurn() : false;
     }
     return false;
   }
@@ -414,6 +416,13 @@ export class Monster extends Entity {
     // A laden thief wants only to escape — it never turns to fight.
     if (this.stolen) { this.fleeStep(p); return; }
 
+    // A Gray-Paper ward beneath the player holds ordinary foes at bay — they won't
+    // attack or close in. Bosses and the Censor fear no scripture.
+    if (!this.def.boss && !this.def.fearless && this.game.level.engravingAt(p.x, p.y)) {
+      this.wanderStep(p);
+      return;
+    }
+
     // The Sybil attack: occasionally a sybil spends its turn replicating.
     if (this.def.splits && ROT.RNG.getUniform() < 0.1 && this.game.spawnSybilNear(this.x, this.y)) return;
 
@@ -457,6 +466,11 @@ export class Monster extends Entity {
     }
 
     // Wander.
+    this.wanderStep(p);
+  }
+
+  /** A random shuffle into an open neighbour — never onto the player. */
+  private wanderStep(p: Player): void {
     const d = ROT.RNG.getItem([[-1, 0], [1, 0], [0, -1], [0, 1]] as [number, number][])!;
     const nx = this.x + d[0], ny = this.y + d[1];
     if (this.game.level.isPassable(nx, ny) && !this.game.monsterAt(nx, ny) && !(nx === p.x && ny === p.y)) {
