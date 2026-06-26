@@ -1,9 +1,11 @@
 import { Game } from "./game";
+import { initLobby } from "./net/lobby";
 
 const screen = document.getElementById("screen");
 const logEl = document.getElementById("log");
 if (screen && logEl) {
   const game = new Game(screen, logEl);
+  initLobby(game); // co-op (P2P) lobby — Stage 1: connection + channel self-test
 
   const connect = document.getElementById("connect") as HTMLButtonElement | null;
   const wstatus = document.getElementById("wstatus");

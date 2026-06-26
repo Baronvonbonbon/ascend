@@ -77,6 +77,11 @@ it's mined). `AscendLedger` (`0x56068D…ccaa5`) is the gasless run record + bon
 wallet** (permissionless, on-chain rarity roll). `AscendLedger` still records runs gaslessly via the
 Datum relay.
 
+**Co-op (P2P, experimental):** a serverless **WebRTC** lobby lets two players link directly
+browser-to-browser (paste an offer code, get an answer code back — no matchmaking server).
+Pick a mode (co-op / co-op + friendly fire / race), Host or Join. *Stage 1* (the peer link +
+channel self-test) is live; live same-dungeon, host-authoritative sync is being built on top.
+
 **Mobile:** on touch / narrow screens an on-screen control deck appears — a D-pad (move + wait),
 quick actions (pick / buy / stairs / pack), and a **⌨ more** drawer with the item verbs and an
 a–t letter strip for inventory selections. The canvas scales to fit.
