@@ -69,6 +69,7 @@ export interface MonsterDef {
   inflict?: "poison" | "confuse"; // status applied on a hit (30% chance)
   ranged?: boolean;      // fires at the player from a distance with line-of-sight
   steals?: boolean;      // a thief — snatches a pack item and flees (the rug pull)
+  mimic?: boolean;       // a honeypot — sits disguised as loot, strikes when touched
   boss?: boolean;        // a unique mini-boss — drops a guaranteed prize on death
 }
 
@@ -85,6 +86,11 @@ export const MONSTERS: MonsterDef[] = [
   { name: "an oracle",         ch: "o", fg: "#e0c040", hp: 9,  dmg: [3, 6], ai: "chase",  minDepth: 5, weight: 2, ranged: true },
   { name: "a 51% attacker",    ch: "A", fg: "#e05050", hp: 16, dmg: [4, 8], ai: "chase",  minDepth: 6, weight: 2, speed: 110, inflict: "confuse" },
 ];
+
+/** The honeypot — a mimic. Spawned separately (placeMimics), disguised as loot. */
+export const HONEYPOT: MonsterDef = {
+  name: "a honeypot", ch: "m", fg: "#e0b020", hp: 16, dmg: [3, 7], ai: "chase", minDepth: 3, weight: 0, mimic: true, speed: 90,
+};
 
 /** The Censor — a unique boss guarding the JAM on the deepest floor. */
 export const CENSOR: MonsterDef = {

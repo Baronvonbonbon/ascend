@@ -37,7 +37,9 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > 51% attackers **confuse** (you stagger), and **oracles** (`o`) **zap you from afar**
 > with line-of-sight — cured by prayer or a healing potion. **Rug pullers** (`r`) live up
 > to the name: get adjacent and one will **snatch an item from your pack and bolt** — chase
-> it down and kill it to reclaim your loot, or it escapes and you're rugged. And you
+> it down and kill it to reclaim your loot, or it escapes and you're rugged. Not all loot
+> is loot: **honeypots** (`m`) are **mimics** that sit disguised as an item — a sword, a
+> potion, a ring — and lunge the moment you reach for them. And you
 > start with a **nominator** (`d`) — a loyal pet that follows you and savages adjacent foes.
 > Mid-depth floors hold **XCM portals** (`Ω`): call out (`>`) to a **parachain branch** —
 > Kusama, Moonbeam, Astar, Phala, Interlay, Bifrost, Hydration, Acala — each with its own

@@ -2,7 +2,7 @@ import * as ROT from "rot-js";
 import type { Game } from "./game";
 import { COLORS, MonsterDef } from "./data";
 import { Inventory, Item } from "./inventory";
-import { bucDelta } from "./items";
+import { bucDelta, ITEMS, ItemType } from "./items";
 
 type Verb = "wield" | "wear" | "quaff" | "read" | "eat" | "drop" | "zap";
 const VERB_PROMPT: Record<Verb, string> = {
@@ -358,6 +358,11 @@ export class Player extends Entity {
 export class Monster extends Entity {
   speedMod = 1; // a wand of slowness halves this
   stolen: Item | null = null; // a thief (rug puller) carries what it snatched; drops it on death
+  // A mimic (honeypot) wears an item's glyph until it's touched.
+  revealed = false;
+  disguiseCh = "*";
+  disguiseFg = "#ffffff";
+  disguiseType: ItemType | null = null;
   constructor(game: Game, public def: MonsterDef, x: number, y: number) {
     super(game);
     this.x = x;
@@ -367,6 +372,10 @@ export class Monster extends Entity {
     this.name = def.name;
     this.hp = this.maxHp = def.hp;
     this.attackDmg = def.dmg;
+    if (def.mimic) {
+      const look = ROT.RNG.getItem(ITEMS.filter((i) => i.kind !== "amulet"))!;
+      this.disguiseCh = look.ch; this.disguiseFg = look.fg; this.disguiseType = look;
+    }
   }
 
   getSpeed(): number {
@@ -376,6 +385,9 @@ export class Monster extends Entity {
   act(): void {
     const p = this.game.player;
     if (!p.alive || !this.alive) return;
+
+    // A dormant honeypot just waits, wearing its loot disguise, until something touches it.
+    if (this.def.mimic && !this.revealed) return;
 
     // A laden thief wants only to escape — it never turns to fight.
     if (this.stolen) { this.fleeStep(p); return; }

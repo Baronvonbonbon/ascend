@@ -5,7 +5,7 @@ import { Item } from "./inventory";
 import { Log } from "./log";
 import {
   COLORS, TILE_GLYPH, MONSTERS, MonsterDef, DEATHS, GREETINGS,
-  MAX_DEPTH, CENSOR, MINIBOSSES, realmName, GRAY_PAPER, ChainDef, CHAINS,
+  MAX_DEPTH, CENSOR, MINIBOSSES, HONEYPOT, realmName, GRAY_PAPER, ChainDef, CHAINS,
 } from "./data";
 import { Idents, ITEMS, JAM, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc } from "./items";
 import { connectWallet, Wallet } from "./chain/wallet";
@@ -120,6 +120,7 @@ export class Game {
     this.spawnTraps();
     this.placePortals();
     this.placeMiniboss();
+    this.placeMimics();
     if (!this.currentChain && this.player.depth >= MAX_DEPTH) this.placeJamAndBoss();
     for (const m of this.monsters) this.scheduler.add(m, true);
     if (this.pet && this.pet.alive) {
@@ -251,6 +252,22 @@ export class Game {
     this.log.add(`A mighty presence stirs on this floor — ${def.name}.`, "bad");
   }
 
+  /** Seed the floor with honeypots — mimics that wear an item's glyph and bite when touched. */
+  private placeMimics(): void {
+    if (this.player.depth < 3) return;
+    const n = ROT.RNG.getUniformInt(0, 2);
+    for (let i = 0; i < n; i++) {
+      let pos = this.level.randomFloor(), tries = 0;
+      while (
+        tries < 40 &&
+        (this.monsterAt(pos.x, pos.y) || this.level.itemAt(pos.x, pos.y) ||
+          (pos.x === this.player.x && pos.y === this.player.y) ||
+          this.level.tileAt(pos.x, pos.y) === "stairsDown" || this.level.tileAt(pos.x, pos.y) === "stairsUp")
+      ) { pos = this.level.randomFloor(); tries++; }
+      if (tries < 40) this.monsters.push(new Monster(this, HONEYPOT, pos.x, pos.y));
+    }
+  }
+
   private placeAltar(): void {
     if (ROT.RNG.getUniform() > 0.45) return;
     const centers = this.level.roomCenters.filter(
@@ -338,6 +355,12 @@ export class Game {
 
   // ── combat ─────────────────────────────────────────────────────────────────
   attack(a: Entity, d: Entity): void {
+    // Touching a disguised honeypot springs the trap — it sheds its loot form.
+    if (d instanceof Monster && d.def.mimic && !d.revealed) {
+      d.revealed = true;
+      const lure = d.disguiseType ? this.ident.name(d.disguiseType) : "the loot";
+      this.log.add(`${cap(lure)} you reached for lurches alive — it's a honeypot! A mimic.`, "bad");
+    }
     const [lo, hi] = a.attackDmg;
     let dmg = ROT.RNG.getUniformInt(lo, hi);
     if (d === this.player && this.player.ac > 0) dmg = Math.max(1, dmg - this.player.ac); // armor soaks
@@ -828,7 +851,9 @@ export class Game {
       if (this.level.isVisible(fi.x, fi.y)) this.display.draw(fi.x, fi.y, fi.type.ch, fi.type.fg, fi.price ? "#2a2208" : COLORS.bg);
     }
     for (const m of this.monsters) {
-      if (m.alive && this.level.isVisible(m.x, m.y)) this.display.draw(m.x, m.y, m.ch, m.fg, COLORS.bg);
+      if (!m.alive || !this.level.isVisible(m.x, m.y)) continue;
+      const dormant = m.def.mimic && !m.revealed; // a honeypot shows as loot until sprung
+      this.display.draw(m.x, m.y, dormant ? m.disguiseCh : m.ch, dormant ? m.disguiseFg : m.fg, COLORS.bg);
     }
     if (this.pet && this.pet.alive && this.level.isVisible(this.pet.x, this.pet.y)) {
       this.display.draw(this.pet.x, this.pet.y, this.pet.ch, this.pet.fg, COLORS.bg);
