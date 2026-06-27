@@ -154,6 +154,11 @@ Fellowship** (as an **Architect** / **Fellow** / **Adept**, by ethos), granting 
 boost, an intrinsic, and a blessed gift. But **don't pray too often** — praying before the cooldown lapses now brings his **wrath**
 (a smite, a cursed item, or soured Fortune), so save it for when you truly need it.
 
+**Faucets & thrones (Phase 9a):** the dungeon now holds **testnet faucets** (`{`) — stand on one and
+**quaff** (`q`) for a gamble: refreshing water (heal), a HODL stone, a **faucet bot**, tainted (poison),
+or it runs dry. And the **Sudo Throne** (`\`) — **sit** (`s`) on it for raw privilege: a full heal +
+Fortune, an instant level or pack-identify… or a curse, a teleport, a guardian, or the throne crumbling.
+
 **Controls:** move **arrows/hjkl/yubn** · pick up `,` · inventory `i` · sheet `@` · wield `w` ·
 wear `W` · take off `T` · quaff `q` · read/study `r` · eat `e` · drop `d` · zap `z` · cast `Z` ·
 throw `t` · apply tool `a` · engrave `E` · pray `P` · offer `O` · descend `>` · ascend/up `<` · wait `.` · restart `R`.

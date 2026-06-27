@@ -4,7 +4,7 @@ import { Entity, Player, Monster, Pet } from "./entities";
 import { Item } from "./inventory";
 import { Log } from "./log";
 import {
-  COLORS, TILE_GLYPH, MONSTERS, MonsterDef, DEATHS, GREETINGS,
+  COLORS, TILE_GLYPH, TileType, MONSTERS, MonsterDef, DEATHS, GREETINGS,
   MAX_DEPTH, CENSOR, MINIBOSSES, HONEYPOT, SHOPKEEPER, realmName, GRAY_PAPER, ChainDef, CHAINS,
   abilityMod, archetypeById, ATTRS, ATTR_LABEL, spellById,
 } from "./data";
@@ -99,7 +99,7 @@ export class Game {
     for (const line of GRAY_PAPER) this.log.add(line, "dim");
     if (this.coop) this.log.add(`Co-op (${this.coopMode}) — Host and Guest share this dungeon. Find the JAM together.`, "sys");
     else this.log.add("Your nominator (d) pads at your heels — it backs you, and bites for you.", "dim");
-    this.log.add("Keys: move · , pick up · @ sheet · p buy · F forge · P pray · O offer · z zap · Z cast · t throw · a apply · E engrave · < up · > down · i/w/W/q/r/e/d items.", "dim");
+    this.log.add("Keys: move · , pick up · @ sheet · p buy · F forge · P pray · O offer · q faucet · s sit throne · z zap · Z cast · t throw · a apply · E engrave · < up · > down · i/w/W/q/r/e/d items.", "dim");
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
@@ -242,6 +242,8 @@ export class Game {
     this.spawnItems();
     this.spawnShop();
     this.placeAltar();
+    this.placeFeature("faucet", 0.3);
+    this.placeFeature("throne", 0.16);
     this.maybePlaceBones();
     this.spawnTraps();
     this.placePortals();
@@ -419,14 +421,44 @@ export class Game {
     }
   }
 
-  private placeAltar(): void {
-    if (ROT.RNG.getUniform() > 0.45) return;
+  private placeAltar(): void { this.placeFeature("altar", 0.45); }
+
+  /** Place a single dungeon feature on an unused room centre. */
+  private placeFeature(tile: TileType, chance: number): void {
+    if (ROT.RNG.getUniform() > chance) return;
     const centers = this.level.roomCenters.filter(
-      (c) => this.level.tileAt(c.x, c.y) === "floor" && !(c.x === this.player.x && c.y === this.player.y),
+      (c) => this.level.tileAt(c.x, c.y) === "floor" && !(c.x === this.player.x && c.y === this.player.y) && !this.monsterAt(c.x, c.y),
     );
     if (!centers.length) return;
     const c = ROT.RNG.getItem(centers)!;
-    this.level.tiles[c.y][c.x] = "altar";
+    this.level.tiles[c.y][c.x] = tile;
+  }
+
+  /** Quaff from a testnet faucet underfoot — a random boon or bane. */
+  quaffFaucet(p: Player): boolean {
+    const r = ROT.RNG.getUniform();
+    if (r < 0.30) { const h = ROT.RNG.getUniformInt(4, 10); p.hp = Math.min(p.maxHp, p.hp + h); this.log.add(`Cool testnet water — refreshing. (+${h} HP)`, "good"); }
+    else if (r < 0.50) { const spot = this.adjacentFree(p.x, p.y); if (spot) { const m = new Monster(this, MONSTERS[0], spot.x, spot.y); this.monsters.push(m); this.scheduler.add(m, true); } this.log.add("A faucet bot sloshes out of the pipes!", "bad"); }
+    else if (r < 0.65) { this.log.add("The water is tainted!", "bad"); this.applyStatus(p, "poison"); }
+    else if (r < 0.80) { if (!this.level.itemAt(p.x, p.y)) { this.level.items.push({ x: p.x, y: p.y, type: itemById("hodlstone")!, buc: rollBuc() }); this.log.add("You fish a HODL stone from the basin!", "good"); } else this.log.add("The water tastes of nothing.", "dim"); }
+    else if (r < 0.90) { this.level.tiles[p.y][p.x] = "floor"; this.log.add("The faucet sputters and runs dry.", "dim"); }
+    else this.log.add("You sip. Nothing happens.", "dim");
+    if (p.hp <= 0) this.killPlayer(p);
+    return true;
+  }
+
+  /** Sit the Sudo Throne underfoot — raw privilege, for better or worse. */
+  sitThrone(p: Player): boolean {
+    const r = ROT.RNG.getUniform();
+    if (r < 0.25) { p.hp = p.maxHp; p.luck = Math.min(13, p.luck + 1); this.log.add(`${this.sub(p)} ${this.verbS(p, "sit")} the Sudo Throne — power flows. (full HP, Fortune up)`, "good"); }
+    else if (r < 0.40) { const eq = [p.weapon, ...p.wornArmor, p.ring].filter((x): x is Item => !!x && x.buc !== "cursed"); if (eq.length) { const it = ROT.RNG.getItem(eq)!; it.buc = "cursed"; it.bucKnown = true; p.recomputeAC(); p.applyWeapon(); this.log.add(`A surge of raw sudo — your ${this.ident.name(it.type)} is cursed!`, "bad"); } else this.log.add("A jolt of sudo finds no purchase.", "dim"); }
+    else if (r < 0.55) { let pos = this.level.randomFloor(), t = 0; while (t < 40 && (this.monsterAt(pos.x, pos.y) || this.level.tileAt(pos.x, pos.y) === "stairsDown")) { pos = this.level.randomFloor(); t++; } p.x = pos.x; p.y = pos.y; this.recomputeFOV(); this.log.add("The throne flings you across the level!", "bad"); }
+    else if (r < 0.70) { for (const it of p.inventory.items) this.ident.learn(it.type); this.log.add("Privileged insight — your pack is identified.", "sys"); }
+    else if (r < 0.82) { this.gainXp(p, Math.max(10, this.xpForLevel(p.level + 1) - p.xp + 1)); this.log.add("Authority flows into you — you feel experienced.", "good"); }
+    else if (r < 0.92) { const spot = this.adjacentFree(p.x, p.y); if (spot) { const def = ROT.RNG.getItem(MONSTERS.filter((m) => m.weight > 0))!; this.monsters.push(new Monster(this, def, spot.x, spot.y)); this.scheduler.add(this.monsters[this.monsters.length - 1], true); } this.log.add("A throne guardian materializes!", "bad"); }
+    else { this.level.tiles[p.y][p.x] = "floor"; this.log.add("The throne crumbles to dust beneath you.", "dim"); }
+    if (p.hp <= 0) this.killPlayer(p);
+    return true;
   }
 
   pray(): void {

@@ -15,7 +15,7 @@ export const COLORS = {
   dim:       "#6c6a60",
 };
 
-export type TileType = "wall" | "floor" | "door" | "stairsDown" | "stairsUp" | "altar" | "portal";
+export type TileType = "wall" | "floor" | "door" | "stairsDown" | "stairsUp" | "altar" | "portal" | "faucet" | "throne";
 
 export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: string }> = {
   wall:       { ch: "#", fg: COLORS.wall,   fgDim: COLORS.wallDim },
@@ -25,6 +25,8 @@ export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: strin
   stairsUp:   { ch: "<", fg: COLORS.stairs, fgDim: "#6a5a28" },
   altar:      { ch: "_", fg: "#c0d0e0",     fgDim: "#4a5560" },
   portal:     { ch: "Ω", fg: "#e060d0",     fgDim: "#6a3060" },
+  faucet:     { ch: "{", fg: "#4fb0e0",     fgDim: "#2a5570" }, // a testnet faucet — quaff (q)
+  throne:     { ch: "\\", fg: "#e0c040",    fgDim: "#6a5a20" }, // the Sudo Throne — sit (s)
 };
 
 export const MAX_DEPTH = 8; // the JAM lies on the deepest floor
