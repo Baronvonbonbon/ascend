@@ -1,6 +1,6 @@
 import * as ROT from "rot-js";
 import type { Game } from "./game";
-import { COLORS, MonsterDef } from "./data";
+import { COLORS, MonsterDef, SPELLS, spellById } from "./data";
 import { Inventory, Item } from "./inventory";
 import { bucDelta, ITEMS, ItemType, ArmorSlot } from "./items";
 
@@ -71,6 +71,12 @@ export class Player extends Entity {
   str = 12; dex = 12; con = 12; int = 12; wis = 12; cha = 12;
   level = 1; xp = 0;
   archetype = "validator";
+  // Phase 8 — spellcasting
+  energy = 5; maxEnergy = 5;
+  spells = new Set<string>(); // known spell ids
+  senseTurns = 0;             // sense minds — monsters revealed
+  hasteTurns = 0;             // overclock — temporary speed
+  private energyTimer = 0;
 
   /** Recompute attack damage from the wielded weapon (or fists) + enchant bonus. */
   applyWeapon(): void {
@@ -108,6 +114,9 @@ export class Player extends Entity {
   private pendingThrow: Item | null = null; // an item awaiting a throw direction
   private pendingApply: Item | null = null; // a tool awaiting a direction (excavator / state reader)
   private pendingWrite: Item | null = null; // a contract deployer awaiting a scroll choice
+  private pendingSpell = false;             // choosing a spell to cast
+  private pendingCastDir: string | null = null; // a directional spell awaiting a direction
+  private castMenu: string[] = [];          // spell ids in the current cast menu order
   private resolveTurn: (() => void) | null = null;
   // Interleaved co-op turns: keys are queued and consumed only on this player's turn.
   private inputQueue: string[] = [];
@@ -124,7 +133,10 @@ export class Player extends Entity {
     this.attackDmg = [1, 3]; // bare hands
   }
 
-  getSpeed(): number { return this.intrinsics.has("fast") ? 130 : 100; } // intrinsic speed from a fork-daemon corpse
+  getSpeed(): number {
+    const base = this.intrinsics.has("fast") ? 130 : 100; // intrinsic speed from a fork-daemon corpse
+    return this.hasteTurns > 0 ? base + 50 : base;          // overclock spell
+  }
 
   act(): Promise<void> {
     this.game.draw(); // start of the player's turn = monsters have moved
@@ -181,10 +193,14 @@ export class Player extends Entity {
       this.game.killPlayer(this);
     }
     this.game.turn++;
+    if (this.senseTurns > 0) this.senseTurns--;
+    if (this.hasteTurns > 0 && --this.hasteTurns === 0) this.game.log.add(`${this.name === "you" ? "You slow" : this.name + " slows"} back to normal.`, "dim");
     // Natural regeneration (faster with a ring of regeneration; not while starving/poisoned).
     if (this.hp < this.maxHp && this.nutrition > 0 && this.poison === 0 && ++this.regenTimer >= (this.regenFast ? 5 : 14)) {
       this.regenTimer = 0; this.hp++;
     }
+    // Energy (Pw) regenerates steadily.
+    if (this.energy < this.maxEnergy && ++this.energyTimer >= 6) { this.energyTimer = 0; this.energy++; }
     const r = this.resolveTurn;
     this.resolveTurn = null;
     if (r) r();
@@ -217,6 +233,8 @@ export class Player extends Entity {
     if (this.pendingThrow) return this.resolveThrowDir(e);
     if (this.pendingApply) return this.resolveApplyDir(e);
     if (this.pendingWrite) return this.resolveWrite(e);
+    if (this.pendingCastDir) return this.resolveCastDir(e);
+    if (this.pendingSpell) return this.resolveCast(e);
     if (this.pending) return this.resolveSelection(e);
     const mv = MOVES[e.key];
     if (mv) return this.tryMove(mv[0], mv[1]);
@@ -239,6 +257,7 @@ export class Player extends Entity {
       case "z": return this.startSelect("zap");
       case "t": return this.startSelect("throw");
       case "a": return this.startSelect("apply");
+      case "Z": return this.startCast();
       case "T": return this.startSelect("takeoff");
       case "E": return this.game.engrave() ? this.endTurn() : false;
       case "F": return this.startSelect("forge");
@@ -309,6 +328,36 @@ export class Player extends Entity {
     const n = parseInt(e.key, 10);
     if (isNaN(n)) { this.game.log.add("Choose a number from the menu.", "dim"); return false; }
     return this.game.writeScroll(item, n - 1) ? this.endTurn() : false;
+  }
+
+  private startCast(): boolean {
+    this.game.acting = this;
+    if (this.spells.size === 0) { this.game.log.add("You know no extrinsics. Study a runtime (+) first.", "dim"); return false; }
+    this.castMenu = SPELLS.filter((s) => this.spells.has(s.id)).map((s) => s.id);
+    const menu = this.castMenu.map((id, i) => { const s = spellById(id)!; return `(${i + 1}) ${s.name} [${s.cost}En]`; }).join("  ");
+    this.game.log.add(`Cast which extrinsic? (En ${this.energy}/${this.maxEnergy})  ${menu}  (Esc to cancel)`, "sys");
+    this.pendingSpell = true;
+    return false;
+  }
+
+  private resolveCast(e: KeyboardEvent): boolean {
+    this.pendingSpell = false;
+    if (e.key === "Escape") { this.game.log.add("Never mind.", "dim"); return false; }
+    const n = parseInt(e.key, 10);
+    if (isNaN(n) || n < 1 || n > this.castMenu.length) { this.game.log.add("No such spell.", "dim"); return false; }
+    const s = spellById(this.castMenu[n - 1])!;
+    if (this.energy < s.cost) { this.game.log.add(`Not enough energy — ${s.name} needs ${s.cost}.`, "bad"); return false; }
+    if (s.dir) { this.pendingCastDir = s.id; this.game.log.add(`Cast ${s.name} in which direction? (a move key, Esc to cancel)`, "sys"); return false; }
+    return this.game.castSpell(s.id, 0, 0) ? this.endTurn() : false;
+  }
+
+  private resolveCastDir(e: KeyboardEvent): boolean {
+    const id = this.pendingCastDir!;
+    this.pendingCastDir = null;
+    if (e.key === "Escape") { this.game.log.add("Never mind.", "dim"); return false; }
+    const mv = MOVES[e.key];
+    if (!mv) { this.game.log.add("That is not a direction.", "dim"); return false; }
+    return this.game.castSpell(id, mv[0], mv[1]) ? this.endTurn() : false;
   }
 
   private resolveThrowDir(e: KeyboardEvent): boolean {
@@ -389,6 +438,7 @@ export class Player extends Entity {
         this.inventory.remove(item); this.unequip(item);
         this.game.applyEffect(t.effect!, item.buc); return this.endTurn();
       case "read":
+        if (t.kind === "spellbook") return this.game.studySpellbook(item) ? this.endTurn() : false;
         if (t.kind !== "scroll") { this.game.log.add("There is nothing to read.", "dim"); return false; }
         ident.learn(t); this.game.log.add(`You read ${t.name}.`);
         this.inventory.remove(item); this.unequip(item);

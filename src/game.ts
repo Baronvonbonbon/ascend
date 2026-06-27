@@ -6,7 +6,7 @@ import { Log } from "./log";
 import {
   COLORS, TILE_GLYPH, MONSTERS, MonsterDef, DEATHS, GREETINGS,
   MAX_DEPTH, CENSOR, MINIBOSSES, HONEYPOT, SHOPKEEPER, realmName, GRAY_PAPER, ChainDef, CHAINS,
-  abilityMod, archetypeById, ATTRS, ATTR_LABEL, ATTR_FLAVOR,
+  abilityMod, archetypeById, ATTRS, ATTR_LABEL, ATTR_FLAVOR, spellById,
 } from "./data";
 import { Idents, ITEMS, JAM, CORPSE, WRITABLE_SCROLLS, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
 import { connectWallet, Wallet } from "./chain/wallet";
@@ -99,7 +99,7 @@ export class Game {
     for (const line of GRAY_PAPER) this.log.add(line, "dim");
     if (this.coop) this.log.add(`Co-op (${this.coopMode}) — Host and Guest share this dungeon. Find the JAM together.`, "sys");
     else this.log.add("Your nominator (d) pads at your heels — it backs you, and bites for you.", "dim");
-    this.log.add("Keys: move · , pick up · @ sheet · p buy · F forge · P pray · z zap · t throw · a apply tool · E engrave · < up · > down · i/w/W/q/r/e/d items.", "dim");
+    this.log.add("Keys: move · , pick up · @ sheet · p buy · F forge · P pray · z zap · Z cast · t throw · a apply · E engrave · < up · > down · i/w/W/q/r/e/d items.", "dim");
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
@@ -186,6 +186,8 @@ export class Game {
     p.int = a.stats.int; p.wis = a.stats.wis; p.cha = a.stats.cha;
     p.maxHp = a.hp; p.hp = a.hp;
     p.level = 1; p.xp = 0;
+    p.spells = new Set(a.spell ? [a.spell] : []);
+    this.recomputeEnergy(p); p.energy = p.maxEnergy;
     for (const itemId of a.start) {
       const t = itemById(itemId);
       if (!t || p.inventory.full) continue;
@@ -206,7 +208,8 @@ export class Game {
       p.level++;
       const gain = Math.max(2, ROT.RNG.getUniformInt(3, 8) + abilityMod(p.con));
       p.maxHp += gain; p.hp += gain;
-      this.log.add(`${this.sub(p)} ${this.verbS(p, "reach")} epoch ${p.level}! Max HP ${p.maxHp}.`, "good");
+      this.recomputeEnergy(p); p.energy = p.maxEnergy;
+      this.log.add(`${this.sub(p)} ${this.verbS(p, "reach")} epoch ${p.level}! Max HP ${p.maxHp}, En ${p.maxEnergy}.`, "good");
     }
   }
 
@@ -217,6 +220,7 @@ export class Game {
     this.log.add(`  HP ${p.hp}/${p.maxHp}  AC ${p.ac}  XP ${p.xp}/${this.xpForLevel(p.level + 1)}  ${ATTR_FLAVOR.str} drives your blows; ${ATTR_FLAVOR.dex} your aim.`, "dim");
     const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", fast: "fast", telepathy: "telepathy" } as Record<string, string>)[i] ?? i);
     if (intr.length) this.log.add(`  Intrinsics: ${intr.join(", ")}.`, "good");
+    if (p.spells.size) this.log.add(`  Energy ${p.energy}/${p.maxEnergy}. Extrinsics: ${[...p.spells].map((id) => spellById(id)?.name ?? id).join(", ")}. (Z to cast)`, "sys");
   }
 
   /** Populate the current level and (re)build the turn schedule. */
@@ -839,6 +843,59 @@ export class Game {
     }
   }
 
+  // ── spellcasting (Phase 8a) ──────────────────────────────────────────────────
+  private recomputeEnergy(p: Player): void { p.maxEnergy = 5 + p.level * 2 + Math.max(0, abilityMod(p.int)) * 3; }
+  /** Throughput (INT) + epoch drive spell success; costlier spells are harder. */
+  private castChance(p: Player, cost: number): number {
+    return Math.max(0.25, Math.min(0.97, 0.5 + abilityMod(p.int) * 0.07 + p.level * 0.02 - cost * 0.01));
+  }
+
+  /** Study a runtime (spellbook) to learn its extrinsic — INT-gated, retryable. */
+  studySpellbook(book: Item): boolean {
+    const sid = book.type.teaches;
+    const s = sid ? spellById(sid) : undefined;
+    if (!sid || !s) { this.log.add("There's nothing to study here.", "dim"); return false; }
+    const p = this.acting;
+    if (p.spells.has(sid)) { this.log.add(`You already grok ${s.name}.`, "dim"); return true; }
+    const chance = Math.max(0.2, Math.min(0.95, 0.35 + abilityMod(p.int) * 0.08 + p.level * 0.03));
+    if (ROT.RNG.getUniform() < chance) {
+      p.spells.add(sid);
+      this.log.add(`${this.sub(p)} ${this.verbS(p, "grok")} ${s.name}. (Z to cast)`, "good");
+    } else {
+      this.log.add(`The runtime's logic eludes ${p.name === "you" ? "you" : p.name} — study fails. Try again.`, "bad");
+    }
+    return true; // studying spends the turn either way
+  }
+
+  /** Cast a known extrinsic. Returns true if the turn (and energy) were spent. */
+  castSpell(id: string, dx: number, dy: number): boolean {
+    const p = this.acting;
+    const s = spellById(id);
+    if (!s || !p.spells.has(id)) { this.log.add("You don't know that extrinsic.", "dim"); return false; }
+    if (p.energy < s.cost) { this.log.add(`Not enough energy — ${s.name} needs ${s.cost}.`, "bad"); return false; }
+    p.energy -= s.cost;
+    if (ROT.RNG.getUniform() > this.castChance(p, s.cost)) {
+      this.log.add(`${this.sub(p)} ${this.verbS(p, "fumble")} ${s.name} — it fizzles.`, "dim");
+      this.draw(); return true;
+    }
+    switch (id) {
+      case "bolt": {
+        let x = p.x, y = p.y; let hit: Monster | undefined;
+        for (let step = 0; step < 10; step++) { x += dx; y += dy; if (!this.level.isPassable(x, y)) break; const m = this.monsterAt(x, y); if (m) { hit = m; break; } }
+        if (!hit) this.log.add("The finality bolt streaks into the dark.", "dim");
+        else { const d = ROT.RNG.getUniformInt(6, 12); hit.hp -= d; this.log.add(`Finality bolt strikes ${hit.name} for ${d}.`, "good"); if (hit.hp <= 0) { this.gainXp(p, hit.maxHp); this.kill(hit); } }
+        break;
+      }
+      case "heal": { const h = ROT.RNG.getUniformInt(8, 16) + Math.max(0, abilityMod(p.int)); p.hp = Math.min(p.maxHp, p.hp + h); this.log.add(`${this.sub(p)} ${this.verbS(p, "mend")} ${h} HP.`, "good"); break; }
+      case "map": { this.level.revealAll(); this.log.add("A light client reveals the whole level.", "sys"); break; }
+      case "sense": { p.senseTurns = Math.max(p.senseTurns, 12); this.log.add(`${this.sub(p)} ${this.verbS(p, "sense")} the minds around ${p.name === "you" ? "you" : "them"}.`, "sys"); break; }
+      case "tele": { let pos = this.level.randomFloor(), t = 0; while (t < 40 && (this.monsterAt(pos.x, pos.y) || this.level.tileAt(pos.x, pos.y) === "stairsDown")) { pos = this.level.randomFloor(); t++; } p.x = pos.x; p.y = pos.y; this.recomputeFOV(); this.log.add(`${this.sub(p)} XCM-${this.verbS(p, "jump")} across the level.`, "sys"); break; }
+      case "haste": { p.hasteTurns = Math.max(p.hasteTurns, 20); this.scheduler.remove(p); this.scheduler.add(p, true); this.log.add(`${this.sub(p)} ${this.verbS(p, "overclock")}! (haste)`, "good"); break; }
+    }
+    this.draw();
+    return true;
+  }
+
   // ── tools (the `apply` command, Phase 7c) ────────────────────────────────────
   /** Sound an auditor's horn (unicorn horn): clear afflictions + a little mend. Returns false if there's nothing to fix. */
   applyHorn(p: Player): boolean {
@@ -1360,8 +1417,8 @@ export class Game {
     for (const pr of this.level.portals) if (vis(pr.x, pr.y)) cells.push([pr.x, pr.y, "Ω", pr.chain.color]);
     for (const e of this.level.engravings) if (vis(e.x, e.y)) cells.push([e.x, e.y, "§", "#b0a060"]);
     for (const fi of this.level.items) if (vis(fi.x, fi.y)) cells.push([fi.x, fi.y, fi.type.ch, fi.type.fg]);
-    // Blind + telepathy: sense every monster's mind even out of sight.
-    const sensed = this.livingPlayers().some((p) => p.blind > 0 && p.intrinsics.has("telepathy"));
+    // Sense minds: blind+telepathy, or the sense-minds spell, reveals monsters out of sight.
+    const sensed = this.livingPlayers().some((p) => (p.blind > 0 && p.intrinsics.has("telepathy")) || p.senseTurns > 0);
     for (const m of this.monsters) {
       if (!m.alive || !(vis(m.x, m.y) || sensed)) continue;
       const dormant = m.def.mimic && !m.revealed;
@@ -1381,6 +1438,7 @@ export class Game {
       `%c{${COLORS.dim}}HP %c{${hpCol}}${p.hp}%c{${COLORS.dim}}/${p.maxHp}  Lv %c{${COLORS.good}}${p.level}%c{${COLORS.dim}}  Depth %c{${COLORS.gold}}${p.depth}` +
       (this.currentChain ? `%c{${COLORS.dim}} @%c{${this.currentChain.color}}${this.currentChain.name}` : `%c{${COLORS.dim}} @%c{${COLORS.dim}}Relay`) +
       `%c{${COLORS.dim}}  AC %c{${COLORS.good}}${p.ac}` +
+      (p.maxEnergy > 5 || p.spells.size ? `%c{${COLORS.dim}}  En %c{#7aa0e0}${p.energy}%c{${COLORS.dim}}/${p.maxEnergy}` : "") +
       (this.coop ? "" : `%c{${COLORS.dim}}  PAS %c{${COLORS.gold}}${p.pas.toFixed(1)}`) +
       (hunger ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}${hunger}` : "") +
       (p.poison > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Psn` : "") +

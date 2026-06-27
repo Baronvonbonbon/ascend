@@ -130,9 +130,16 @@ arm's reach (`Blind`) and you swing less accurately; **throw** it to blind a mon
 you. Eat a **censor imp** corpse for **telepathy**, which lets you *sense every monster's mind while
 blind*. Cure blindness with prayer, the **auditor's horn**, a scroll of cleansing, or just wait it out.
 
+**Spellcasting (Phase 8a):** you have **energy** (Pw, from INT + epoch — it regenerates). Find a
+**runtime** (spellbook `+`) and **read** (`r`) it to *study* the spell (INT-gated — retry if it eludes
+you), then **cast** (`Z`) it for energy: **finality bolt** (a directional blast), **self-mend** (heal),
+**light client** (map the level), **sense minds** (reveal monsters), **XCM jump** (teleport), or
+**overclock** (haste). Builders and Cypherpunks start knowing one; higher **Throughput** (INT) means
+fewer fizzles.
+
 **Controls:** move **arrows/hjkl/yubn** · pick up `,` · inventory `i` · sheet `@` · wield `w` ·
-wear `W` · take off `T` · quaff `q` · read `r` · eat `e` · drop `d` · zap `z` · throw `t` ·
-engrave `E` · pray `P` · descend `>` · ascend/up `<` · wait `.` · restart `R`.
+wear `W` · take off `T` · quaff `q` · read/study `r` · eat `e` · drop `d` · zap `z` · cast `Z` ·
+throw `t` · apply tool `a` · engrave `E` · pray `P` · descend `>` · ascend/up `<` · wait `.` · restart `R`.
 
 `npm run build` → typecheck + production bundle in `dist/`.
 

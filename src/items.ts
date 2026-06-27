@@ -2,7 +2,7 @@
 
 import * as ROT from "rot-js";
 
-export type ItemKind = "weapon" | "armor" | "food" | "potion" | "scroll" | "amulet" | "ring" | "wand" | "tool";
+export type ItemKind = "weapon" | "armor" | "food" | "potion" | "scroll" | "amulet" | "ring" | "wand" | "tool" | "spellbook";
 
 /** Armor occupies one of seven body slots — wear one piece in each. */
 export type ArmorSlot = "shirt" | "body" | "cloak" | "helm" | "gloves" | "boots" | "shield";
@@ -40,6 +40,7 @@ export interface ItemType {
   slot?: ArmorSlot;        // which body slot this armor fills
   nutrition?: number;      // food
   effect?: EffectId;       // potion / scroll
+  teaches?: string;        // spellbook — the spell id it studies into
   weight: number;          // spawn weight
 }
 
@@ -93,6 +94,13 @@ export const ITEMS: ItemType[] = [
   { id: "horn",    kind: "tool", name: "an auditor's horn",   ch: "(", fg: "#e0e0c0", weight: 2 }, // cures afflictions
   { id: "marker",  kind: "tool", name: "a contract deployer", ch: "(", fg: "#a0d0e0", weight: 2 }, // writes scrolls (charged)
   { id: "scope",   kind: "tool", name: "a state reader",      ch: "(", fg: "#a0c0a0", weight: 2 }, // probe an adjacent foe
+  // ── spellbooks ── + (study with r; cast with Z)
+  { id: "book_bolt",  kind: "spellbook", name: "a runtime of finality bolt", ch: "+", fg: "#c0d0f0", teaches: "bolt",  weight: 2 },
+  { id: "book_heal",  kind: "spellbook", name: "a runtime of self-mend",     ch: "+", fg: "#a0e0a0", teaches: "heal",  weight: 2 },
+  { id: "book_map",   kind: "spellbook", name: "a runtime of light client",  ch: "+", fg: "#a0c0e0", teaches: "map",   weight: 2 },
+  { id: "book_sense", kind: "spellbook", name: "a runtime of sense minds",   ch: "+", fg: "#d0c0e0", teaches: "sense", weight: 2 },
+  { id: "book_tele",  kind: "spellbook", name: "a runtime of XCM jump",      ch: "+", fg: "#c0c0e0", teaches: "tele",  weight: 1 },
+  { id: "book_haste", kind: "spellbook", name: "a runtime of overclock",     ch: "+", fg: "#e0d0a0", teaches: "haste", weight: 1 },
 ];
 
 /** Scrolls a contract deployer (magic marker) can inscribe, in menu order. */
