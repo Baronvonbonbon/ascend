@@ -6,7 +6,7 @@ import { Log } from "./log";
 import {
   COLORS, TILE_GLYPH, MONSTERS, MonsterDef, DEATHS, GREETINGS,
   MAX_DEPTH, CENSOR, MINIBOSSES, HONEYPOT, SHOPKEEPER, realmName, GRAY_PAPER, ChainDef, CHAINS,
-  abilityMod, archetypeById, ATTRS, ATTR_LABEL, ATTR_FLAVOR, spellById,
+  abilityMod, archetypeById, ATTRS, ATTR_LABEL, spellById,
 } from "./data";
 import { Idents, ITEMS, JAM, CORPSE, WRITABLE_SCROLLS, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
 import { connectWallet, Wallet } from "./chain/wallet";
@@ -99,7 +99,7 @@ export class Game {
     for (const line of GRAY_PAPER) this.log.add(line, "dim");
     if (this.coop) this.log.add(`Co-op (${this.coopMode}) — Host and Guest share this dungeon. Find the JAM together.`, "sys");
     else this.log.add("Your nominator (d) pads at your heels — it backs you, and bites for you.", "dim");
-    this.log.add("Keys: move · , pick up · @ sheet · p buy · F forge · P pray · z zap · Z cast · t throw · a apply · E engrave · < up · > down · i/w/W/q/r/e/d items.", "dim");
+    this.log.add("Keys: move · , pick up · @ sheet · p buy · F forge · P pray · O offer · z zap · Z cast · t throw · a apply · E engrave · < up · > down · i/w/W/q/r/e/d items.", "dim");
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
@@ -217,7 +217,7 @@ export class Game {
     const p = this.acting;
     this.log.add(`— ${p.name === "you" ? "You" : p.name}, ${cap(p.archetype)} · epoch ${p.level} —`, "sys");
     this.log.add(`  ${ATTRS.map((a) => `${ATTR_LABEL[a]} ${p[a]}`).join("  ")}`, "dim");
-    this.log.add(`  HP ${p.hp}/${p.maxHp}  AC ${p.ac}  XP ${p.xp}/${this.xpForLevel(p.level + 1)}  ${ATTR_FLAVOR.str} drives your blows; ${ATTR_FLAVOR.dex} your aim.`, "dim");
+    this.log.add(`  HP ${p.hp}/${p.maxHp}  AC ${p.ac}  Fortune ${this.luckOf(p) >= 0 ? "+" : ""}${this.luckOf(p)}  XP ${p.xp}/${this.xpForLevel(p.level + 1)}`, "dim");
     const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", fast: "fast", telepathy: "telepathy" } as Record<string, string>)[i] ?? i);
     if (intr.length) this.log.add(`  Intrinsics: ${intr.join(", ")}.`, "good");
     if (p.spells.size) this.log.add(`  Energy ${p.energy}/${p.maxEnergy}. Extrinsics: ${[...p.spells].map((id) => spellById(id)?.name ?? id).join(", ")}. (Z to cast)`, "sys");
@@ -436,6 +436,7 @@ export class Game {
     p.poison = 0; p.confused = 0;
     if (p.stoning > 0 || p.illness > 0) { p.stoning = 0; p.illness = 0; this.log.add("The petrifying chill / the bad block lifts.", "good"); }
     if (p.blind > 0) { p.blind = 0; this.recomputeFOV(); }
+    if (p.luck < 0) { p.luck = 0; this.log.add("Gavin steadies your fortune.", "good"); }
     this.log.add("Gavin, the Architect, hears you. You are made whole.", "good");
     // Gavin lifts the curses binding your worn gear.
     const bound = [p.weapon, ...p.wornArmor, p.ring].filter((it): it is Item => !!it && it.buc === "cursed");
@@ -453,6 +454,39 @@ export class Game {
       this.log.add("Truth is revealed — your pack is identified.", "sys");
     }
     this.draw();
+  }
+
+  /** Offer a corpse (on or beside a Gavin altar) — burn it for the Architect's favor: Fortune, and rarely a gift. */
+  offerCorpse(p: Player): boolean {
+    if (this.level.tileAt(p.x, p.y) !== "altar") { this.log.add("You can only make an offering at a Gavin altar (_).", "dim"); return false; }
+    let fi = this.level.items.find((i) => i.corpse && i.x === p.x && i.y === p.y);
+    if (!fi) {
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]] as [number, number][]) {
+        const c = this.level.items.find((i) => i.corpse && i.x === p.x + dx && i.y === p.y + dy);
+        if (c) { fi = c; break; }
+      }
+    }
+    if (!fi || !fi.corpse) { this.log.add("There's no corpse on or beside the altar to offer. (kill something near it)", "dim"); return false; }
+    const rotten = this.turn - fi.corpse.born > 60;
+    const name = fi.corpse.def.name;
+    this.level.items = this.level.items.filter((i) => i !== fi);
+    if (rotten) {
+      p.luck = Math.max(-13, p.luck - 1);
+      this.log.add(`You burn the rotten ${name} on the altar — Gavin is unimpressed. (Fortune dips)`, "bad");
+      return true;
+    }
+    p.luck = Math.min(13, p.luck + 1);
+    this.log.add(`You burn the ${name} on the altar as an offering. Gavin's favor warms you. (Fortune rises)`, "good");
+    const r = ROT.RNG.getUniform();
+    if (r < 0.06 && !this.level.itemAt(p.x, p.y)) {
+      const prize = ROT.RNG.getItem(ITEMS.filter((i) => isGear(i)))!;
+      this.level.items.push({ x: p.x, y: p.y, type: prize, enchant: ROT.RNG.getUniformInt(1, 2), buc: "blessed", bucKnown: true });
+      this.log.add(`✦ Gavin bestows a gift upon the altar — a blessed ${prize.name}!`, "sys");
+    } else if (r < 0.22) {
+      p.hp = Math.min(p.maxHp, p.hp + ROT.RNG.getUniformInt(4, 10));
+      this.log.add("A wave of finality mends you.", "good");
+    }
+    return true;
   }
 
   /** Scratch a warding sigil (a Gray-Paper clause) at your feet; ordinary foes shrink from the tile. */
@@ -586,11 +620,18 @@ export class Game {
     if (roll === 20) return true;
     if (roll === 1) return false;
     let acc = 0, eva = 0;
-    if (a instanceof Player) acc = a.level + abilityMod(a.dex) + (a.weapon?.enchant ?? 0) - (a.blind > 0 ? 3 : 0); // swinging blind
+    if (a instanceof Player) acc = a.level + abilityMod(a.dex) + (a.weapon?.enchant ?? 0) - (a.blind > 0 ? 3 : 0) + Math.round(this.luckOf(a) / 3); // swinging blind; Fortune sways the roll
     else if (a instanceof Monster) acc = 2 + Math.floor(a.maxHp / 8);
-    if (d instanceof Player) eva = abilityMod(d.dex) + Math.floor(d.level / 3) + Math.floor(d.ac / 2); // armor is dodge now
+    if (d instanceof Player) eva = abilityMod(d.dex) + Math.floor(d.level / 3) + Math.floor(d.ac / 2) + Math.round(this.luckOf(d) / 3); // armor is dodge now; Fortune helps you slip
     else if (d instanceof Monster) eva = d.def.speed ? Math.max(0, Math.floor((d.def.speed - 100) / 12)) : 0;
     return roll + acc >= 10 + eva;
+  }
+
+  /** Effective Fortune: base luck + a carried HODL stone (blessed +2 luckstone / cursed −2 loadstone). */
+  luckOf(p: Player): number {
+    let l = p.luck;
+    for (const it of p.inventory.items) if (it.type.id === "hodlstone") l += it.buc === "blessed" ? 2 : it.buc === "cursed" ? -2 : 0;
+    return Math.max(-13, Math.min(13, l));
   }
 
   /** Erode a random unproofed worn piece (rust/corrosion), reducing its evasion. */
@@ -1439,6 +1480,7 @@ export class Game {
       (this.currentChain ? `%c{${COLORS.dim}} @%c{${this.currentChain.color}}${this.currentChain.name}` : `%c{${COLORS.dim}} @%c{${COLORS.dim}}Relay`) +
       `%c{${COLORS.dim}}  AC %c{${COLORS.good}}${p.ac}` +
       (p.maxEnergy > 5 || p.spells.size ? `%c{${COLORS.dim}}  En %c{#7aa0e0}${p.energy}%c{${COLORS.dim}}/${p.maxEnergy}` : "") +
+      (this.luckOf(p) !== 0 ? `%c{${COLORS.dim}}  Luck %c{${this.luckOf(p) > 0 ? COLORS.good : COLORS.bad}}${this.luckOf(p) > 0 ? "+" : ""}${this.luckOf(p)}` : "") +
       (this.coop ? "" : `%c{${COLORS.dim}}  PAS %c{${COLORS.gold}}${p.pas.toFixed(1)}`) +
       (hunger ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}${hunger}` : "") +
       (p.poison > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Psn` : "") +

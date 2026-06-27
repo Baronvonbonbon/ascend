@@ -71,6 +71,7 @@ export class Player extends Entity {
   str = 12; dex = 12; con = 12; int = 12; wis = 12; cha = 12;
   level = 1; xp = 0;
   archetype = "validator";
+  luck = 0; // Fortune (−13..+13) from altar offerings — sways every roll
   // Phase 8 — spellcasting
   energy = 5; maxEnergy = 5;
   spells = new Set<string>(); // known spell ids
@@ -258,6 +259,7 @@ export class Player extends Entity {
       case "t": return this.startSelect("throw");
       case "a": return this.startSelect("apply");
       case "Z": return this.startCast();
+      case "O": return this.game.offerCorpse(this) ? this.endTurn() : false;
       case "T": return this.startSelect("takeoff");
       case "E": return this.game.engrave() ? this.endTurn() : false;
       case "F": return this.startSelect("forge");
@@ -444,6 +446,7 @@ export class Player extends Entity {
         this.inventory.remove(item); this.unequip(item);
         this.game.applyEffect(t.effect!, item.buc); return this.endTurn();
       case "drop":
+        if (t.id === "hodlstone" && item.buc === "cursed") { item.bucKnown = true; this.game.log.add(`The ${t.name} won't leave your pack — a cursed loadstone!`, "bad"); return this.endTurn(); }
         if (this.isWelded(item)) { item.bucKnown = true; this.game.log.add(`You can't let go of ${ident.name(t)} — it's cursed!`, "bad"); return this.endTurn(); }
         this.inventory.remove(item); this.unequip(item);
         this.game.dropItem(item); this.game.log.add(`You drop ${ident.name(t)}.`); return this.endTurn();

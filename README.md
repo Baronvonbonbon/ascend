@@ -137,9 +137,15 @@ you), then **cast** (`Z`) it for energy: **finality bolt** (a directional blast)
 **overclock** (haste). Builders and Cypherpunks start knowing one; higher **Throughput** (INT) means
 fewer fizzles.
 
+**Faith & Fortune (Phase 8c):** you have a **Fortune** stat (Luck, −13..+13) that sways every to-hit
+and dodge. Raise it by **offering** (`O`) a corpse on (or beside) a **Gavin altar** — burn it for the
+Architect's favor (a rare blessed **gift**, or a mend; rotten offerings displease him). A **HODL stone**
+is a gamble: blessed it's a **luckstone** (+Fortune), cursed it's a **loadstone** you can't drop — and you
+won't know which until you check it on an altar. Prayer also steadies bad Fortune.
+
 **Controls:** move **arrows/hjkl/yubn** · pick up `,` · inventory `i` · sheet `@` · wield `w` ·
 wear `W` · take off `T` · quaff `q` · read/study `r` · eat `e` · drop `d` · zap `z` · cast `Z` ·
-throw `t` · apply tool `a` · engrave `E` · pray `P` · descend `>` · ascend/up `<` · wait `.` · restart `R`.
+throw `t` · apply tool `a` · engrave `E` · pray `P` · offer `O` · descend `>` · ascend/up `<` · wait `.` · restart `R`.
 
 `npm run build` → typecheck + production bundle in `dist/`.
 
