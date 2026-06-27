@@ -186,6 +186,7 @@ export class Game {
     p.int = a.stats.int; p.wis = a.stats.wis; p.cha = a.stats.cha;
     p.maxHp = a.hp; p.hp = a.hp;
     p.level = 1; p.xp = 0;
+    p.ethos = a.ethos; p.favor = 0; p.crowned = false; p.title = "";
     p.spells = new Set(a.spell ? [a.spell] : []);
     this.recomputeEnergy(p); p.energy = p.maxEnergy;
     for (const itemId of a.start) {
@@ -215,12 +216,13 @@ export class Game {
 
   showCharSheet(): void {
     const p = this.acting;
-    this.log.add(`— ${p.name === "you" ? "You" : p.name}, ${cap(p.archetype)} · epoch ${p.level} —`, "sys");
+    this.log.add(`— ${p.name === "you" ? "You" : p.name}, ${p.title ? p.title + " " : ""}${cap(p.archetype)} · ${p.ethos} · epoch ${p.level} —`, "sys");
     this.log.add(`  ${ATTRS.map((a) => `${ATTR_LABEL[a]} ${p[a]}`).join("  ")}`, "dim");
     this.log.add(`  HP ${p.hp}/${p.maxHp}  AC ${p.ac}  Fortune ${this.luckOf(p) >= 0 ? "+" : ""}${this.luckOf(p)}  XP ${p.xp}/${this.xpForLevel(p.level + 1)}`, "dim");
     const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", fast: "fast", telepathy: "telepathy" } as Record<string, string>)[i] ?? i);
     if (intr.length) this.log.add(`  Intrinsics: ${intr.join(", ")}.`, "good");
     if (p.spells.size) this.log.add(`  Energy ${p.energy}/${p.maxEnergy}. Extrinsics: ${[...p.spells].map((id) => spellById(id)?.name ?? id).join(", ")}. (Z to cast)`, "sys");
+    this.log.add(`  Ethos: ${p.ethos}, favor ${p.favor}${p.crowned ? " — crowned " + p.title : ""}.`, "dim");
   }
 
   /** Populate the current level and (re)build the turn schedule. */
@@ -429,7 +431,7 @@ export class Game {
 
   pray(): void {
     const p = this.acting;
-    if (p.prayerCooldown > 0) { this.log.add("Gavin is unmoved — pray again later.", "dim"); return; }
+    if (p.prayerCooldown > 0) { this.wrath(p); return; } // praying too soon angers him
     p.prayerCooldown = 130;
     p.hp = p.maxHp;
     p.nutrition = Math.max(p.nutrition, 600);
@@ -453,7 +455,45 @@ export class Game {
       for (const it of p.inventory.items) this.ident.learn(it.type);
       this.log.add("Truth is revealed — your pack is identified.", "sys");
     }
+    p.favor += 1;
+    this.maybeCrown(p);
     this.draw();
+  }
+
+  /** Praying before the cooldown lapses — Gavin's displeasure: smite, curse, or sour your luck. */
+  private wrath(p: Player): void {
+    this.log.add(`${this.sub(p)} ${this.verbS(p, "pray")} too soon — Gavin is wroth!`, "bad");
+    p.favor = Math.max(0, p.favor - 2);
+    const r = ROT.RNG.getUniform();
+    if (r < 0.5) {
+      const d = ROT.RNG.getUniformInt(4, 10); p.hp -= d;
+      this.log.add(`A bolt of displeasure strikes ${p.name === "you" ? "you" : p.name} for ${d}.`, "bad");
+      if (p.hp <= 0) this.killPlayer(p);
+    } else if (r < 0.8) {
+      const eq = [p.weapon, ...p.wornArmor, p.ring].filter((x): x is Item => !!x && x.buc !== "cursed");
+      if (eq.length) { const it = ROT.RNG.getItem(eq)!; it.buc = "cursed"; it.bucKnown = true; p.recomputeAC(); p.applyWeapon(); this.log.add(`Your ${this.ident.name(it.type)} is cursed by his glare!`, "bad"); }
+      else this.log.add("His glare chills you to the bone.", "bad");
+    } else {
+      p.luck = Math.max(-13, p.luck - 2);
+      this.log.add("Your Fortune sours under his gaze.", "bad");
+    }
+    this.draw();
+  }
+
+  /** When favored and uncrowned, Gavin may anoint you Champion — a title, a gift, Fortune, and a boon. */
+  private maybeCrown(p: Player): void {
+    if (p.crowned || p.favor < 8 || ROT.RNG.getUniform() > 0.5) return;
+    p.crowned = true;
+    const title: Record<string, string> = { Order: "Champion of Order", Balance: "Keeper of Balance", Chaos: "Herald of Chaos" };
+    p.title = title[p.ethos] ?? "Champion";
+    this.log.add(`✦ Gavin CROWNS ${p.name === "you" ? "you" : p.name} ${cap(p.archetype)}, ${p.title}! ✦`, "sys");
+    p.luck = Math.min(13, p.luck + 3);
+    p.intrinsics.add("poisonResist");
+    if (!this.level.itemAt(p.x, p.y)) {
+      const prize = ROT.RNG.getItem(ITEMS.filter((i) => isGear(i)))!;
+      this.level.items.push({ x: p.x, y: p.y, type: prize, enchant: 3, buc: "blessed", bucKnown: true });
+      this.log.add(`A blessed ${prize.name} +3 manifests at your feet — your crowning gift.`, "good");
+    }
   }
 
   /** Offer a corpse (on or beside a Gavin altar) — burn it for the Architect's favor: Fortune, and rarely a gift. */
@@ -476,7 +516,9 @@ export class Game {
       return true;
     }
     p.luck = Math.min(13, p.luck + 1);
+    p.favor += 2;
     this.log.add(`You burn the ${name} on the altar as an offering. Gavin's favor warms you. (Fortune rises)`, "good");
+    this.maybeCrown(p);
     const r = ROT.RNG.getUniform();
     if (r < 0.06 && !this.level.itemAt(p.x, p.y)) {
       const prize = ROT.RNG.getItem(ITEMS.filter((i) => isGear(i)))!;

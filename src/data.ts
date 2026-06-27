@@ -40,22 +40,26 @@ export const ATTR_FLAVOR: Record<Attr, string> = {
 /** −4..+4 ability modifier (D&D 10 = +0). Feeds to-hit, damage, HP, dodge. */
 export function abilityMod(score: number): number { return Math.floor((score - 10) / 2); }
 
+/** Ethos (alignment): Order ≈ Lawful, Balance ≈ Neutral, Chaos ≈ Chaotic. */
+export type Ethos = "Order" | "Balance" | "Chaos";
+
 export interface Archetype {
   id: string; name: string; blurb: string;
   stats: Record<Attr, number>;
   hp: number;
   start: string[]; // extra starting item ids, beyond the dagger + ration kit
   spell?: string;  // a spell known from the start (casters)
+  ethos: Ethos;
 }
 export const ARCHETYPES: Archetype[] = [
   { id: "validator", name: "Validator", blurb: "Secures the chain — strong and tough.",
-    stats: { str: 16, dex: 11, con: 16, int: 9, wis: 11, cha: 10 }, hp: 26, start: ["mace", "vest"] },
+    stats: { str: 16, dex: 11, con: 16, int: 9, wis: 11, cha: 10 }, hp: 26, start: ["mace", "vest"], ethos: "Order" },
   { id: "nominator", name: "Nominator", blurb: "Backs validators — balanced and well-liked.",
-    stats: { str: 12, dex: 13, con: 13, int: 11, wis: 12, cha: 15 }, hp: 22, start: ["heal"] },
+    stats: { str: 12, dex: 13, con: 13, int: 11, wis: 12, cha: 15 }, hp: 22, start: ["heal"], ethos: "Balance" },
   { id: "cypherpunk", name: "Cypherpunk", blurb: "Privacy and speed — quick, clever, unseen.",
-    stats: { str: 10, dex: 16, con: 11, int: 15, wis: 12, cha: 8 }, hp: 18, start: ["ring_priv", "tele"], spell: "tele" },
+    stats: { str: 10, dex: 16, con: 11, int: 15, wis: 12, cha: 8 }, hp: 18, start: ["ring_priv", "tele"], spell: "tele", ethos: "Chaos" },
   { id: "builder", name: "Builder", blurb: "Ships primitives — versatile and bright.",
-    stats: { str: 11, dex: 12, con: 12, int: 16, wis: 13, cha: 11 }, hp: 20, start: ["book_map"], spell: "bolt" },
+    stats: { str: 11, dex: 12, con: 12, int: 16, wis: 13, cha: 11 }, hp: 20, start: ["book_map"], spell: "bolt", ethos: "Balance" },
 ];
 export function archetypeById(id: string): Archetype { return ARCHETYPES.find((a) => a.id === id) ?? ARCHETYPES[0]; }
 

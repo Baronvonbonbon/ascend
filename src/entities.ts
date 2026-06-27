@@ -72,6 +72,8 @@ export class Player extends Entity {
   level = 1; xp = 0;
   archetype = "validator";
   luck = 0; // Fortune (−13..+13) from altar offerings — sways every roll
+  ethos = "Balance"; // Order / Balance / Chaos
+  favor = 0; crowned = false; title = ""; // standing with your Architect; crowning
   // Phase 8 — polymorph self ("fork")
   polyForm: MonsterDef | null = null;
   polyTurns = 0; savedHp = 0; savedMaxHp = 0;
