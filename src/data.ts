@@ -98,6 +98,7 @@ export interface MonsterDef {
   inflict?: "poison" | "confuse"; // status applied on a hit (30% chance)
   ranged?: boolean;      // fires at the player from a distance with line-of-sight
   corpseEffect?: "poisonous" | "petrify" | "speed"; // what eating its corpse does
+  corrodes?: boolean;    // its touch rusts/corrodes a worn armor piece
   steals?: boolean;      // a thief — snatches a pack item and flees (the rug pull)
   mimic?: boolean;       // a honeypot — sits disguised as loot, strikes when touched
   fearless?: boolean;    // ignores warding engravings (bosses fear no Gray Paper)
@@ -108,7 +109,7 @@ export interface MonsterDef {
 // Themed bestiary — the centralised legacy stack fights back.
 export const MONSTERS: MonsterDef[] = [
   { name: "a sybil",           ch: "s", fg: "#9a9a9a", hp: 3,  dmg: [1, 2], ai: "chase",  minDepth: 1, weight: 4, splits: true, speed: 105 },
-  { name: "a rust bug",        ch: "x", fg: "#7ac06a", hp: 2,  dmg: [1, 1], ai: "wander", minDepth: 1, weight: 5, speed: 90 },
+  { name: "a rust bug",        ch: "x", fg: "#7ac06a", hp: 2,  dmg: [1, 1], ai: "wander", minDepth: 1, weight: 5, speed: 90, corrodes: true },
   { name: "a validator golem", ch: "V", fg: "#5c8ad0", hp: 12, dmg: [2, 4], ai: "chase",  minDepth: 2, weight: 3, speed: 85 },
   { name: "a fork daemon",     ch: "f", fg: "#d0a0d0", hp: 7,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 3, speed: 120, corpseEffect: "speed" },
   { name: "a gas wraith",      ch: "w", fg: "#c08adf", hp: 6,  dmg: [2, 3], ai: "chase",  minDepth: 3, weight: 3, inflict: "poison", corpseEffect: "poisonous" },

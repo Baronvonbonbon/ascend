@@ -4,6 +4,9 @@ import * as ROT from "rot-js";
 
 export type ItemKind = "weapon" | "armor" | "food" | "potion" | "scroll" | "amulet" | "ring" | "wand";
 
+/** Armor occupies one of seven body slots — wear one piece in each. */
+export type ArmorSlot = "shirt" | "body" | "cloak" | "helm" | "gloves" | "boots" | "shield";
+
 /** Blessed / uncursed / cursed — an item's hidden sanctity. Cursed gear welds on. */
 export type Buc = "blessed" | "uncursed" | "cursed";
 
@@ -33,7 +36,8 @@ export interface ItemType {
   ch: string;
   fg: string;
   dmg?: [number, number];  // weapon
-  ac?: number;             // armor (flat damage reduction)
+  ac?: number;             // armor — contributes to evasion (harder to hit)
+  slot?: ArmorSlot;        // which body slot this armor fills
   nutrition?: number;      // food
   effect?: EffectId;       // potion / scroll
   weight: number;          // spawn weight
@@ -46,10 +50,15 @@ export const ITEMS: ItemType[] = [
   { id: "dagger", kind: "weapon", name: "a debug dagger",      ch: ")", fg: "#cfcf9a", dmg: [2, 4], weight: 5 },
   { id: "sword",  kind: "weapon", name: "a consensus sword",   ch: ")", fg: "#dfe6f0", dmg: [3, 6], weight: 3 },
   { id: "mace",   kind: "weapon", name: "a validator's mace",  ch: ")", fg: "#c0a060", dmg: [4, 9], weight: 2 },
-  // ── armor ── [
-  { id: "vest",   kind: "armor",  name: "a firewall vest",     ch: "[", fg: "#9ac0c0", ac: 1, weight: 5 },
-  { id: "cloak",  kind: "armor",  name: "a ZK cloak",          ch: "[", fg: "#b09adf", ac: 2, weight: 3 },
-  { id: "plate",  kind: "armor",  name: "validator plate",     ch: "[", fg: "#8aa0d0", ac: 3, weight: 2 },
+  // ── armor ── [ (seven slots — wear one of each)
+  { id: "shirt",  kind: "armor",  name: "a hashguard shirt",   ch: "[", fg: "#a0b0a0", ac: 1, slot: "shirt",  weight: 3 },
+  { id: "vest",   kind: "armor",  name: "a firewall vest",     ch: "[", fg: "#9ac0c0", ac: 2, slot: "body",   weight: 5 },
+  { id: "plate",  kind: "armor",  name: "validator plate",     ch: "[", fg: "#8aa0d0", ac: 3, slot: "body",   weight: 2 },
+  { id: "cloak",  kind: "armor",  name: "a ZK cloak",          ch: "[", fg: "#b09adf", ac: 2, slot: "cloak",  weight: 3 },
+  { id: "helm",   kind: "armor",  name: "a consensus helm",    ch: "[", fg: "#c0c090", ac: 1, slot: "helm",   weight: 3 },
+  { id: "gloves", kind: "armor",  name: "relay gauntlets",     ch: "[", fg: "#c0a070", ac: 1, slot: "gloves", weight: 2 },
+  { id: "boots",  kind: "armor",  name: "sync boots",          ch: "[", fg: "#a08060", ac: 1, slot: "boots",  weight: 2 },
+  { id: "shield", kind: "armor",  name: "a firewall shield",   ch: "[", fg: "#90a0c0", ac: 2, slot: "shield", weight: 3 },
   // ── food ── %
   { id: "ration", kind: "food",   name: "a ration of cycles",  ch: "%", fg: "#c0a050", nutrition: 600, weight: 5 },
   { id: "crumb",  kind: "food",   name: "a stale block",       ch: "%", fg: "#8a7a40", nutrition: 220, weight: 4 },

@@ -153,7 +153,7 @@ export class Game {
     // The held item *becomes* the forged relic (rarity bonus baked into its enchant).
     item.relic = true; item.enchant = r.enchant ?? base; item.buc = "blessed"; item.bucKnown = true;
     if (item === this.player.weapon) this.player.applyWeapon();
-    else if (item === this.player.armor) this.player.ac = (item.type.ac ?? 0) + (item.enchant ?? 0) + bucDelta(item.buc);
+    else if (this.player.wornArmor.includes(item)) this.player.recomputeAC();
     const tier = RARITY[r.rarity ?? 0] ?? "common";
     this.log.add(`✦ You forge a ${tier.toUpperCase()} ${this.ident.name(item.type)} +${item.enchant} — minted as a tradeable NFT you own. It returns in future runs.`, (r.rarity ?? 0) >= 2 ? "good" : "sys");
     // Re-sync owned token ids so loadRelics won't double-add this run.
@@ -431,12 +431,16 @@ export class Game {
     if (p.stoning > 0 || p.illness > 0) { p.stoning = 0; p.illness = 0; this.log.add("The petrifying chill / the bad block lifts.", "good"); }
     this.log.add("Gavin, the Architect, hears you. You are made whole.", "good");
     // Gavin lifts the curses binding your worn gear.
-    const bound = [p.weapon, p.armor, p.ring].filter((it): it is Item => !!it && it.buc === "cursed");
+    const bound = [p.weapon, ...p.wornArmor, p.ring].filter((it): it is Item => !!it && it.buc === "cursed");
     if (bound.length) {
       for (const it of bound) { it.buc = "uncursed"; it.bucKnown = true; }
-      p.applyWeapon();
+      p.applyWeapon(); p.recomputeAC();
       this.log.add("Welds loosen — the curses on your gear are lifted.", "good");
     }
+    // Gavin also burnishes away rust and corrosion from your worn gear.
+    let repaired = 0;
+    for (const it of [p.weapon, ...p.wornArmor].filter((x): x is Item => !!x)) if (it.erosion) { it.erosion = 0; repaired++; }
+    if (repaired) { p.recomputeAC(); p.applyWeapon(); this.log.add("Rust and corrosion flake away — your gear is restored.", "good"); }
     if (ROT.RNG.getUniform() < 0.4) {
       for (const it of p.inventory.items) this.ident.learn(it.type);
       this.log.add("Truth is revealed — your pack is identified.", "sys");
@@ -550,8 +554,9 @@ export class Game {
     const [lo, hi] = a.attackDmg;
     let dmg = ROT.RNG.getUniformInt(lo, hi);
     if (a instanceof Player) dmg = Math.max(1, dmg + abilityMod(a.str)); // Stake-weight drives the blow
-    if (d instanceof Player && d.ac > 0) dmg = Math.max(1, dmg - d.ac); // armor soaks
     d.hp -= dmg;
+    // A rust/corrosion striker (rust bug) eats away a random worn piece on a hit.
+    if (a instanceof Monster && a.def.corrodes && d instanceof Player) this.corrodeArmor(d);
     if (a instanceof Player && d instanceof Monster) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg}.`, "good");
     else if (a instanceof Monster && d instanceof Player) {
       this.log.add(`${cap(a.name)} hits ${d.name} for ${dmg}.`, "bad");
@@ -576,9 +581,20 @@ export class Game {
     let acc = 0, eva = 0;
     if (a instanceof Player) acc = a.level + abilityMod(a.dex) + (a.weapon?.enchant ?? 0);
     else if (a instanceof Monster) acc = 2 + Math.floor(a.maxHp / 8);
-    if (d instanceof Player) eva = abilityMod(d.dex) + Math.floor(d.level / 3);
+    if (d instanceof Player) eva = abilityMod(d.dex) + Math.floor(d.level / 3) + Math.floor(d.ac / 2); // armor is dodge now
     else if (d instanceof Monster) eva = d.def.speed ? Math.max(0, Math.floor((d.def.speed - 100) / 12)) : 0;
     return roll + acc >= 10 + eva;
+  }
+
+  /** Erode a random unproofed worn piece (rust/corrosion), reducing its evasion. */
+  private corrodeArmor(p: Player): void {
+    const targets = p.wornArmor.filter((it) => !it.proofed && (it.erosion ?? 0) < 3);
+    if (targets.length === 0) return;
+    const it = ROT.RNG.getItem(targets)!;
+    it.erosion = (it.erosion ?? 0) + 1;
+    p.recomputeAC();
+    const tag = ["", "rusty", "corroded", "badly corroded"][it.erosion];
+    this.log.add(`${p.name === "you" ? "Your" : p.name + "'s"} ${this.ident.name(it.type)} corrodes — now ${tag}.`, "bad");
   }
 
   /** Subject + verb agreement so the shared co-op log reads right ("You strike" / "Guest strikes"). */
@@ -657,7 +673,7 @@ export class Game {
     if (p.inventory.items.length === 0) return null;
     const it = ROT.RNG.getItem(p.inventory.items)!;
     if (p.weapon === it) { p.weapon = null; p.applyWeapon(); }
-    if (p.armor === it) { p.armor = null; p.ac = 0; }
+    if (p.wornArmor.includes(it)) { p.wornArmor = p.wornArmor.filter((a) => a !== it); p.recomputeAC(); }
     if (p.ring === it) { p.applyRing(it, false); p.ring = null; }
     p.inventory.remove(it);
     return it;
@@ -851,12 +867,13 @@ export class Game {
     this.log.add(`— ${who.name === "you" ? "Inventory" : who.name + "'s pack"} —`, "sys");
     inv.items.forEach((it, i) => {
       const welded = who.isWelded(it);
-      const eq = welded ? " (welded)" : it === who.weapon ? " (wielded)" : it === who.armor ? " (worn)" : it === who.ring ? " (on hand)" : "";
+      const eq = welded ? " (welded)" : it === who.weapon ? " (wielded)" : who.wornArmor.includes(it) ? " (worn)" : it === who.ring ? " (on hand)" : "";
       const ch = it.charges != null ? ` [${it.charges}]` : "";
       const relic = it.relic ? ` +${it.enchant ?? 0} ✦` : "";
       const buc = it.bucKnown && it.buc ? `${it.buc} ` : "";
+      const ero = it.erosion ? (["", "rusty ", "corroded ", "very corroded "][it.erosion] ?? "") : (it.proofed ? "audited " : "");
       const tone = it.bucKnown && it.buc === "cursed" ? "bad" : it.bucKnown && it.buc === "blessed" ? "good" : it.relic ? "sys" : "dim";
-      this.log.add(`  ${inv.letter(i)}) ${buc}${this.ident.name(it.type)}${relic}${ch}${eq}`, tone);
+      this.log.add(`  ${inv.letter(i)}) ${buc}${ero}${this.ident.name(it.type)}${relic}${ch}${eq}`, tone);
     });
   }
 
@@ -921,8 +938,9 @@ export class Game {
         for (const it of p.inventory.items) {
           if (it.buc === "cursed") { it.buc = wash ? "blessed" : "uncursed"; n++; }
           it.bucKnown = true;
+          if (it.type.kind === "armor" || it.type.kind === "weapon") { it.erosion = 0; it.proofed = true; } // audited = rust-proof
         }
-        p.applyWeapon();
+        p.applyWeapon(); p.recomputeAC();
         this.log.add(n > 0 ? `Verification passes — ${n} curse${n > 1 ? "s" : ""} lifted; your pack is audited.` : "Verification passes — your gear is clean.", "good");
         break;
       }

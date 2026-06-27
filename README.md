@@ -109,6 +109,12 @@ for your character sheet.
 care: a **freezer** (`c`) corpse **petrifies** you (`Ston` — a deadly countdown), and rotten corpses make
 you **ill** (`Ill`). Race the clock: **pray** or read a **scroll of cleansing** to cure before it kills you.
 
+**Armor & erosion (Phase 7b):** there are now **seven armor slots** — shirt, body, cloak, helm, gloves,
+boots, shield — wear one of each (`W`) and remove a chosen piece with `T`. **AC is evasion** now (more
+armor = harder to hit, not less damage taken). Watch out for **rust bugs** (`x`): their touch **corrodes**
+a worn piece (rusty → badly corroded), dropping its AC — **pray** to repair it, or read a blessed **scroll
+of formal verification** to repair *and* rust-proof ("audit") your gear.
+
 **Controls:** move **arrows/hjkl/yubn** · pick up `,` · inventory `i` · sheet `@` · wield `w` ·
 wear `W` · take off `T` · quaff `q` · read `r` · eat `e` · drop `d` · zap `z` · throw `t` ·
 engrave `E` · pray `P` · descend `>` · ascend/up `<` · wait `.` · restart `R`.
