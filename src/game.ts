@@ -6,6 +6,7 @@ import { Log } from "./log";
 import {
   COLORS, TILE_GLYPH, MONSTERS, MonsterDef, DEATHS, GREETINGS,
   MAX_DEPTH, CENSOR, MINIBOSSES, HONEYPOT, SHOPKEEPER, realmName, GRAY_PAPER, ChainDef, CHAINS,
+  abilityMod, archetypeById, ATTRS, ATTR_LABEL, ATTR_FLAVOR,
 } from "./data";
 import { Idents, ITEMS, JAM, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
 import { connectWallet, Wallet } from "./chain/wallet";
@@ -53,6 +54,7 @@ export class Game {
   private coop = false;        // this game session has two players
   private peer: Peer | null = null;
   private downed = new Set<Player>(); // players who have fallen this run
+  archetypeId = "validator";   // the local player's chosen archetype (applied on newGame)
 
   constructor(screen: HTMLElement, logEl: HTMLElement) {
     this.display = new ROT.Display({
@@ -76,6 +78,7 @@ export class Game {
     this.player = new Player(this, this.level.start.x, this.level.start.y);
     this.acting = this.player;
     this.giveStartingKit(this.player);
+    this.applyArchetype(this.player, this.archetypeId);
     if (this.coop) {
       // Two adventurers descend together; perspective-neutral names for the shared log.
       this.player.name = "Host";
@@ -83,6 +86,7 @@ export class Game {
       this.coPlayer = new Player(this, spot.x, spot.y);
       this.coPlayer.name = "Guest";
       this.giveStartingKit(this.coPlayer);
+      this.applyArchetype(this.coPlayer, "nominator"); // the partner runs as a Nominator in co-op v1
       this.pet = null; // no nominators in co-op v1
     } else {
       this.coPlayer = null;
@@ -93,7 +97,7 @@ export class Game {
     for (const line of GRAY_PAPER) this.log.add(line, "dim");
     if (this.coop) this.log.add(`Co-op (${this.coopMode}) — Host and Guest share this dungeon. Find the JAM together.`, "sys");
     else this.log.add("Your nominator (d) pads at your heels — it backs you, and bites for you.", "dim");
-    this.log.add("Keys: move · , pick up · p buy · F forge relic · P pray · z zap · t throw · E engrave · < up · > down · i/w/W/q/r/e/d items.", "dim");
+    this.log.add("Keys: move · , pick up · @ sheet · p buy · F forge · P pray · z zap · t throw · E engrave · < up · > down · i/w/W/q/r/e/d items.", "dim");
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
@@ -170,6 +174,45 @@ export class Game {
     who.weapon = wielded;
     who.attackDmg = dagger.dmg!;
     const r = who.inventory.add(ration); r.buc = "uncursed"; r.bucKnown = true;
+  }
+
+  /** Set a player's attributes, HP, and archetype starting gear. */
+  private applyArchetype(p: Player, id: string): void {
+    const a = archetypeById(id);
+    p.archetype = a.id;
+    p.str = a.stats.str; p.dex = a.stats.dex; p.con = a.stats.con;
+    p.int = a.stats.int; p.wis = a.stats.wis; p.cha = a.stats.cha;
+    p.maxHp = a.hp; p.hp = a.hp;
+    p.level = 1; p.xp = 0;
+    for (const itemId of a.start) {
+      const t = itemById(itemId);
+      if (!t || p.inventory.full) continue;
+      const it = p.inventory.add(t);
+      it.buc = "uncursed"; it.bucKnown = true;
+      if (t.kind === "wand") it.charges = ROT.RNG.getUniformInt(3, 6);
+    }
+  }
+
+  /** XP needed to reach a given epoch (level): L2=20, L3=60, L4=120, L5=200… */
+  private xpForLevel(L: number): number { return 10 * L * (L - 1); }
+
+  /** Award XP to a player and level them up ("reach an epoch"), gaining max HP. */
+  gainXp(p: Player, amount: number): void {
+    if (!p.alive || amount <= 0) return;
+    p.xp += amount;
+    while (p.level < 20 && p.xp >= this.xpForLevel(p.level + 1)) {
+      p.level++;
+      const gain = Math.max(2, ROT.RNG.getUniformInt(3, 8) + abilityMod(p.con));
+      p.maxHp += gain; p.hp += gain;
+      this.log.add(`${this.sub(p)} ${this.verbS(p, "reach")} epoch ${p.level}! Max HP ${p.maxHp}.`, "good");
+    }
+  }
+
+  showCharSheet(): void {
+    const p = this.acting;
+    this.log.add(`— ${p.name === "you" ? "You" : p.name}, ${cap(p.archetype)} · epoch ${p.level} —`, "sys");
+    this.log.add(`  ${ATTRS.map((a) => `${ATTR_LABEL[a]} ${p[a]}`).join("  ")}`, "dim");
+    this.log.add(`  HP ${p.hp}/${p.maxHp}  AC ${p.ac}  XP ${p.xp}/${this.xpForLevel(p.level + 1)}  ${ATTR_FLAVOR.str} drives your blows; ${ATTR_FLAVOR.dex} your aim.`, "dim");
   }
 
   /** Populate the current level and (re)build the turn schedule. */
@@ -491,10 +534,17 @@ export class Game {
       d.peaceful = false; d.fg = "#ff5030";
       this.log.add("The Marketmaker roars \"Bad debt!\" and turns lethal.", "bad");
     }
+    // A d20 to-hit layer: level + DEX + enchant vs the target's dodge. Misses happen now.
+    if (!this.lands(a, d)) {
+      if (a instanceof Player && d instanceof Monster) this.log.add(`${this.sub(a)} ${this.verbS(a, "miss")} ${d.name}.`, "dim");
+      else if (a instanceof Monster && d instanceof Player) this.log.add(`${cap(a.name)} misses ${d.name}.`, "dim");
+      return;
+    }
     // Fighting on a warded tile scuffs the sigil away faster.
     if (a instanceof Player) { const e = this.level.engravingAt(a.x, a.y); if (e) e.life -= 3; }
     const [lo, hi] = a.attackDmg;
     let dmg = ROT.RNG.getUniformInt(lo, hi);
+    if (a instanceof Player) dmg = Math.max(1, dmg + abilityMod(a.str)); // Stake-weight drives the blow
     if (d instanceof Player && d.ac > 0) dmg = Math.max(1, dmg - d.ac); // armor soaks
     d.hp -= dmg;
     if (a instanceof Player && d instanceof Monster) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg}.`, "good");
@@ -505,7 +555,25 @@ export class Game {
     else if (a instanceof Player && d instanceof Player) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg} — friendly fire!`, "bad");
     else if (a === this.pet) this.log.add(`Your nominator savages ${d.name} for ${dmg}.`, "good");
     else if (d === this.pet) this.log.add(`${cap(a.name)} mauls your nominator for ${dmg}.`, "bad");
-    if (d.hp <= 0) this.kill(d);
+    if (d.hp <= 0) {
+      if (a instanceof Player && d instanceof Monster) this.gainXp(a, d.maxHp); // XP = the foe's vitality
+      this.kill(d);
+    }
+  }
+
+  /** d20 to-hit: nat 20 always lands, nat 1 always misses; else roll + accuracy ≥ 10 + dodge.
+   *  Pet and monster-vs-monster swings always land (kept simple). */
+  private lands(a: Entity, d: Entity): boolean {
+    if (!(a instanceof Player) && !(d instanceof Player)) return true;
+    const roll = ROT.RNG.getUniformInt(1, 20);
+    if (roll === 20) return true;
+    if (roll === 1) return false;
+    let acc = 0, eva = 0;
+    if (a instanceof Player) acc = a.level + abilityMod(a.dex) + (a.weapon?.enchant ?? 0);
+    else if (a instanceof Monster) acc = 2 + Math.floor(a.maxHp / 8);
+    if (d instanceof Player) eva = abilityMod(d.dex) + Math.floor(d.level / 3);
+    else if (d instanceof Monster) eva = d.def.speed ? Math.max(0, Math.floor((d.def.speed - 100) / 12)) : 0;
+    return roll + acc >= 10 + eva;
   }
 
   /** Subject + verb agreement so the shared co-op log reads right ("You strike" / "Guest strikes"). */
@@ -622,7 +690,7 @@ export class Game {
         if (t.effect === "harm") {
           const d = ROT.RNG.getUniformInt(6, 12); hit.hp -= d;
           this.log.add(`The ${t.name} bursts on ${hit.name} — a reorg tears it for ${d}.`, "good");
-          if (hit.hp <= 0) this.kill(hit);
+          if (hit.hp <= 0) { this.gainXp(this.acting, hit.maxHp); this.kill(hit); }
         } else if (t.effect === "heal") {
           hit.hp = Math.min(hit.maxHp, hit.hp + ROT.RNG.getUniformInt(8, 14));
           this.log.add(`The ${t.name} splashes ${hit.name} — you mend it by mistake!`, "bad");
@@ -642,7 +710,7 @@ export class Game {
       const dmg = Math.max(1, ROT.RNG.getUniformInt(lo, hi) + b);
       hit.hp -= dmg;
       this.log.add(`You hurl ${this.ident.name(t)} — it strikes ${hit.name} for ${dmg}.`, "good");
-      if (hit.hp <= 0) this.kill(hit);
+      if (hit.hp <= 0) { this.gainXp(this.acting, hit.maxHp); this.kill(hit); }
       lx = hit.x; ly = hit.y; // the weapon drops where the target stood
     } else {
       this.log.add(`You hurl ${this.ident.name(t)}. It clatters to the ground.`, "dim");
@@ -679,7 +747,7 @@ export class Game {
       } else if (item.type.id === "wand_bolt") {
         const d = ROT.RNG.getUniformInt(8, 14); hit.hp -= d;
         this.log.add(`A bolt of finality strikes ${hit.name} for ${d}.`, "good");
-        if (hit.hp <= 0) this.kill(hit);
+        if (hit.hp <= 0) { this.gainXp(this.acting, hit.maxHp); this.kill(hit); }
       } else if (item.type.id === "wand_banish") {
         let pos = this.level.randomFloor(), t = 0;
         while (t < 40 && (this.monsterAt(pos.x, pos.y) || (pos.x === this.player.x && pos.y === this.player.y))) { pos = this.level.randomFloor(); t++; }
@@ -1128,7 +1196,7 @@ export class Game {
     const hpCol = p.hp <= p.maxHp * 0.3 ? COLORS.bad : COLORS.good;
     const hunger = p.hungerWord();
     return (
-      `%c{${COLORS.dim}}HP %c{${hpCol}}${p.hp}%c{${COLORS.dim}}/${p.maxHp}  Depth %c{${COLORS.gold}}${p.depth}` +
+      `%c{${COLORS.dim}}HP %c{${hpCol}}${p.hp}%c{${COLORS.dim}}/${p.maxHp}  Lv %c{${COLORS.good}}${p.level}%c{${COLORS.dim}}  Depth %c{${COLORS.gold}}${p.depth}` +
       (this.currentChain ? `%c{${COLORS.dim}} @%c{${this.currentChain.color}}${this.currentChain.name}` : `%c{${COLORS.dim}} @%c{${COLORS.dim}}Relay`) +
       `%c{${COLORS.dim}}  AC %c{${COLORS.good}}${p.ac}` +
       (this.coop ? "" : `%c{${COLORS.dim}}  PAS %c{${COLORS.gold}}${p.pas.toFixed(1)}`) +

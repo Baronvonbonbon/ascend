@@ -29,6 +29,35 @@ export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: strin
 
 export const MAX_DEPTH = 8; // the JAM lies on the deepest floor
 
+// ── Phase 6: the character sheet ─────────────────────────────────────────────
+/** The six attributes, Polkadot-flavored. Stored 3–18; modifier is D&D-style. */
+export const ATTRS = ["str", "dex", "con", "int", "wis", "cha"] as const;
+export type Attr = (typeof ATTRS)[number];
+export const ATTR_LABEL: Record<Attr, string> = { str: "STR", dex: "DEX", con: "CON", int: "INT", wis: "WIS", cha: "CHA" };
+export const ATTR_FLAVOR: Record<Attr, string> = {
+  str: "Stake-weight", dex: "Latency", con: "Resilience", int: "Throughput", wis: "Insight", cha: "Reputation",
+};
+/** −4..+4 ability modifier (D&D 10 = +0). Feeds to-hit, damage, HP, dodge. */
+export function abilityMod(score: number): number { return Math.floor((score - 10) / 2); }
+
+export interface Archetype {
+  id: string; name: string; blurb: string;
+  stats: Record<Attr, number>;
+  hp: number;
+  start: string[]; // extra starting item ids, beyond the dagger + ration kit
+}
+export const ARCHETYPES: Archetype[] = [
+  { id: "validator", name: "Validator", blurb: "Secures the chain — strong and tough.",
+    stats: { str: 16, dex: 11, con: 16, int: 9, wis: 11, cha: 10 }, hp: 26, start: ["mace", "vest"] },
+  { id: "nominator", name: "Nominator", blurb: "Backs validators — balanced and well-liked.",
+    stats: { str: 12, dex: 13, con: 13, int: 11, wis: 12, cha: 15 }, hp: 22, start: ["heal"] },
+  { id: "cypherpunk", name: "Cypherpunk", blurb: "Privacy and speed — quick, clever, unseen.",
+    stats: { str: 10, dex: 16, con: 11, int: 15, wis: 12, cha: 8 }, hp: 18, start: ["ring_priv", "tele"] },
+  { id: "builder", name: "Builder", blurb: "Ships primitives — versatile and bright.",
+    stats: { str: 11, dex: 12, con: 12, int: 16, wis: 13, cha: 11 }, hp: 20, start: ["wand_bolt", "map"] },
+];
+export function archetypeById(id: string): Archetype { return ARCHETYPES.find((a) => a.id === id) ?? ARCHETYPES[0]; }
+
 /** XCM destinations: each parachain branch scales difficulty + loot vs. the relay. */
 export interface ChainDef { id: string; name: string; difficulty: number; loot: number; color: string; }
 export const CHAINS: ChainDef[] = [

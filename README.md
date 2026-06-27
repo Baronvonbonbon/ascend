@@ -98,7 +98,13 @@ npm install
 npm run dev      # http://localhost:5180
 ```
 
-**Controls:** move **arrows/hjkl/yubn** · pick up `,` · inventory `i` · wield `w` ·
+**Character (Phase 6):** pick an **archetype** (Validator / Nominator / Cypherpunk / Builder) in the
+top bar, each with its own six attributes (**STR/DEX/CON/INT/WIS/CHA**) and starting kit. Kills grant
+**XP** → **epochs** (levels) that raise max HP; combat now rolls a **d20 to-hit** (your level + DEX +
+weapon enchant vs the foe's dodge — misses happen), and **STR** adds to your melee damage. Press `@`
+for your character sheet.
+
+**Controls:** move **arrows/hjkl/yubn** · pick up `,` · inventory `i` · sheet `@` · wield `w` ·
 wear `W` · take off `T` · quaff `q` · read `r` · eat `e` · drop `d` · zap `z` · throw `t` ·
 engrave `E` · pray `P` · descend `>` · ascend/up `<` · wait `.` · restart `R`.
 

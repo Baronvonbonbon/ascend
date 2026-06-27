@@ -7,6 +7,12 @@ if (screen && logEl) {
   const game = new Game(screen, logEl);
   initLobby(game); // co-op (P2P) lobby — Stage 1: connection + channel self-test
 
+  const archetype = document.getElementById("archetype") as HTMLSelectElement | null;
+  if (archetype) {
+    game.archetypeId = archetype.value;
+    archetype.onchange = () => { game.archetypeId = archetype.value; };
+  }
+
   const connect = document.getElementById("connect") as HTMLButtonElement | null;
   const wstatus = document.getElementById("wstatus");
   if (connect) connect.onclick = () => { void game.connect(); };

@@ -62,6 +62,10 @@ export class Player extends Entity {
   maxDepthReached = 1;
   weaponBonus = 0; // from scrolls of enchantment
   prayerCooldown = 0;
+  // Phase 6 — character sheet
+  str = 12; dex = 12; con = 12; int = 12; wis = 12; cha = 12;
+  level = 1; xp = 0;
+  archetype = "validator";
 
   /** Recompute attack damage from the wielded weapon (or fists) + enchant bonus. */
   applyWeapon(): void {
@@ -195,6 +199,7 @@ export class Player extends Entity {
       case "p": void this.game.tryBuy(); return false; // shop purchase (async, gasless — no turn)
       case "H": void this.game.showHallOfFame(); return false;
       case "i": this.game.showInventory(); return false;
+      case "@": this.game.showCharSheet(); return false;
       case "w": return this.startSelect("wield");
       case "W": return this.startSelect("wear");
       case "q": return this.startSelect("quaff");
