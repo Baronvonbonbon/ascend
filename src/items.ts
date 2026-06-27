@@ -44,7 +44,7 @@ export interface ItemType {
   weight: number;          // spawn weight
 }
 
-export type EffectId = "heal" | "harm" | "strength" | "teleport" | "map" | "identify" | "enchant" | "cure" | "uncurse" | "blind";
+export type EffectId = "heal" | "harm" | "strength" | "teleport" | "map" | "identify" | "enchant" | "cure" | "uncurse" | "blind" | "polyself";
 
 export const ITEMS: ItemType[] = [
   // ── weapons ── )
@@ -75,6 +75,7 @@ export const ITEMS: ItemType[] = [
   { id: "ench",   kind: "scroll", name: "a scroll of enchantment",  ch: "?", fg: "#e0d090", effect: "enchant",  weight: 3 },
   { id: "cure",   kind: "scroll", name: "a scroll of cleansing",    ch: "?", fg: "#c0e0e0", effect: "cure",     weight: 3 },
   { id: "uncurse",kind: "scroll", name: "a scroll of formal verification", ch: "?", fg: "#d0f0c0", effect: "uncurse", weight: 3 },
+  { id: "fork",   kind: "scroll", name: "a scroll of hard fork",      ch: "?", fg: "#e090e0", effect: "polyself", weight: 2 },
   // ── rings ── = (passive while worn; put on with W)
   { id: "ring_res",   kind: "ring", name: "a ring of resilience",    ch: "=", fg: "#c0a0e0", weight: 2 },
   { id: "ring_regen", kind: "ring", name: "a ring of regeneration",  ch: "=", fg: "#a0e0a0", weight: 2 },
@@ -108,7 +109,7 @@ export const ITEMS: ItemType[] = [
 export const WRITABLE_SCROLLS = ["tele", "map", "ident", "ench", "cure", "uncurse"];
 
 const POTION_LOOKS = ["a fizzy potion", "a murky potion", "a glowing vial", "a smoking flask", "a bubbling phial"];
-const SCROLL_LOOKS = ["a scroll labeled XYZZY", "a scroll labeled ELBERETH", "a scroll labeled HODL", "a scroll labeled WAGMI", "a scroll labeled GM", "a scroll labeled DYOR"];
+const SCROLL_LOOKS = ["a scroll labeled XYZZY", "a scroll labeled ELBERETH", "a scroll labeled HODL", "a scroll labeled WAGMI", "a scroll labeled GM", "a scroll labeled DYOR", "a scroll labeled REKT"];
 
 /** Per-game randomised appearances + which item *types* the player has identified. */
 export class Idents {

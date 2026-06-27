@@ -143,6 +143,11 @@ Architect's favor (a rare blessed **gift**, or a mend; rotten offerings displeas
 is a gamble: blessed it's a **luckstone** (+Fortune), cursed it's a **loadstone** you can't drop — and you
 won't know which until you check it on an altar. Prayer also steadies bad Fortune.
 
+**Polymorph / "fork" (Phase 8b):** read a **scroll of hard fork** (or step on a **fork trap**) to
+transform *into a monster* — you take its glyph, attacks, speed, and HP pool for a couple dozen turns,
+then snap back. Become a **whale** to tank a hard fight, a **fork daemon** to blur past foes — and don't
+panic if the form's HP hits zero: you collapse back to your true form and may well survive.
+
 **Controls:** move **arrows/hjkl/yubn** · pick up `,` · inventory `i` · sheet `@` · wield `w` ·
 wear `W` · take off `T` · quaff `q` · read/study `r` · eat `e` · drop `d` · zap `z` · cast `Z` ·
 throw `t` · apply tool `a` · engrave `E` · pray `P` · offer `O` · descend `>` · ascend/up `<` · wait `.` · restart `R`.

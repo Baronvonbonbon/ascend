@@ -683,6 +683,12 @@ export class Game {
   }
 
   killPlayer(p: Player = this.player): void {
+    // A fork collapsing isn't death — you snap back to your true (saved) HP and may survive.
+    if (p.polyForm) {
+      this.revertPoly(p);
+      this.log.add(`${this.sub(p)} ${this.verbS(p, "collapse")} out of the fork.`, "bad");
+      if (p.hp > 0) return;
+    }
     this.downPlayer(p);
   }
 
@@ -937,6 +943,29 @@ export class Game {
     return true;
   }
 
+  // ── polymorph self / "fork" (Phase 8b) ──────────────────────────────────────
+  /** Hard-fork into a monster form: its glyph, attacks, speed, and HP pool, for a while. */
+  polySelf(p: Player, form?: MonsterDef): void {
+    if (p.polyForm) this.revertPoly(p, true);
+    const f = form ?? ROT.RNG.getItem(MONSTERS.filter((m) => m.weight > 0))!;
+    p.polyForm = f;
+    p.polyTurns = ROT.RNG.getUniformInt(20, 40);
+    p.savedHp = p.hp; p.savedMaxHp = p.maxHp;
+    p.maxHp = f.hp; p.hp = f.hp;
+    p.attackDmg = f.dmg;
+    this.log.add(`${this.sub(p)} ${this.verbS(p, "hard-fork")} into ${f.name}!`, "sys");
+  }
+
+  /** Snap back to your true form, restoring your real HP pool. */
+  revertPoly(p: Player, silent = false): void {
+    if (!p.polyForm) return;
+    p.polyForm = null; p.polyTurns = 0;
+    p.maxHp = p.savedMaxHp;
+    p.hp = Math.min(p.savedHp, p.savedMaxHp);
+    p.applyWeapon();
+    if (!silent) this.log.add(`${this.sub(p)} ${this.verbS(p, "snap")} back to ${p.name === "you" ? "your" : "their"} true form.`, "sys");
+  }
+
   // ── tools (the `apply` command, Phase 7c) ────────────────────────────────────
   /** Sound an auditor's horn (unicorn horn): clear afflictions + a little mend. Returns false if there's nothing to fix. */
   applyHorn(p: Player): boolean {
@@ -1142,6 +1171,7 @@ export class Game {
         } else this.log.add("You feel briefly cleansed.", "dim");
         break;
       }
+      case "polyself": { this.polySelf(p); break; }
       case "blind": {
         if (p.intrinsics.has("telepathy")) this.log.add("Your sight goes dark — but your mind's eye stays open.", "sys");
         else this.log.add(`${this.sub(p)} ${this.verbS(p, "go")} blind — the world obfuscates!`, "bad");
@@ -1353,7 +1383,7 @@ export class Game {
 
   private spawnTraps(): void {
     const count = 2 + Math.floor(this.player.depth * 0.8);
-    const kinds: TrapKind[] = ["gas", "slash", "reorg"];
+    const kinds: TrapKind[] = ["gas", "slash", "reorg", "fork"];
     for (let i = 0; i < count; i++) {
       let pos = this.level.randomFloor();
       let tries = 0;
@@ -1378,6 +1408,7 @@ export class Game {
         p.x = pos.x; p.y = pos.y; this.recomputeFOV();
         this.log.add("A reorg trap flings you across the level!", "bad"); break;
       }
+      case "fork": { this.log.add("A fork trap! Reality splits around you —", "bad"); this.polySelf(p); break; }
     }
     if (p.hp <= 0) this.killPlayer(p);
   }
@@ -1467,7 +1498,10 @@ export class Game {
     }
     if (this.pet && this.pet.alive && vis(this.pet.x, this.pet.y)) cells.push([this.pet.x, this.pet.y, this.pet.ch, this.pet.fg]);
     for (const pl of this.allPlayers()) {
-      if (pl.alive) cells.push([pl.x, pl.y, "@", pl === this.player ? pl.fg : PARTNER_FG]);
+      if (!pl.alive) continue;
+      const ch = pl.polyForm ? pl.polyForm.ch : "@"; // you wear your fork's shape
+      const fg = pl.polyForm ? pl.polyForm.fg : pl === this.player ? pl.fg : PARTNER_FG;
+      cells.push([pl.x, pl.y, ch, fg]);
     }
     return cells;
   }
@@ -1481,6 +1515,7 @@ export class Game {
       `%c{${COLORS.dim}}  AC %c{${COLORS.good}}${p.ac}` +
       (p.maxEnergy > 5 || p.spells.size ? `%c{${COLORS.dim}}  En %c{#7aa0e0}${p.energy}%c{${COLORS.dim}}/${p.maxEnergy}` : "") +
       (this.luckOf(p) !== 0 ? `%c{${COLORS.dim}}  Luck %c{${this.luckOf(p) > 0 ? COLORS.good : COLORS.bad}}${this.luckOf(p) > 0 ? "+" : ""}${this.luckOf(p)}` : "") +
+      (p.polyForm ? `%c{${COLORS.dim}}  %c{#d070d0}Fork:${p.polyForm.name.replace(/^an? /, "")} ${p.polyTurns}` : "") +
       (this.coop ? "" : `%c{${COLORS.dim}}  PAS %c{${COLORS.gold}}${p.pas.toFixed(1)}`) +
       (hunger ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}${hunger}` : "") +
       (p.poison > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Psn` : "") +

@@ -5,7 +5,7 @@ import type { ItemType } from "./items";
 export interface Portal { x: number; y: number; chain: ChainDef; }
 
 export interface FloorItem { x: number; y: number; type: ItemType; price?: number; enchant?: number; relic?: boolean; mintOnBuy?: boolean; buc?: import("./items").Buc; bucKnown?: boolean; corpse?: { def: import("./data").MonsterDef; born: number }; } // price = shop ware; relic/enchant/mintOnBuy = NFT gear; buc = sanctity; corpse = edible remains
-export type TrapKind = "gas" | "reorg" | "slash";
+export type TrapKind = "gas" | "reorg" | "slash" | "fork";
 export interface Trap { x: number; y: number; kind: TrapKind; revealed: boolean; }
 /** A sigil scratched in the dust (the Gray Paper) that wards monsters from the tile; it scuffs away. */
 export interface Engraving { x: number; y: number; life: number; }

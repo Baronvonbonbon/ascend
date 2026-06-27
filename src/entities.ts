@@ -72,6 +72,9 @@ export class Player extends Entity {
   level = 1; xp = 0;
   archetype = "validator";
   luck = 0; // Fortune (−13..+13) from altar offerings — sways every roll
+  // Phase 8 — polymorph self ("fork")
+  polyForm: MonsterDef | null = null;
+  polyTurns = 0; savedHp = 0; savedMaxHp = 0;
   // Phase 8 — spellcasting
   energy = 5; maxEnergy = 5;
   spells = new Set<string>(); // known spell ids
@@ -135,8 +138,10 @@ export class Player extends Entity {
   }
 
   getSpeed(): number {
+    const haste = this.hasteTurns > 0 ? 50 : 0; // overclock spell
+    if (this.polyForm) return Math.max(20, this.polyForm.speed ?? 100) + haste; // move as your fork
     const base = this.intrinsics.has("fast") ? 130 : 100; // intrinsic speed from a fork-daemon corpse
-    return this.hasteTurns > 0 ? base + 50 : base;          // overclock spell
+    return base + haste;
   }
 
   act(): Promise<void> {
@@ -194,6 +199,7 @@ export class Player extends Entity {
       this.game.killPlayer(this);
     }
     this.game.turn++;
+    if (this.polyForm && --this.polyTurns <= 0) this.game.revertPoly(this);
     if (this.senseTurns > 0) this.senseTurns--;
     if (this.hasteTurns > 0 && --this.hasteTurns === 0) this.game.log.add(`${this.name === "you" ? "You slow" : this.name + " slows"} back to normal.`, "dim");
     // Natural regeneration (faster with a ring of regeneration; not while starving/poisoned).
