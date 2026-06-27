@@ -97,6 +97,7 @@ export interface MonsterDef {
   speed?: number;        // turn speed (100 = normal; higher acts more often)
   inflict?: "poison" | "confuse"; // status applied on a hit (30% chance)
   ranged?: boolean;      // fires at the player from a distance with line-of-sight
+  corpseEffect?: "poisonous" | "petrify" | "speed"; // what eating its corpse does
   steals?: boolean;      // a thief — snatches a pack item and flees (the rug pull)
   mimic?: boolean;       // a honeypot — sits disguised as loot, strikes when touched
   fearless?: boolean;    // ignores warding engravings (bosses fear no Gray Paper)
@@ -109,8 +110,9 @@ export const MONSTERS: MonsterDef[] = [
   { name: "a sybil",           ch: "s", fg: "#9a9a9a", hp: 3,  dmg: [1, 2], ai: "chase",  minDepth: 1, weight: 4, splits: true, speed: 105 },
   { name: "a rust bug",        ch: "x", fg: "#7ac06a", hp: 2,  dmg: [1, 1], ai: "wander", minDepth: 1, weight: 5, speed: 90 },
   { name: "a validator golem", ch: "V", fg: "#5c8ad0", hp: 12, dmg: [2, 4], ai: "chase",  minDepth: 2, weight: 3, speed: 85 },
-  { name: "a fork daemon",     ch: "f", fg: "#d0a0d0", hp: 7,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 3, speed: 120 },
-  { name: "a gas wraith",      ch: "w", fg: "#c08adf", hp: 6,  dmg: [2, 3], ai: "chase",  minDepth: 3, weight: 3, inflict: "poison" },
+  { name: "a fork daemon",     ch: "f", fg: "#d0a0d0", hp: 7,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 3, speed: 120, corpseEffect: "speed" },
+  { name: "a gas wraith",      ch: "w", fg: "#c08adf", hp: 6,  dmg: [2, 3], ai: "chase",  minDepth: 3, weight: 3, inflict: "poison", corpseEffect: "poisonous" },
+  { name: "a freezer",         ch: "c", fg: "#bcd6e6", hp: 10, dmg: [2, 4], ai: "chase",  minDepth: 4, weight: 2, corpseEffect: "petrify" },
   { name: "a rug puller",      ch: "r", fg: "#d08040", hp: 5,  dmg: [3, 6], ai: "chase",  minDepth: 4, weight: 2, speed: 115, steals: true },
   { name: "a censor imp",      ch: "i", fg: "#d05c5c", hp: 8,  dmg: [3, 5], ai: "chase",  minDepth: 4, weight: 2, inflict: "confuse" },
   { name: "a whale",           ch: "O", fg: "#4090c0", hp: 24, dmg: [3, 6], ai: "chase",  minDepth: 5, weight: 2, speed: 60 },

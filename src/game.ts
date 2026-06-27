@@ -8,7 +8,7 @@ import {
   MAX_DEPTH, CENSOR, MINIBOSSES, HONEYPOT, SHOPKEEPER, realmName, GRAY_PAPER, ChainDef, CHAINS,
   abilityMod, archetypeById, ATTRS, ATTR_LABEL, ATTR_FLAVOR,
 } from "./data";
-import { Idents, ITEMS, JAM, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
+import { Idents, ITEMS, JAM, CORPSE, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
 import { connectWallet, Wallet } from "./chain/wallet";
 import { walletBalancePas, buyDirect } from "./chain/bank";
 import { recordRun, readRecent, RunEntry } from "./chain/ledger";
@@ -55,6 +55,7 @@ export class Game {
   private peer: Peer | null = null;
   private downed = new Set<Player>(); // players who have fallen this run
   archetypeId = "validator";   // the local player's chosen archetype (applied on newGame)
+  turn = 0;                    // global turn clock (drives corpse rot)
 
   constructor(screen: HTMLElement, logEl: HTMLElement) {
     this.display = new ROT.Display({
@@ -73,6 +74,7 @@ export class Game {
     this.defeatedBosses.clear();
     this.loadedRelics.clear();
     this.downed.clear();
+    this.turn = 0;
     this.ident = new Idents();
     this.level = new Level(W, MAP_H);
     this.player = new Player(this, this.level.start.x, this.level.start.y);
@@ -213,6 +215,8 @@ export class Game {
     this.log.add(`— ${p.name === "you" ? "You" : p.name}, ${cap(p.archetype)} · epoch ${p.level} —`, "sys");
     this.log.add(`  ${ATTRS.map((a) => `${ATTR_LABEL[a]} ${p[a]}`).join("  ")}`, "dim");
     this.log.add(`  HP ${p.hp}/${p.maxHp}  AC ${p.ac}  XP ${p.xp}/${this.xpForLevel(p.level + 1)}  ${ATTR_FLAVOR.str} drives your blows; ${ATTR_FLAVOR.dex} your aim.`, "dim");
+    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", fast: "fast" } as Record<string, string>)[i] ?? i);
+    if (intr.length) this.log.add(`  Intrinsics: ${intr.join(", ")}.`, "good");
   }
 
   /** Populate the current level and (re)build the turn schedule. */
@@ -424,6 +428,7 @@ export class Game {
     p.hp = p.maxHp;
     p.nutrition = Math.max(p.nutrition, 600);
     p.poison = 0; p.confused = 0;
+    if (p.stoning > 0 || p.illness > 0) { p.stoning = 0; p.illness = 0; this.log.add("The petrifying chill / the bad block lifts.", "good"); }
     this.log.add("Gavin, the Architect, hears you. You are made whole.", "good");
     // Gavin lifts the curses binding your worn gear.
     const bound = [p.weapon, p.armor, p.ring].filter((it): it is Item => !!it && it.buc === "cursed");
@@ -581,6 +586,7 @@ export class Game {
   private verbS(p: Player, base: string): string { return p.name === "you" ? base : base + "s"; }
 
   applyStatus(target: Player, kind: "poison" | "confuse"): void {
+    if (kind === "poison" && target.intrinsics.has("poisonResist")) { this.log.add(`${target.name === "you" ? "You resist" : target.name + " resists"} the toxin.`, "dim"); return; }
     if (kind === "poison") { target.poison = Math.max(target.poison, 6); this.log.add(`${target.name === "you" ? "You are" : target.name + " is"} poisoned!`, "bad"); }
     else { target.confused = Math.max(target.confused, 5); this.log.add(`${target.name === "you" ? "Your head spins" : target.name + "'s head spins"} — confused!`, "bad"); }
   }
@@ -768,6 +774,7 @@ export class Game {
     const who = this.acting;
     const fi = this.level.itemAt(who.x, who.y);
     if (!fi) { this.log.add("There is nothing here to pick up.", "dim"); return false; }
+    if (fi.corpse) { this.log.add(`Best eaten where it lies — press e to eat the ${fi.corpse.def.name} corpse.`, "dim"); return false; }
     if (fi.type.id === "jam") {
       who.hasJam = true;
       this.level.items = this.level.items.filter((i) => i !== fi);
@@ -787,6 +794,35 @@ export class Game {
     this.level.items = this.level.items.filter((i) => i !== fi);
     const tag = fi.relic ? ` +${fi.enchant ?? 0} ✦` : "";
     this.log.add(`You pick up ${this.ident.name(fi.type)}${tag}.`);
+    return true;
+  }
+
+  /** Eat a corpse lying at a player's feet. Returns true if there was one (the turn is spent).
+   *  Corpses feed you — but some are poisonous, some petrify, and old ones make you ill. */
+  eatFloorCorpse(p: Player): boolean {
+    const fi = this.level.items.find((i) => i.x === p.x && i.y === p.y && i.corpse);
+    if (!fi || !fi.corpse) return false;
+    const { def, born } = fi.corpse;
+    this.level.items = this.level.items.filter((i) => i !== fi);
+    p.nutrition += Math.max(50, Math.min(600, def.hp * 12));
+    this.log.add(`${this.sub(p)} ${this.verbS(p, "eat")} the ${def.name} corpse.`, "good");
+    const rotten = this.turn - born > 60;
+    if (def.corpseEffect === "petrify" && !p.intrinsics.has("petrifyResist")) {
+      p.stoning = 5;
+      this.log.add(`${this.sub(p)} ${this.verbS(p, "start")} to freeze solid — find a cure, fast! (pray, or a cleanse)`, "bad");
+    } else if (def.corpseEffect === "poisonous") {
+      if (p.intrinsics.has("poisonResist")) this.log.add("Toxic — but you shrug it off.", "dim");
+      else { this.applyStatus(p, "poison"); if (ROT.RNG.getUniform() < 0.33) { p.intrinsics.add("poisonResist"); this.log.add("Your gut hardens — poison resistance!", "good"); } }
+    } else if (def.corpseEffect === "speed") {
+      if (!p.intrinsics.has("fast") && ROT.RNG.getUniform() < 0.4) { p.intrinsics.add("fast"); this.log.add("You feel quick! (intrinsic speed)", "good"); }
+    } else if (rotten && !p.intrinsics.has("poisonResist") && ROT.RNG.getUniform() < 0.5) {
+      p.illness = 8;
+      this.log.add("That was rotten — a bad block churns in you. (cure it before it's fatal)", "bad");
+    } else if (ROT.RNG.getUniform() < 0.06) {
+      p.intrinsics.add("poisonResist");
+      this.log.add("You feel hardier. (poison resistance)", "good");
+    }
+    if (p.hp <= 0) this.killPlayer(p);
     return true;
   }
 
@@ -872,8 +908,10 @@ export class Game {
         break;
       }
       case "cure": {
-        if (p.poison > 0 || p.confused > 0) { p.poison = 0; p.confused = 0; this.log.add("A cleansing light — your afflictions lift.", "good"); }
-        else this.log.add("You feel briefly cleansed.", "dim");
+        if (p.poison > 0 || p.confused > 0 || p.stoning > 0 || p.illness > 0) {
+          p.poison = 0; p.confused = 0; p.stoning = 0; p.illness = 0;
+          this.log.add("A cleansing light — your afflictions lift.", "good");
+        } else this.log.add("You feel briefly cleansed.", "dim");
         break;
       }
       case "uncurse": {
@@ -1015,6 +1053,10 @@ export class Game {
       this.log.add(`${cap(m.name)} falls! It leaves a prize — ${prize.name} +${enchant}. Forge it (F) into a tradeable NFT relic.`, "good");
     } else {
       this.log.add(`${cap(m.name)} is destroyed.`, "good");
+    }
+    // It leaves a corpse — food, but eat with care (poison / petrify / rot).
+    if (!m.def.boss && !m.def.keeper && !m.def.mimic && ROT.RNG.getUniform() < 0.55 && !this.level.itemAt(m.x, m.y)) {
+      this.level.items.push({ x: m.x, y: m.y, type: CORPSE, corpse: { def: m.def, born: this.turn } });
     }
   }
 
@@ -1203,6 +1245,9 @@ export class Game {
       (hunger ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}${hunger}` : "") +
       (p.poison > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Psn` : "") +
       (p.confused > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Cfz` : "") +
+      (p.stoning > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Ston${p.stoning}` : "") +
+      (p.illness > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Ill${p.illness}` : "") +
+      (p.intrinsics.has("fast") ? `%c{${COLORS.dim}}  %c{${COLORS.good}}Fast` : "") +
       (p.hasJam ? `%c{${COLORS.dim}}  %c{${COLORS.gold}}✦JAM — ASCEND (<)` : `%c{${COLORS.dim}}  JAM: depth ${MAX_DEPTH}`)
     );
   }

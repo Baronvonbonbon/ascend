@@ -57,6 +57,9 @@ export class Player extends Entity {
   regenFast = false;   // ring of regeneration
   poison = 0;          // turns of damage-over-time remaining
   confused = 0;        // turns of staggering movement remaining
+  stoning = 0;         // turns until you freeze solid (petrification) — cure fast
+  illness = 0;         // turns until food poisoning kills you — cure fast
+  intrinsics = new Set<string>(); // poisonResist, petrifyResist, fast (from eating corpses)
   private regenTimer = 0;
   hasJam = false;
   maxDepthReached = 1;
@@ -109,6 +112,8 @@ export class Player extends Entity {
     this.attackDmg = [1, 3]; // bare hands
   }
 
+  getSpeed(): number { return this.intrinsics.has("fast") ? 130 : 100; } // intrinsic speed from a fork-daemon corpse
+
   act(): Promise<void> {
     this.game.draw(); // start of the player's turn = monsters have moved
     return new Promise((resolve) => {
@@ -153,6 +158,16 @@ export class Player extends Entity {
       if (this.hp <= 0) { this.game.log.add(`The poison takes ${this.name}.`, "bad"); this.game.killPlayer(this); }
     }
     if (this.confused > 0 && --this.confused === 0) this.game.log.add("Your head clears.", "dim");
+    // Petrification & illness are countdowns you must out-race (prayer / a cure).
+    if (this.stoning > 0 && --this.stoning === 0) {
+      this.game.log.add(`${this.name === "you" ? "You freeze" : this.name + " freezes"} solid — finality denied.`, "bad");
+      this.game.killPlayer(this);
+    }
+    if (this.illness > 0 && --this.illness === 0) {
+      this.game.log.add(`${this.name === "you" ? "You succumb" : this.name + " succumbs"} to the bad block.`, "bad");
+      this.game.killPlayer(this);
+    }
+    this.game.turn++;
     // Natural regeneration (faster with a ring of regeneration; not while starving/poisoned).
     if (this.hp < this.maxHp && this.nutrition > 0 && this.poison === 0 && ++this.regenTimer >= (this.regenFast ? 5 : 14)) {
       this.regenTimer = 0; this.hp++;
@@ -204,7 +219,7 @@ export class Player extends Entity {
       case "W": return this.startSelect("wear");
       case "q": return this.startSelect("quaff");
       case "r": return this.startSelect("read");
-      case "e": return this.startSelect("eat");
+      case "e": return this.game.eatFloorCorpse(this) ? this.endTurn() : this.startSelect("eat");
       case "d": return this.startSelect("drop");
       case "z": return this.startSelect("zap");
       case "t": return this.startSelect("throw");
@@ -377,8 +392,11 @@ export class Player extends Entity {
     this.game.recomputeFOV();
     const here = this.game.level.itemAt(this.x, this.y);
     if (here) {
-      const nm = this.game.ident.name(here.type);
-      this.game.log.add(here.price ? `${nm} — ${here.price} PAS (press p to buy).` : `You see ${nm} here. (, to pick up)`, "dim");
+      if (here.corpse) this.game.log.add(`A ${here.corpse.def.name} corpse lies here. (e to eat)`, "dim");
+      else {
+        const nm = this.game.ident.name(here.type);
+        this.game.log.add(here.price ? `${nm} — ${here.price} PAS (press p to buy).` : `You see ${nm} here. (, to pick up)`, "dim");
+      }
     }
     const grave = this.game.level.graveAt(this.x, this.y);
     if (grave) this.game.log.add(`☗ ${grave.label}.`, "dim");

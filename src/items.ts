@@ -23,6 +23,9 @@ export function bucDelta(buc?: Buc): number {
 /** The JAM — the Amulet of Yendor of this world. Unique; never randomly spawned. */
 export const JAM: ItemType = { id: "jam", kind: "amulet", name: "the JAM", ch: "*", fg: "#f4e89a", weight: 0 };
 
+/** Generic corpse glyph; the real identity rides on FloorItem.corpse (eat for effects). */
+export const CORPSE: ItemType = { id: "corpse", kind: "food", name: "a corpse", ch: "%", fg: "#b06a5a", nutrition: 0, weight: 0 };
+
 export interface ItemType {
   id: string;
   kind: ItemKind;

@@ -104,6 +104,11 @@ top bar, each with its own six attributes (**STR/DEX/CON/INT/WIS/CHA**) and star
 weapon enchant vs the foe's dodge — misses happen), and **STR** adds to your melee damage. Press `@`
 for your character sheet.
 
+**Corpses & afflictions (Phase 7a):** slain monsters leave **corpses** (`%`) — stand on one and press
+`e` to eat for nutrition, and maybe an **intrinsic** (poison resistance, intrinsic speed). But eat with
+care: a **freezer** (`c`) corpse **petrifies** you (`Ston` — a deadly countdown), and rotten corpses make
+you **ill** (`Ill`). Race the clock: **pray** or read a **scroll of cleansing** to cure before it kills you.
+
 **Controls:** move **arrows/hjkl/yubn** · pick up `,` · inventory `i` · sheet `@` · wield `w` ·
 wear `W` · take off `T` · quaff `q` · read `r` · eat `e` · drop `d` · zap `z` · throw `t` ·
 engrave `E` · pray `P` · descend `>` · ascend/up `<` · wait `.` · restart `R`.
