@@ -222,7 +222,7 @@ export class Game {
     const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", fast: "fast", telepathy: "telepathy" } as Record<string, string>)[i] ?? i);
     if (intr.length) this.log.add(`  Intrinsics: ${intr.join(", ")}.`, "good");
     if (p.spells.size) this.log.add(`  Energy ${p.energy}/${p.maxEnergy}. Extrinsics: ${[...p.spells].map((id) => spellById(id)?.name ?? id).join(", ")}. (Z to cast)`, "sys");
-    this.log.add(`  Ethos: ${p.ethos}, favor ${p.favor}${p.crowned ? " — crowned " + p.title : ""}.`, "dim");
+    this.log.add(`  Ethos: ${p.ethos}, favor ${p.favor}${p.crowned ? " — Technical Fellowship " + p.title : ""}.`, "dim");
   }
 
   /** Populate the current level and (re)build the turn schedule. */
@@ -480,13 +480,14 @@ export class Game {
     this.draw();
   }
 
-  /** When favored and uncrowned, Gavin may anoint you Champion — a title, a gift, Fortune, and a boon. */
+  /** When favored, Gavin may induct you into the Technical Fellowship — a rank, a gift, Fortune, and a boon. */
   private maybeCrown(p: Player): void {
     if (p.crowned || p.favor < 8 || ROT.RNG.getUniform() > 0.5) return;
     p.crowned = true;
-    const title: Record<string, string> = { Order: "Champion of Order", Balance: "Keeper of Balance", Chaos: "Herald of Chaos" };
-    p.title = title[p.ethos] ?? "Champion";
-    this.log.add(`✦ Gavin CROWNS ${p.name === "you" ? "you" : p.name} ${cap(p.archetype)}, ${p.title}! ✦`, "sys");
+    // Fellowship ranks, flavored by ethos.
+    const rank: Record<string, string> = { Order: "Architect", Balance: "Fellow", Chaos: "Adept" };
+    p.title = rank[p.ethos] ?? "Fellow";
+    this.log.add(`✦ Gavin inducts ${p.name === "you" ? "you" : p.name} into the Technical Fellowship — rise, ${p.title}! ✦`, "sys");
     p.luck = Math.min(13, p.luck + 3);
     p.intrinsics.add("poisonResist");
     if (!this.level.itemAt(p.x, p.y)) {
@@ -556,6 +557,7 @@ export class Game {
   private win(winner?: Player): void {
     if (this.over) return;
     this.over = true;
+    this.engine.lock(); // halt the scheduler — otherwise it spins on the (promise-less) monsters
     const w = winner ?? this.player;
     if (this.coop && this.coopMode === "race") {
       this.log.add(`✦ ${cap(w.name)} seizes the JAM and ASCENDS — ${cap(w.name)} wins the race! ✦`, "good");
@@ -574,6 +576,7 @@ export class Game {
   private gameOver(): void {
     if (this.over) return;
     this.over = true;
+    this.engine.lock(); // stop the engine looping forever over the surviving monsters (no player promise → freeze)
     this.player.hp = 0;
     this.log.add(ROT.RNG.getItem(DEATHS)!, "bad");
     this.log.add(`You fell at depth ${this.player.depth} (deepest ${this.player.maxDepthReached}). Press R to try again.`, "sys");

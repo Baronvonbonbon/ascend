@@ -149,9 +149,9 @@ then snap back. Become a **whale** to tank a hard fight, a **fork daemon** to bl
 panic if the form's HP hits zero: you collapse back to your true form and may well survive.
 
 **Faith & crowning (Phase 8d):** your archetype has an **ethos** — Order, Balance, or Chaos. Prayer and
-altar **offerings** build **favor** with Gavin; earn enough and he may **crown** you (**Champion of Order**
-/ **Keeper of Balance** / **Herald of Chaos**), granting a title, a Fortune boost, an intrinsic, and a
-blessed gift. But **don't pray too often** — praying before the cooldown lapses now brings his **wrath**
+altar **offerings** build **favor** with Gavin; earn enough and he may **induct you into the Technical
+Fellowship** (as an **Architect** / **Fellow** / **Adept**, by ethos), granting a rank/title, a Fortune
+boost, an intrinsic, and a blessed gift. But **don't pray too often** — praying before the cooldown lapses now brings his **wrath**
 (a smite, a cursed item, or soured Fortune), so save it for when you truly need it.
 
 **Controls:** move **arrows/hjkl/yubn** · pick up `,` · inventory `i` · sheet `@` · wield `w` ·
