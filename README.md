@@ -159,6 +159,11 @@ boost, an intrinsic, and a blessed gift. But **don't pray too often** — prayin
 or it runs dry. And the **Sudo Throne** (`\`) — **sit** (`s`) on it for raw privilege: a full heal +
 Fortune, an instant level or pack-identify… or a curse, a teleport, a guardian, or the throne crumbling.
 
+**Chests (Phase 9b):** **chests** (`(`) appear in rooms — stand on one and **open** (`o`) it (locked ones
+take a few tries to force); the loot spills onto the floor to pick up. And you can now **walk past the
+Marketmaker** — stepping into a peaceful NPC (or your nominator) **swaps places** instead of attacking, so
+no more accidental shop brawls; you only fight the keeper once you've provoked it by shoplifting.
+
 **Controls:** move **arrows/hjkl/yubn** · pick up `,` · inventory `i` · sheet `@` · wield `w` ·
 wear `W` · take off `T` · quaff `q` · read/study `r` · eat `e` · drop `d` · zap `z` · cast `Z` ·
 throw `t` · apply tool `a` · engrave `E` · pray `P` · offer `O` · descend `>` · ascend/up `<` · wait `.` · restart `R`.

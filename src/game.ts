@@ -8,7 +8,7 @@ import {
   MAX_DEPTH, CENSOR, MINIBOSSES, HONEYPOT, SHOPKEEPER, realmName, GRAY_PAPER, ChainDef, CHAINS,
   abilityMod, archetypeById, ATTRS, ATTR_LABEL, spellById,
 } from "./data";
-import { Idents, ITEMS, JAM, CORPSE, WRITABLE_SCROLLS, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
+import { Idents, ITEMS, JAM, CORPSE, CHEST, WRITABLE_SCROLLS, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
 import { connectWallet, Wallet } from "./chain/wallet";
 import { walletBalancePas, buyDirect } from "./chain/bank";
 import { recordRun, readRecent, RunEntry } from "./chain/ledger";
@@ -99,7 +99,7 @@ export class Game {
     for (const line of GRAY_PAPER) this.log.add(line, "dim");
     if (this.coop) this.log.add(`Co-op (${this.coopMode}) — Host and Guest share this dungeon. Find the JAM together.`, "sys");
     else this.log.add("Your nominator (d) pads at your heels — it backs you, and bites for you.", "dim");
-    this.log.add("Keys: move · , pick up · @ sheet · p buy · F forge · P pray · O offer · q faucet · s sit throne · z zap · Z cast · t throw · a apply · E engrave · < up · > down · i/w/W/q/r/e/d items.", "dim");
+    this.log.add("Keys: move · , pick up · o open chest · @ sheet · p buy · F forge · P pray · O offer · q faucet · s sit · z zap · Z cast · t throw · a apply · E engrave · < > stairs · i/w/W/q/r/e/d items.", "dim");
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
@@ -244,6 +244,7 @@ export class Game {
     this.placeAltar();
     this.placeFeature("faucet", 0.3);
     this.placeFeature("throne", 0.16);
+    this.placeChest(0.35);
     this.maybePlaceBones();
     this.spawnTraps();
     this.placePortals();
@@ -432,6 +433,41 @@ export class Game {
     if (!centers.length) return;
     const c = ROT.RNG.getItem(centers)!;
     this.level.tiles[c.y][c.x] = tile;
+  }
+
+  /** Drop a chest of loot on an unused room centre. */
+  private placeChest(chance: number): void {
+    if (ROT.RNG.getUniform() > chance) return;
+    const centers = this.level.roomCenters.filter(
+      (c) => this.level.tileAt(c.x, c.y) === "floor" && !this.level.itemAt(c.x, c.y) && !(c.x === this.player.x && c.y === this.player.y),
+    );
+    if (!centers.length) return;
+    const c = ROT.RNG.getItem(centers)!;
+    this.level.items.push({ x: c.x, y: c.y, type: CHEST, chest: { locked: ROT.RNG.getUniform() < 0.5 } });
+  }
+
+  /** Open a chest underfoot — force the lock if need be, then spill its loot. */
+  openChest(p: Player): boolean {
+    const fi = this.level.items.find((i) => i.chest && i.x === p.x && i.y === p.y);
+    if (!fi || !fi.chest) { this.log.add("There's no chest here to open.", "dim"); return false; }
+    if (fi.chest.locked) {
+      if (ROT.RNG.getUniform() < 0.25) { this.log.add("You strain at the lock — it holds. Try again.", "dim"); return true; }
+      this.log.add("You force the lock open.", "good"); fi.chest.locked = false;
+    }
+    this.level.items = this.level.items.filter((i) => i !== fi);
+    const n = ROT.RNG.getUniformInt(1, 3);
+    const spots = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]];
+    let dropped = 0, si = 0;
+    for (let k = 0; k < n; k++) {
+      const type = ROT.RNG.getUniform() < 0.15 ? itemById("hodlstone")! : pickItemType();
+      while (si < spots.length) {
+        const [dx, dy] = spots[si++];
+        const x = p.x + dx, y = p.y + dy;
+        if (this.level.isPassable(x, y) && !this.level.itemAt(x, y)) { this.level.items.push({ x, y, type, buc: rollBuc() }); dropped++; break; }
+      }
+    }
+    this.log.add(dropped ? `The chest holds ${dropped} item${dropped > 1 ? "s" : ""} — they spill out. (, to pick up)` : "The chest is empty.", dropped ? "good" : "dim");
+    return true;
   }
 
   /** Quaff from a testnet faucet underfoot — a random boon or bane. */
@@ -1105,6 +1141,7 @@ export class Game {
     const who = this.acting;
     const fi = this.level.itemAt(who.x, who.y);
     if (!fi) { this.log.add("There is nothing here to pick up.", "dim"); return false; }
+    if (fi.chest) { this.log.add("It's a chest — press o to open it.", "dim"); return false; }
     if (fi.corpse) { this.log.add(`Best eaten where it lies — press e to eat the ${fi.corpse.def.name} corpse.`, "dim"); return false; }
     if (fi.type.id === "jam") {
       who.hasJam = true;

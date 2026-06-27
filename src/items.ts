@@ -29,6 +29,9 @@ export const JAM: ItemType = { id: "jam", kind: "amulet", name: "the JAM", ch: "
 /** Generic corpse glyph; the real identity rides on FloorItem.corpse (eat for effects). */
 export const CORPSE: ItemType = { id: "corpse", kind: "food", name: "a corpse", ch: "%", fg: "#b06a5a", nutrition: 0, weight: 0 };
 
+/** A chest — a floor container you open (o) for loot; the real state rides on FloorItem.chest. */
+export const CHEST: ItemType = { id: "chest", kind: "tool", name: "a chest", ch: "(", fg: "#b08040", weight: 0 };
+
 export interface ItemType {
   id: string;
   kind: ItemKind;

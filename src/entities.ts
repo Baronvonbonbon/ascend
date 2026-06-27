@@ -261,6 +261,7 @@ export class Player extends Entity {
       case "W": return this.startSelect("wear");
       case "q": return this.game.level.tileAt(this.x, this.y) === "faucet" ? (this.game.quaffFaucet(this) ? this.endTurn() : false) : this.startSelect("quaff");
       case "s": return this.game.level.tileAt(this.x, this.y) === "throne" ? (this.game.sitThrone(this) ? this.endTurn() : false) : false;
+      case "o": return this.game.openChest(this) ? this.endTurn() : false;
       case "r": return this.startSelect("read");
       case "e": return this.game.eatFloorCorpse(this) ? this.endTurn() : this.startSelect("eat");
       case "d": return this.startSelect("drop");
@@ -489,7 +490,7 @@ export class Player extends Entity {
     }
     const nx = this.x + dx, ny = this.y + dy;
     const foe = this.game.monsterAt(nx, ny);
-    if (foe) { this.game.attack(this, foe); return this.endTurn(); }
+    if (foe && !foe.peaceful) { this.game.attack(this, foe); return this.endTurn(); } // only hostiles get hit
     // Bumping your co-op partner: blocked in pure co-op, a strike under friendly-fire / race.
     const ally = this.game.otherPlayerAt(this, nx, ny);
     if (ally) {
@@ -497,11 +498,16 @@ export class Player extends Entity {
       this.game.attack(this, ally); return this.endTurn();
     }
     if (!this.game.level.isPassable(nx, ny)) return false; // bumping a wall costs no turn
+    // Displace — slip past a peaceful NPC (the Marketmaker) or your nominator; never attack a friend.
+    if (foe && foe.peaceful) { foe.x = this.x; foe.y = this.y; this.game.log.add(`You slip past ${foe.name}.`, "dim"); }
+    const pet = this.game.pet;
+    if (pet && pet.alive && pet.x === nx && pet.y === ny) { pet.x = this.x; pet.y = this.y; }
     this.x = nx; this.y = ny;
     this.game.recomputeFOV();
     const here = this.game.level.itemAt(this.x, this.y);
     if (here) {
-      if (here.corpse) this.game.log.add(`A ${here.corpse.def.name} corpse lies here. (e to eat)`, "dim");
+      if (here.chest) this.game.log.add(`A ${here.chest.locked ? "locked " : ""}chest sits here. (o to open)`, "dim");
+      else if (here.corpse) this.game.log.add(`A ${here.corpse.def.name} corpse lies here. (e to eat)`, "dim");
       else {
         const nm = this.game.ident.name(here.type);
         this.game.log.add(here.price ? `${nm} — ${here.price} PAS (press p to buy).` : `You see ${nm} here. (, to pick up)`, "dim");
