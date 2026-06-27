@@ -451,6 +451,8 @@ export class Player extends Entity {
 
 export class Monster extends Entity {
   speedMod = 1; // a wand of slowness halves this
+  sleepTurns = 0; // a wand of stasis freezes it for a while
+  cancelled = false; // a wand of nullification strips its special powers
   splitsLeft = 0; // a sybil's remaining replications — bounds the swarm (children inherit one fewer)
   stolen: Item | null = null; // a thief (rug puller) carries what it snatched; drops it on death
   // A shopkeeper stands peaceful until you steal; then it hunts you down.
@@ -485,6 +487,9 @@ export class Monster extends Entity {
     const p = this.game.nearestPlayer(this.x, this.y); // target the closer of the party
     if (!p.alive || !this.alive) return;
 
+    // Frozen in stasis (a wand of stasis) — it loses the turn.
+    if (this.sleepTurns > 0) { this.sleepTurns--; return; }
+
     // A dormant honeypot just waits, wearing its loot disguise, until something touches it.
     if (this.def.mimic && !this.revealed) return;
 
@@ -501,12 +506,12 @@ export class Monster extends Entity {
       return;
     }
 
-    // The Sybil attack: a sybil with budget left occasionally replicates (bounded).
-    if (this.def.splits && this.splitsLeft > 0 && ROT.RNG.getUniform() < 0.05 && this.game.spawnSybilNear(this)) return;
+    // The Sybil attack: a sybil with budget left occasionally replicates (bounded). Nullified ones can't.
+    if (!this.cancelled && this.def.splits && this.splitsLeft > 0 && ROT.RNG.getUniform() < 0.05 && this.game.spawnSybilNear(this)) return;
 
     const dist = Math.max(Math.abs(this.x - p.x), Math.abs(this.y - p.y));
     // The rug pull: a thief adjacent to you snatches a pack item and blinks away.
-    if (this.def.steals && dist === 1) {
+    if (!this.cancelled && this.def.steals && dist === 1) {
       const loot = this.game.stealItem(p);
       if (loot) {
         this.stolen = loot;
@@ -524,7 +529,7 @@ export class Monster extends Entity {
     if (pet && pet.alive && Math.max(Math.abs(this.x - pet.x), Math.abs(this.y - pet.y)) === 1) { this.game.attack(this, pet); return; }
 
     // Ranged foes (oracles) zap the player from a distance with line-of-sight.
-    if (this.def.ranged && !p.stealth && dist >= 2 && dist <= 6 && this.game.level.isVisible(this.x, this.y) && this.game.hasLineOfSight(this.x, this.y, p.x, p.y)) {
+    if (!this.cancelled && this.def.ranged && !p.stealth && dist >= 2 && dist <= 6 && this.game.level.isVisible(this.x, this.y) && this.game.hasLineOfSight(this.x, this.y, p.x, p.y)) {
       this.game.rangedAttack(this);
       return;
     }

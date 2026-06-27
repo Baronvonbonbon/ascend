@@ -115,6 +115,11 @@ armor = harder to hit, not less damage taken). Watch out for **rust bugs** (`x`)
 a worn piece (rusty → badly corroded), dropping its AC — **pray** to repair it, or read a blessed **scroll
 of formal verification** to repair *and* rust-proof ("audit") your gear.
 
+**Wands & the ray engine (Phase 7d):** beyond finality/banish/slow/dig, find a **wand of immolation**
+(a **fire ray** that bounces off walls and burns everything in line — including *you* if it caroms back),
+**stasis** (sleep a foe), **forking** (polymorph a monster into a random other one), **nullification**
+(strip a foe's special powers), and **state-read** (probe a monster's HP + traits). Zap with `z`.
+
 **Controls:** move **arrows/hjkl/yubn** · pick up `,` · inventory `i` · sheet `@` · wield `w` ·
 wear `W` · take off `T` · quaff `q` · read `r` · eat `e` · drop `d` · zap `z` · throw `t` ·
 engrave `E` · pray `P` · descend `>` · ascend/up `<` · wait `.` · restart `R`.

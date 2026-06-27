@@ -82,6 +82,11 @@ export const ITEMS: ItemType[] = [
   { id: "wand_banish", kind: "wand", name: "a wand of banishment",   ch: "/", fg: "#d090d0", weight: 2 },
   { id: "wand_slow",   kind: "wand", name: "a wand of slowness",     ch: "/", fg: "#80a0d0", weight: 2 },
   { id: "wand_dig",    kind: "wand", name: "a wand of digging",      ch: "/", fg: "#c0a060", weight: 2 },
+  { id: "wand_fire",   kind: "wand", name: "a wand of immolation",   ch: "/", fg: "#e07040", weight: 2 }, // a bouncing fire ray
+  { id: "wand_sleep",  kind: "wand", name: "a wand of stasis",       ch: "/", fg: "#90a0d0", weight: 2 },
+  { id: "wand_poly",   kind: "wand", name: "a wand of forking",      ch: "/", fg: "#d070d0", weight: 1 },
+  { id: "wand_cancel", kind: "wand", name: "a wand of nullification",ch: "/", fg: "#a0a0a0", weight: 1 },
+  { id: "wand_probe",  kind: "wand", name: "a wand of state-read",   ch: "/", fg: "#80c0a0", weight: 2 },
 ];
 
 const POTION_LOOKS = ["a fizzy potion", "a murky potion", "a glowing vial", "a smoking flask", "a bubbling phial"];

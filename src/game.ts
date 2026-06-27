@@ -556,11 +556,11 @@ export class Game {
     if (a instanceof Player) dmg = Math.max(1, dmg + abilityMod(a.str)); // Stake-weight drives the blow
     d.hp -= dmg;
     // A rust/corrosion striker (rust bug) eats away a random worn piece on a hit.
-    if (a instanceof Monster && a.def.corrodes && d instanceof Player) this.corrodeArmor(d);
+    if (a instanceof Monster && !a.cancelled && a.def.corrodes && d instanceof Player) this.corrodeArmor(d);
     if (a instanceof Player && d instanceof Monster) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg}.`, "good");
     else if (a instanceof Monster && d instanceof Player) {
       this.log.add(`${cap(a.name)} hits ${d.name} for ${dmg}.`, "bad");
-      if (a.def.inflict && d.hp > 0 && ROT.RNG.getUniform() < 0.3) this.applyStatus(d, a.def.inflict);
+      if (!a.cancelled && a.def.inflict && d.hp > 0 && ROT.RNG.getUniform() < 0.3) this.applyStatus(d, a.def.inflict);
     }
     else if (a instanceof Player && d instanceof Player) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg} — friendly fire!`, "bad");
     else if (a === this.pet) this.log.add(`Your nominator savages ${d.name} for ${dmg}.`, "good");
@@ -756,6 +756,13 @@ export class Game {
       }
       this.log.add(dug ? `You bore through ${dug} wall${dug > 1 ? "s" : ""}.` : "The wand of digging finds no wall.", dug ? "good" : "dim");
       this.recomputeFOV();
+    } else if (item.type.id === "wand_fire") {
+      // A bouncing fire ray — it sears everything in its path, including you if it caroms back.
+      this.castRay(this.acting.x, this.acting.y, dx, dy, 9, (e) => {
+        const d = ROT.RNG.getUniformInt(6, 12); e.hp -= d;
+        this.log.add(e instanceof Player ? `The firebolt scorches ${e.name} for ${d}!` : `The firebolt sears ${e.name} for ${d}.`, e instanceof Player ? "bad" : "good");
+        if (e.hp <= 0) { if (e instanceof Monster) this.gainXp(this.acting, e.maxHp); this.kill(e); }
+      });
     } else {
       let x = this.acting.x, y = this.acting.y;
       let hit: Monster | undefined;
@@ -772,18 +779,57 @@ export class Game {
         if (hit.hp <= 0) { this.gainXp(this.acting, hit.maxHp); this.kill(hit); }
       } else if (item.type.id === "wand_banish") {
         let pos = this.level.randomFloor(), t = 0;
-        while (t < 40 && (this.monsterAt(pos.x, pos.y) || (pos.x === this.player.x && pos.y === this.player.y))) { pos = this.level.randomFloor(); t++; }
+        while (t < 40 && (this.monsterAt(pos.x, pos.y) || this.playerAt(pos.x, pos.y))) { pos = this.level.randomFloor(); t++; }
         hit.x = pos.x; hit.y = pos.y;
         this.log.add(`${cap(hit.name)} is banished across the chain.`, "good");
       } else if (item.type.id === "wand_slow") {
         hit.speedMod = 0.5;
         this.scheduler.remove(hit); this.scheduler.add(hit, true); // re-time at the slower speed
         this.log.add(`${cap(hit.name)} slows to a crawl.`, "good");
+      } else if (item.type.id === "wand_sleep") {
+        hit.sleepTurns = ROT.RNG.getUniformInt(5, 10);
+        this.log.add(`${cap(hit.name)} freezes in stasis.`, "good");
+      } else if (item.type.id === "wand_poly") {
+        const old = hit.name;
+        const pool = MONSTERS.filter((m) => m.weight > 0 && m !== hit!.def);
+        const nd = ROT.RNG.getItem(pool)!;
+        hit.def = nd; hit.ch = nd.ch; hit.fg = nd.fg; hit.name = nd.name;
+        hit.hp = hit.maxHp = nd.hp; hit.attackDmg = nd.dmg;
+        hit.splitsLeft = nd.splits ? 2 : 0; hit.cancelled = false; hit.sleepTurns = 0; hit.speedMod = 1;
+        this.scheduler.remove(hit); this.scheduler.add(hit, true);
+        this.log.add(`${cap(old)} is forked into ${nd.name}!`, "sys");
+      } else if (item.type.id === "wand_cancel") {
+        hit.cancelled = true;
+        this.log.add(`${cap(hit.name)} is nullified — its powers fail.`, "good");
+      } else if (item.type.id === "wand_probe") {
+        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.cancelled && "nullified"].filter(Boolean).join(", ");
+        this.log.add(`State-read ${hit.name}: ${hit.hp}/${hit.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       }
     }
 
     if (item.charges <= 0) { this.acting.inventory.remove(item); this.log.add(`The ${item.type.name} crumbles to dust.`, "dim"); }
     this.draw();
+  }
+
+  /** Trace a ray that bounces off walls, calling onHit for each entity (monster or player)
+   *  it passes through — so a careless shot down a short corridor can carom back onto you. */
+  private castRay(sx: number, sy: number, dx: number, dy: number, range: number, onHit: (e: Entity) => void): void {
+    let x = sx, y = sy;
+    for (let step = 0; step < range; step++) {
+      let nx = x + dx, ny = y + dy;
+      if (!this.level.isPassable(nx, ny)) {
+        const bx = !this.level.isPassable(x + dx, y);
+        const by = !this.level.isPassable(x, y + dy);
+        if (bx) dx = -dx;
+        if (by) dy = -dy;
+        if (!bx && !by) { dx = -dx; dy = -dy; } // dead-on into a corner — reverse
+        nx = x + dx; ny = y + dy;
+        if (!this.level.isPassable(nx, ny)) break; // boxed in
+      }
+      x = nx; y = ny;
+      const m = this.monsterAt(x, y); if (m && m.alive) onHit(m);
+      const pl = this.playerAt(x, y); if (pl) onHit(pl);
+    }
   }
 
   tryPickup(): boolean {
