@@ -26,6 +26,9 @@
       #connect { font-family: inherit; font-size: 12px; background: #1c1c20; color: var(--gold);
         border: 1px solid var(--gold); border-radius: 4px; padding: 4px 10px; cursor: pointer; }
       #connect:hover { background: #262620; }
+      #charbar { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--dim); flex-wrap: wrap; justify-content: center; }
+      #charbar select { font-family: inherit; font-size: 12px; color: var(--ink); background: #1c1c20; border: 1px solid #3a361f; border-radius: 4px; padding: 3px 8px; }
+      #charbar .hint { color: var(--dim); }
       a { color: var(--gold); }
 
       /* ── co-op lobby ── */
@@ -64,11 +67,21 @@
         #log { height: 96px; }
       }
     </style>
-    <script type="module" crossorigin src="/ascend/assets/index-BtN_KTnq.js"></script>
+    <script type="module" crossorigin src="/ascend/assets/index-DgM2DIQl.js"></script>
   </head>
   <body>
     <div id="app">
       <div id="title">⛓ ASCEND <small>— descend to recover the JAM</small></div>
+      <div id="charbar">
+        <span>Archetype:</span>
+        <select id="archetype">
+          <option value="validator">Validator — strong &amp; tough</option>
+          <option value="nominator">Nominator — balanced</option>
+          <option value="cypherpunk">Cypherpunk — quick &amp; clever</option>
+          <option value="builder">Builder — versatile</option>
+        </select>
+        <span class="hint">press <b>R</b> to (re)start as this · <b>@</b> sheet</span>
+      </div>
       <div id="wallet">
         <button id="connect">Connect Wallet</button>
         <span id="wstatus">not connected — shop provisions are paid directly from your wallet (PAS)</span>
@@ -123,6 +136,7 @@
           <button data-key=">">down ▾</button>
           <button data-key="<">up ▴</button>
           <button data-key="i">pack</button>
+          <button data-key="@">sheet</button>
           <button id="touch-more" type="button">⌨ more</button>
         </div>
         <div id="touch-deck">
