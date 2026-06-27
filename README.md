@@ -119,7 +119,9 @@ No framework in the engine; the chain layer reuses the Datum relay.
 4. **Persistence & social** — on-chain runs/leaderboard, bones, **tradeable NFT gear** ✓.
 5. **Toward parity** — spells, traps, pets, alignment, special levels.
 
-Full design + theming bible in **[DESIGN.md](./DESIGN.md)**.
+Full design + theming bible in **[DESIGN.md](./DESIGN.md)**. The complete
+**[NetHack ↔ Ascend parity map + Phase 6–13 roadmap](./NETHACK-PARITY.md)** tracks every
+canonical NetHack subsystem against Ascend's status and plans the missing ones in Polkadot flavor.
 
 ## License
 
