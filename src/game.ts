@@ -215,7 +215,7 @@ export class Game {
     this.log.add(`— ${p.name === "you" ? "You" : p.name}, ${cap(p.archetype)} · epoch ${p.level} —`, "sys");
     this.log.add(`  ${ATTRS.map((a) => `${ATTR_LABEL[a]} ${p[a]}`).join("  ")}`, "dim");
     this.log.add(`  HP ${p.hp}/${p.maxHp}  AC ${p.ac}  XP ${p.xp}/${this.xpForLevel(p.level + 1)}  ${ATTR_FLAVOR.str} drives your blows; ${ATTR_FLAVOR.dex} your aim.`, "dim");
-    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", fast: "fast" } as Record<string, string>)[i] ?? i);
+    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", fast: "fast", telepathy: "telepathy" } as Record<string, string>)[i] ?? i);
     if (intr.length) this.log.add(`  Intrinsics: ${intr.join(", ")}.`, "good");
   }
 
@@ -280,10 +280,12 @@ export class Game {
   }
   /** Union field-of-view over the whole living party (shared vision). */
   recomputeFOV(): void {
-    const ps = this.livingPlayers();
-    const origin = ps[0] ?? this.player;
-    this.level.computeFOV(origin.x, origin.y);
-    for (let i = 1; i < ps.length; i++) this.level.addFOV(ps[i].x, ps[i].y);
+    const list = this.livingPlayers().length ? this.livingPlayers() : [this.player];
+    list.forEach((p, i) => {
+      const r = p.blind > 0 ? 1 : 8; // blindness shrinks your sight to arm's reach
+      if (i === 0) this.level.computeFOV(p.x, p.y, r);
+      else this.level.addFOV(p.x, p.y, r);
+    });
   }
 
   descend(): void {
@@ -429,6 +431,7 @@ export class Game {
     p.nutrition = Math.max(p.nutrition, 600);
     p.poison = 0; p.confused = 0;
     if (p.stoning > 0 || p.illness > 0) { p.stoning = 0; p.illness = 0; this.log.add("The petrifying chill / the bad block lifts.", "good"); }
+    if (p.blind > 0) { p.blind = 0; this.recomputeFOV(); }
     this.log.add("Gavin, the Architect, hears you. You are made whole.", "good");
     // Gavin lifts the curses binding your worn gear.
     const bound = [p.weapon, ...p.wornArmor, p.ring].filter((it): it is Item => !!it && it.buc === "cursed");
@@ -579,7 +582,7 @@ export class Game {
     if (roll === 20) return true;
     if (roll === 1) return false;
     let acc = 0, eva = 0;
-    if (a instanceof Player) acc = a.level + abilityMod(a.dex) + (a.weapon?.enchant ?? 0);
+    if (a instanceof Player) acc = a.level + abilityMod(a.dex) + (a.weapon?.enchant ?? 0) - (a.blind > 0 ? 3 : 0); // swinging blind
     else if (a instanceof Monster) acc = 2 + Math.floor(a.maxHp / 8);
     if (d instanceof Player) eva = abilityMod(d.dex) + Math.floor(d.level / 3) + Math.floor(d.ac / 2); // armor is dodge now
     else if (d instanceof Monster) eva = d.def.speed ? Math.max(0, Math.floor((d.def.speed - 100) / 12)) : 0;
@@ -717,6 +720,9 @@ export class Game {
         } else if (t.effect === "heal") {
           hit.hp = Math.min(hit.maxHp, hit.hp + ROT.RNG.getUniformInt(8, 14));
           this.log.add(`The ${t.name} splashes ${hit.name} — you mend it by mistake!`, "bad");
+        } else if (t.effect === "blind") {
+          hit.blindTurns = ROT.RNG.getUniformInt(8, 14);
+          this.log.add(`The ${t.name} bursts over ${hit.name} — blinded, it gropes about.`, "good");
         } else {
           this.log.add(`The ${t.name} shatters against ${hit.name} to no effect.`, "dim");
         }
@@ -836,11 +842,12 @@ export class Game {
   // ── tools (the `apply` command, Phase 7c) ────────────────────────────────────
   /** Sound an auditor's horn (unicorn horn): clear afflictions + a little mend. Returns false if there's nothing to fix. */
   applyHorn(p: Player): boolean {
-    if (p.poison === 0 && p.confused === 0 && p.stoning === 0 && p.illness === 0 && p.hp >= p.maxHp) {
+    if (p.poison === 0 && p.confused === 0 && p.stoning === 0 && p.illness === 0 && p.blind === 0 && p.hp >= p.maxHp) {
       this.log.add("The auditor's horn finds nothing amiss.", "dim"); return false;
     }
-    p.poison = 0; p.confused = 0; p.stoning = 0; p.illness = 0;
+    p.poison = 0; p.confused = 0; p.stoning = 0; p.illness = 0; p.blind = 0;
     p.hp = Math.min(p.maxHp, p.hp + ROT.RNG.getUniformInt(2, 6));
+    this.recomputeFOV();
     this.log.add(`${this.sub(p)} ${this.verbS(p, "sound")} the auditor's horn — afflictions clear.`, "good");
     return true;
   }
@@ -935,6 +942,8 @@ export class Game {
       else { this.applyStatus(p, "poison"); if (ROT.RNG.getUniform() < 0.33) { p.intrinsics.add("poisonResist"); this.log.add("Your gut hardens — poison resistance!", "good"); } }
     } else if (def.corpseEffect === "speed") {
       if (!p.intrinsics.has("fast") && ROT.RNG.getUniform() < 0.4) { p.intrinsics.add("fast"); this.log.add("You feel quick! (intrinsic speed)", "good"); }
+    } else if (def.corpseEffect === "telepathy") {
+      if (!p.intrinsics.has("telepathy")) { p.intrinsics.add("telepathy"); this.log.add("Your mind expands — you sense other minds while blind. (telepathy)", "good"); }
     } else if (rotten && !p.intrinsics.has("poisonResist") && ROT.RNG.getUniform() < 0.5) {
       p.illness = 8;
       this.log.add("That was rotten — a bad block churns in you. (cure it before it's fatal)", "bad");
@@ -1029,10 +1038,17 @@ export class Game {
         break;
       }
       case "cure": {
-        if (p.poison > 0 || p.confused > 0 || p.stoning > 0 || p.illness > 0) {
-          p.poison = 0; p.confused = 0; p.stoning = 0; p.illness = 0;
-          this.log.add("A cleansing light — your afflictions lift.", "good");
+        if (p.poison > 0 || p.confused > 0 || p.stoning > 0 || p.illness > 0 || p.blind > 0) {
+          p.poison = 0; p.confused = 0; p.stoning = 0; p.illness = 0; p.blind = 0;
+          this.log.add("A cleansing light — your afflictions lift.", "good"); this.recomputeFOV();
         } else this.log.add("You feel briefly cleansed.", "dim");
+        break;
+      }
+      case "blind": {
+        if (p.intrinsics.has("telepathy")) this.log.add("Your sight goes dark — but your mind's eye stays open.", "sys");
+        else this.log.add(`${this.sub(p)} ${this.verbS(p, "go")} blind — the world obfuscates!`, "bad");
+        p.blind = Math.max(p.blind, buc === "cursed" ? 50 : buc === "blessed" ? 15 : 30);
+        this.recomputeFOV();
         break;
       }
       case "uncurse": {
@@ -1344,8 +1360,10 @@ export class Game {
     for (const pr of this.level.portals) if (vis(pr.x, pr.y)) cells.push([pr.x, pr.y, "Ω", pr.chain.color]);
     for (const e of this.level.engravings) if (vis(e.x, e.y)) cells.push([e.x, e.y, "§", "#b0a060"]);
     for (const fi of this.level.items) if (vis(fi.x, fi.y)) cells.push([fi.x, fi.y, fi.type.ch, fi.type.fg]);
+    // Blind + telepathy: sense every monster's mind even out of sight.
+    const sensed = this.livingPlayers().some((p) => p.blind > 0 && p.intrinsics.has("telepathy"));
     for (const m of this.monsters) {
-      if (!m.alive || !vis(m.x, m.y)) continue;
+      if (!m.alive || !(vis(m.x, m.y) || sensed)) continue;
       const dormant = m.def.mimic && !m.revealed;
       cells.push([m.x, m.y, dormant ? m.disguiseCh : m.ch, dormant ? m.disguiseFg : m.fg]);
     }
@@ -1369,6 +1387,7 @@ export class Game {
       (p.confused > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Cfz` : "") +
       (p.stoning > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Ston${p.stoning}` : "") +
       (p.illness > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Ill${p.illness}` : "") +
+      (p.blind > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Blind` : "") +
       (p.intrinsics.has("fast") ? `%c{${COLORS.dim}}  %c{${COLORS.good}}Fast` : "") +
       (p.hasJam ? `%c{${COLORS.dim}}  %c{${COLORS.gold}}✦JAM — ASCEND (<)` : `%c{${COLORS.dim}}  JAM: depth ${MAX_DEPTH}`)
     );

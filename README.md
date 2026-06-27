@@ -125,6 +125,11 @@ in a direction), an **auditor's horn** (cure poison / confusion / **stoning** / 
 mend — your lifeline against eating the wrong corpse), a **contract deployer** (write a chosen scroll,
 spending its gas), or a **state reader** (probe an adjacent foe's HP + traits).
 
+**Blindness & telepathy (Phase 7e):** a **potion of obfuscation** blinds you — your sight shrinks to
+arm's reach (`Blind`) and you swing less accurately; **throw** it to blind a monster so it can't find
+you. Eat a **censor imp** corpse for **telepathy**, which lets you *sense every monster's mind while
+blind*. Cure blindness with prayer, the **auditor's horn**, a scroll of cleansing, or just wait it out.
+
 **Controls:** move **arrows/hjkl/yubn** · pick up `,` · inventory `i` · sheet `@` · wield `w` ·
 wear `W` · take off `T` · quaff `q` · read `r` · eat `e` · drop `d` · zap `z` · throw `t` ·
 engrave `E` · pray `P` · descend `>` · ascend/up `<` · wait `.` · restart `R`.

@@ -43,7 +43,7 @@ export interface ItemType {
   weight: number;          // spawn weight
 }
 
-export type EffectId = "heal" | "harm" | "strength" | "teleport" | "map" | "identify" | "enchant" | "cure" | "uncurse";
+export type EffectId = "heal" | "harm" | "strength" | "teleport" | "map" | "identify" | "enchant" | "cure" | "uncurse" | "blind";
 
 export const ITEMS: ItemType[] = [
   // ── weapons ── )
@@ -66,6 +66,7 @@ export const ITEMS: ItemType[] = [
   { id: "heal",   kind: "potion", name: "a potion of finality", ch: "!", fg: "#76c66a", effect: "heal",     weight: 5 },
   { id: "harm",   kind: "potion", name: "a potion of reorg",    ch: "!", fg: "#c75c5c", effect: "harm",     weight: 3 },
   { id: "boost",  kind: "potion", name: "a potion of staking",  ch: "!", fg: "#e0b94d", effect: "strength", weight: 3 },
+  { id: "blind",  kind: "potion", name: "a potion of obfuscation", ch: "!", fg: "#707070", effect: "blind", weight: 2 },
   // ── scrolls ── ? (appearance randomised per game)
   { id: "tele",   kind: "scroll", name: "a scroll of teleport",     ch: "?", fg: "#c0c0e0", effect: "teleport", weight: 4 },
   { id: "map",    kind: "scroll", name: "a scroll of light client", ch: "?", fg: "#9ac0e0", effect: "map",      weight: 4 },

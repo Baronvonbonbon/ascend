@@ -60,6 +60,7 @@ export class Player extends Entity {
   confused = 0;        // turns of staggering movement remaining
   stoning = 0;         // turns until you freeze solid (petrification) — cure fast
   illness = 0;         // turns until food poisoning kills you — cure fast
+  blind = 0;           // turns of blindness — FOV shrinks to your fingertips
   intrinsics = new Set<string>(); // poisonResist, petrifyResist, fast (from eating corpses)
   private regenTimer = 0;
   hasJam = false;
@@ -169,6 +170,7 @@ export class Player extends Entity {
       if (this.hp <= 0) { this.game.log.add(`The poison takes ${this.name}.`, "bad"); this.game.killPlayer(this); }
     }
     if (this.confused > 0 && --this.confused === 0) this.game.log.add("Your head clears.", "dim");
+    if (this.blind > 0 && --this.blind === 0) { this.game.log.add(`${this.name === "you" ? "Your sight returns" : this.name + "'s sight returns"}.`, "good"); this.game.recomputeFOV(); }
     // Petrification & illness are countdowns you must out-race (prayer / a cure).
     if (this.stoning > 0 && --this.stoning === 0) {
       this.game.log.add(`${this.name === "you" ? "You freeze" : this.name + " freezes"} solid — finality denied.`, "bad");
@@ -491,6 +493,7 @@ export class Player extends Entity {
 export class Monster extends Entity {
   speedMod = 1; // a wand of slowness halves this
   sleepTurns = 0; // a wand of stasis freezes it for a while
+  blindTurns = 0; // a thrown potion of obfuscation blinds it — it can't chase
   cancelled = false; // a wand of nullification strips its special powers
   splitsLeft = 0; // a sybil's remaining replications — bounds the swarm (children inherit one fewer)
   stolen: Item | null = null; // a thief (rug puller) carries what it snatched; drops it on death
@@ -528,6 +531,8 @@ export class Monster extends Entity {
 
     // Frozen in stasis (a wand of stasis) — it loses the turn.
     if (this.sleepTurns > 0) { this.sleepTurns--; return; }
+    // Blinded (a thrown potion of obfuscation) — it gropes about, unable to find you.
+    if (this.blindTurns > 0) { this.blindTurns--; this.wanderStep(); return; }
 
     // A dormant honeypot just waits, wearing its loot disguise, until something touches it.
     if (this.def.mimic && !this.revealed) return;
