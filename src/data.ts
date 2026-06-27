@@ -77,7 +77,7 @@ export interface MonsterDef {
 
 // Themed bestiary — the centralised legacy stack fights back.
 export const MONSTERS: MonsterDef[] = [
-  { name: "a sybil",           ch: "s", fg: "#9a9a9a", hp: 3,  dmg: [1, 2], ai: "chase",  minDepth: 1, weight: 6, splits: true, speed: 130 },
+  { name: "a sybil",           ch: "s", fg: "#9a9a9a", hp: 3,  dmg: [1, 2], ai: "chase",  minDepth: 1, weight: 4, splits: true, speed: 105 },
   { name: "a rust bug",        ch: "x", fg: "#7ac06a", hp: 2,  dmg: [1, 1], ai: "wander", minDepth: 1, weight: 5, speed: 90 },
   { name: "a validator golem", ch: "V", fg: "#5c8ad0", hp: 12, dmg: [2, 4], ai: "chase",  minDepth: 2, weight: 3, speed: 85 },
   { name: "a fork daemon",     ch: "f", fg: "#d0a0d0", hp: 7,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 3, speed: 120 },

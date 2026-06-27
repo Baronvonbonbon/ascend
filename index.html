@@ -36,6 +36,7 @@
         background: #1c1c20; border: 1px solid var(--gold); border-radius: 4px; padding: 4px 10px; cursor: pointer; }
       #lobby select { color: var(--ink); border-color: #3a361f; }
       .lobby-pane { display: flex; flex-direction: column; gap: 5px; border-top: 1px solid #1c1c20; padding-top: 8px; }
+      #lobby [hidden] { display: none !important; } /* the hidden attribute must beat .lobby-pane's display:flex */
       .lobby-pane label { color: var(--dim); }
       #lobby textarea { width: 100%; font-family: inherit; font-size: 10px; background: #08080a; color: var(--ink);
         border: 1px solid #2a2620; border-radius: 4px; resize: vertical; }
@@ -73,7 +74,7 @@
       </div>
       <div id="lobby">
         <div class="lobby-row">
-          <span>Co-op (P2P):</span>
+          <span id="lobby-mode-label">Co-op (P2P):</span>
           <select id="lobby-mode">
             <option value="coop">Co-op</option>
             <option value="coop-ff">Co-op + friendly fire</option>

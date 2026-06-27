@@ -985,14 +985,18 @@ export class Game {
     return this.monsters.find((m) => m.alive && m.x === x && m.y === y);
   }
 
-  /** A sybil replicates into an adjacent free cell (capped). */
-  spawnSybilNear(x: number, y: number): boolean {
-    if (this.monsters.length >= 40) return false;
+  /** A sybil replicates into an adjacent free cell — bounded by a per-level sybil cap and
+   *  the parent's split budget (the child inherits one fewer), so it can't runaway-swarm. */
+  spawnSybilNear(parent: Monster): boolean {
+    if (this.monsters.length >= 30) return false;
+    const sybils = this.monsters.reduce((n, m) => n + (m.alive && m.def.splits ? 1 : 0), 0);
+    if (sybils >= 8) return false; // hard cap on the swarm size
     const offs = ROT.RNG.shuffle([[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]] as [number, number][]);
     for (const [dx, dy] of offs) {
-      const nx = x + dx, ny = y + dy;
-      if (this.level.isPassable(nx, ny) && !this.monsterAt(nx, ny) && !(nx === this.player.x && ny === this.player.y)) {
+      const nx = parent.x + dx, ny = parent.y + dy;
+      if (this.level.isPassable(nx, ny) && !this.monsterAt(nx, ny) && !this.playerAt(nx, ny)) {
         const m = new Monster(this, MONSTERS[0], nx, ny);
+        m.splitsLeft = Math.max(0, parent.splitsLeft - 1); // children replicate less; grandchildren not at all
         this.monsters.push(m);
         this.scheduler.add(m, true);
         return true;

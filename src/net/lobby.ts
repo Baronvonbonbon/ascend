@@ -25,10 +25,14 @@ export function initLobby(game: Game): void {
     else game.startCoopGuest(peer);
   };
 
+  const hostBtn = $<HTMLButtonElement>("lobby-host");
+  const joinBtn = $<HTMLButtonElement>("lobby-join");
+
   // ── Host flow ──
-  $<HTMLButtonElement>("lobby-host")?.addEventListener("click", async () => {
+  hostBtn?.addEventListener("click", async () => {
     if (hostPane) hostPane.hidden = false;
     if (joinPane) joinPane.hidden = true;
+    if (joinBtn) joinBtn.hidden = true; // a host only sees host controls
     say("Creating offer…");
     try {
       const m = mode();
@@ -49,9 +53,13 @@ export function initLobby(game: Game): void {
   });
 
   // ── Join flow ──
-  $<HTMLButtonElement>("lobby-join")?.addEventListener("click", () => {
+  joinBtn?.addEventListener("click", () => {
     if (joinPane) joinPane.hidden = false;
     if (hostPane) hostPane.hidden = true;
+    if (hostBtn) hostBtn.hidden = true;       // a joiner only sees join controls
+    modeSel.hidden = true;                     // the host decides the mode
+    const modeLabel = document.getElementById("lobby-mode-label");
+    if (modeLabel) modeLabel.hidden = true;
     say("Paste the host's offer code, then Generate answer.");
   });
 

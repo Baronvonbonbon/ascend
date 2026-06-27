@@ -422,6 +422,7 @@ export class Player extends Entity {
 
 export class Monster extends Entity {
   speedMod = 1; // a wand of slowness halves this
+  splitsLeft = 0; // a sybil's remaining replications — bounds the swarm (children inherit one fewer)
   stolen: Item | null = null; // a thief (rug puller) carries what it snatched; drops it on death
   // A shopkeeper stands peaceful until you steal; then it hunts you down.
   peaceful = false;
@@ -444,6 +445,7 @@ export class Monster extends Entity {
       this.disguiseCh = look.ch; this.disguiseFg = look.fg; this.disguiseType = look;
     }
     if (def.keeper) this.peaceful = true; // minds its stall until provoked
+    if (def.splits) this.splitsLeft = 2; // a fresh sybil can replicate at most twice
   }
 
   getSpeed(): number {
@@ -470,8 +472,8 @@ export class Monster extends Entity {
       return;
     }
 
-    // The Sybil attack: occasionally a sybil spends its turn replicating.
-    if (this.def.splits && ROT.RNG.getUniform() < 0.1 && this.game.spawnSybilNear(this.x, this.y)) return;
+    // The Sybil attack: a sybil with budget left occasionally replicates (bounded).
+    if (this.def.splits && this.splitsLeft > 0 && ROT.RNG.getUniform() < 0.05 && this.game.spawnSybilNear(this)) return;
 
     const dist = Math.max(Math.abs(this.x - p.x), Math.abs(this.y - p.y));
     // The rug pull: a thief adjacent to you snatches a pack item and blinks away.
