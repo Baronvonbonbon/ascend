@@ -4,13 +4,13 @@ import { COLORS, MonsterDef } from "./data";
 import { Inventory, Item } from "./inventory";
 import { bucDelta, ITEMS, ItemType, ArmorSlot } from "./items";
 
-type Verb = "wield" | "wear" | "takeoff" | "quaff" | "read" | "eat" | "drop" | "zap" | "throw" | "forge";
+type Verb = "wield" | "wear" | "takeoff" | "quaff" | "read" | "eat" | "drop" | "zap" | "throw" | "forge" | "apply";
 const VERB_PROMPT: Record<Verb, string> = {
   wield: "Wield which weapon?", wear: "Wear/put on which item?",
   quaff: "Quaff which potion?", read: "Read which scroll?",
   eat: "Eat what?", drop: "Drop which item?", zap: "Zap which wand?",
   throw: "Throw which item?", forge: "Forge which piece of gear into an NFT relic?",
-  takeoff: "Take off which worn piece?",
+  takeoff: "Take off which worn piece?", apply: "Apply which tool?",
 };
 
 export abstract class Entity {
@@ -105,6 +105,8 @@ export class Player extends Entity {
   private pending: Verb | null = null;
   private pendingDir: Item | null = null; // a wand awaiting a zap direction
   private pendingThrow: Item | null = null; // an item awaiting a throw direction
+  private pendingApply: Item | null = null; // a tool awaiting a direction (excavator / state reader)
+  private pendingWrite: Item | null = null; // a contract deployer awaiting a scroll choice
   private resolveTurn: (() => void) | null = null;
   // Interleaved co-op turns: keys are queued and consumed only on this player's turn.
   private inputQueue: string[] = [];
@@ -211,6 +213,8 @@ export class Player extends Entity {
     this.game.acting = this; // the player whose action this is (co-op: host or guest avatar)
     if (this.pendingDir) return this.resolveZapDir(e);
     if (this.pendingThrow) return this.resolveThrowDir(e);
+    if (this.pendingApply) return this.resolveApplyDir(e);
+    if (this.pendingWrite) return this.resolveWrite(e);
     if (this.pending) return this.resolveSelection(e);
     const mv = MOVES[e.key];
     if (mv) return this.tryMove(mv[0], mv[1]);
@@ -232,6 +236,7 @@ export class Player extends Entity {
       case "d": return this.startSelect("drop");
       case "z": return this.startSelect("zap");
       case "t": return this.startSelect("throw");
+      case "a": return this.startSelect("apply");
       case "T": return this.startSelect("takeoff");
       case "E": return this.game.engrave() ? this.endTurn() : false;
       case "F": return this.startSelect("forge");
@@ -267,7 +272,41 @@ export class Player extends Entity {
       this.game.log.add("Throw in which direction? (a move key, Esc to cancel)", "sys");
       return false;
     }
+    if (verb === "apply") {
+      if (item.type.kind !== "tool") { this.game.log.add("That isn't a tool you can apply.", "dim"); return false; }
+      const id = item.type.id;
+      if (id === "horn") return this.game.applyHorn(this) ? this.endTurn() : false;
+      if (id === "pickaxe" || id === "scope") {
+        this.pendingApply = item;
+        this.game.log.add(`${id === "pickaxe" ? "Dig" : "Probe"} in which direction? (a move key, Esc to cancel)`, "sys");
+        return false;
+      }
+      if (id === "marker") {
+        this.pendingWrite = item;
+        this.game.promptWrite();
+        return false;
+      }
+      this.game.log.add("Nothing happens.", "dim"); return false;
+    }
     return this.doVerb(verb, item);
+  }
+
+  private resolveApplyDir(e: KeyboardEvent): boolean {
+    const item = this.pendingApply!;
+    this.pendingApply = null;
+    if (e.key === "Escape") { this.game.log.add("Never mind.", "dim"); return false; }
+    const mv = MOVES[e.key];
+    if (!mv) { this.game.log.add("That is not a direction.", "dim"); return false; }
+    return this.game.applyTool(item, mv[0], mv[1]) ? this.endTurn() : false;
+  }
+
+  private resolveWrite(e: KeyboardEvent): boolean {
+    const item = this.pendingWrite!;
+    this.pendingWrite = null;
+    if (e.key === "Escape") { this.game.log.add("Never mind.", "dim"); return false; }
+    const n = parseInt(e.key, 10);
+    if (isNaN(n)) { this.game.log.add("Choose a number from the menu.", "dim"); return false; }
+    return this.game.writeScroll(item, n - 1) ? this.endTurn() : false;
   }
 
   private resolveThrowDir(e: KeyboardEvent): boolean {

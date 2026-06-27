@@ -120,6 +120,11 @@ of formal verification** to repair *and* rust-proof ("audit") your gear.
 **stasis** (sleep a foe), **forking** (polymorph a monster into a random other one), **nullification**
 (strip a foe's special powers), and **state-read** (probe a monster's HP + traits). Zap with `z`.
 
+**Tools (Phase 7c):** **apply** (`a`) a **tool** (`(`) — an **excavator** (reusable pick-axe; dig walls
+in a direction), an **auditor's horn** (cure poison / confusion / **stoning** / **illness** + a small
+mend — your lifeline against eating the wrong corpse), a **contract deployer** (write a chosen scroll,
+spending its gas), or a **state reader** (probe an adjacent foe's HP + traits).
+
 **Controls:** move **arrows/hjkl/yubn** · pick up `,` · inventory `i` · sheet `@` · wield `w` ·
 wear `W` · take off `T` · quaff `q` · read `r` · eat `e` · drop `d` · zap `z` · throw `t` ·
 engrave `E` · pray `P` · descend `>` · ascend/up `<` · wait `.` · restart `R`.

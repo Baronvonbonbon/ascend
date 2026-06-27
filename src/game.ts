@@ -8,7 +8,7 @@ import {
   MAX_DEPTH, CENSOR, MINIBOSSES, HONEYPOT, SHOPKEEPER, realmName, GRAY_PAPER, ChainDef, CHAINS,
   abilityMod, archetypeById, ATTRS, ATTR_LABEL, ATTR_FLAVOR,
 } from "./data";
-import { Idents, ITEMS, JAM, CORPSE, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
+import { Idents, ITEMS, JAM, CORPSE, WRITABLE_SCROLLS, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
 import { connectWallet, Wallet } from "./chain/wallet";
 import { walletBalancePas, buyDirect } from "./chain/bank";
 import { recordRun, readRecent, RunEntry } from "./chain/ledger";
@@ -99,7 +99,7 @@ export class Game {
     for (const line of GRAY_PAPER) this.log.add(line, "dim");
     if (this.coop) this.log.add(`Co-op (${this.coopMode}) — Host and Guest share this dungeon. Find the JAM together.`, "sys");
     else this.log.add("Your nominator (d) pads at your heels — it backs you, and bites for you.", "dim");
-    this.log.add("Keys: move · , pick up · @ sheet · p buy · F forge · P pray · z zap · t throw · E engrave · < up · > down · i/w/W/q/r/e/d items.", "dim");
+    this.log.add("Keys: move · , pick up · @ sheet · p buy · F forge · P pray · z zap · t throw · a apply tool · E engrave · < up · > down · i/w/W/q/r/e/d items.", "dim");
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
@@ -683,6 +683,7 @@ export class Game {
   giveItem(type: ItemType, opts?: { enchant?: number; relic?: boolean; buc?: Buc; bucKnown?: boolean }): Item {
     const it = this.acting.inventory.add(type);
     if (type.kind === "wand") it.charges = ROT.RNG.getUniformInt(3, 6);
+    if (type.id === "marker") it.charges = ROT.RNG.getUniformInt(2, 4); // a contract deployer's gas
     if (opts?.enchant) it.enchant = opts.enchant;
     if (opts?.relic) it.relic = true;
     it.buc = opts?.buc ?? rollBuc();
@@ -830,6 +831,63 @@ export class Game {
       const m = this.monsterAt(x, y); if (m && m.alive) onHit(m);
       const pl = this.playerAt(x, y); if (pl) onHit(pl);
     }
+  }
+
+  // ── tools (the `apply` command, Phase 7c) ────────────────────────────────────
+  /** Sound an auditor's horn (unicorn horn): clear afflictions + a little mend. Returns false if there's nothing to fix. */
+  applyHorn(p: Player): boolean {
+    if (p.poison === 0 && p.confused === 0 && p.stoning === 0 && p.illness === 0 && p.hp >= p.maxHp) {
+      this.log.add("The auditor's horn finds nothing amiss.", "dim"); return false;
+    }
+    p.poison = 0; p.confused = 0; p.stoning = 0; p.illness = 0;
+    p.hp = Math.min(p.maxHp, p.hp + ROT.RNG.getUniformInt(2, 6));
+    this.log.add(`${this.sub(p)} ${this.verbS(p, "sound")} the auditor's horn — afflictions clear.`, "good");
+    return true;
+  }
+
+  /** Apply a directional tool (excavator digs walls; state reader probes an adjacent foe). */
+  applyTool(item: Item, dx: number, dy: number): boolean {
+    const p = this.acting;
+    if (item.type.id === "pickaxe") {
+      let x = p.x, y = p.y, dug = 0;
+      for (let step = 0; step < 6 && dug < 3; step++) {
+        x += dx; y += dy;
+        if (x < 1 || y < 1 || x >= W - 1 || y >= MAP_H - 1) break;
+        if (this.level.tileAt(x, y) === "wall") { this.level.tiles[y][x] = "floor"; dug++; }
+      }
+      this.log.add(dug ? `${this.sub(p)} ${this.verbS(p, "hew")} through ${dug} wall${dug > 1 ? "s" : ""} with the excavator.` : "Nothing to dig there.", dug ? "good" : "dim");
+      if (dug) this.recomputeFOV();
+      return true; // a swing of the pick spends the turn either way
+    }
+    if (item.type.id === "scope") {
+      const m = this.monsterAt(p.x + dx, p.y + dy);
+      if (!m) { this.log.add("You press the state reader to empty air.", "dim"); return false; }
+      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.splits && "splits", m.def.corrodes && "corrodes", m.cancelled && "nullified", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
+      this.log.add(`State-read ${m.name}: ${m.hp}/${m.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
+      return true;
+    }
+    return false;
+  }
+
+  /** Show the contract-deployer (magic marker) scroll menu. */
+  promptWrite(): void {
+    const menu = WRITABLE_SCROLLS.map((id, i) => `(${i + 1}) ${itemById(id)?.name ?? id}`).join("  ");
+    this.log.add(`Deploy which scroll? ${menu}  (Esc to cancel)`, "sys");
+  }
+
+  /** Write (deploy) a scroll with a contract deployer, spending a charge. */
+  writeScroll(marker: Item, idx: number): boolean {
+    if (idx < 0 || idx >= WRITABLE_SCROLLS.length) { this.log.add("No such scroll on the menu.", "dim"); return false; }
+    if ((marker.charges ?? 0) <= 0) { this.log.add("The contract deployer is out of gas.", "dim"); return false; }
+    const p = this.acting;
+    if (p.inventory.full) { this.log.add("Your pack is full.", "bad"); return false; }
+    const t = itemById(WRITABLE_SCROLLS[idx]);
+    if (!t) return false;
+    marker.charges = (marker.charges ?? 0) - 1;
+    const it = p.inventory.add(t); it.buc = "uncursed"; it.bucKnown = true;
+    this.ident.learn(t); // deploying it reveals its identity
+    this.log.add(`${this.sub(p)} ${this.verbS(p, "deploy")} ${t.name}. (deployer gas left: ${marker.charges})`, "good");
+    return true;
   }
 
   tryPickup(): boolean {

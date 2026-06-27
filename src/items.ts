@@ -2,7 +2,7 @@
 
 import * as ROT from "rot-js";
 
-export type ItemKind = "weapon" | "armor" | "food" | "potion" | "scroll" | "amulet" | "ring" | "wand";
+export type ItemKind = "weapon" | "armor" | "food" | "potion" | "scroll" | "amulet" | "ring" | "wand" | "tool";
 
 /** Armor occupies one of seven body slots — wear one piece in each. */
 export type ArmorSlot = "shirt" | "body" | "cloak" | "helm" | "gloves" | "boots" | "shield";
@@ -87,7 +87,15 @@ export const ITEMS: ItemType[] = [
   { id: "wand_poly",   kind: "wand", name: "a wand of forking",      ch: "/", fg: "#d070d0", weight: 1 },
   { id: "wand_cancel", kind: "wand", name: "a wand of nullification",ch: "/", fg: "#a0a0a0", weight: 1 },
   { id: "wand_probe",  kind: "wand", name: "a wand of state-read",   ch: "/", fg: "#80c0a0", weight: 2 },
+  // ── tools ── ( (applied with a)
+  { id: "pickaxe", kind: "tool", name: "an excavator",        ch: "(", fg: "#c0a060", weight: 3 }, // reusable dig
+  { id: "horn",    kind: "tool", name: "an auditor's horn",   ch: "(", fg: "#e0e0c0", weight: 2 }, // cures afflictions
+  { id: "marker",  kind: "tool", name: "a contract deployer", ch: "(", fg: "#a0d0e0", weight: 2 }, // writes scrolls (charged)
+  { id: "scope",   kind: "tool", name: "a state reader",      ch: "(", fg: "#a0c0a0", weight: 2 }, // probe an adjacent foe
 ];
+
+/** Scrolls a contract deployer (magic marker) can inscribe, in menu order. */
+export const WRITABLE_SCROLLS = ["tele", "map", "ident", "ench", "cure", "uncurse"];
 
 const POTION_LOOKS = ["a fizzy potion", "a murky potion", "a glowing vial", "a smoking flask", "a bubbling phial"];
 const SCROLL_LOOKS = ["a scroll labeled XYZZY", "a scroll labeled ELBERETH", "a scroll labeled HODL", "a scroll labeled WAGMI", "a scroll labeled GM", "a scroll labeled DYOR"];
