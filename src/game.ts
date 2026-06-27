@@ -470,6 +470,21 @@ export class Game {
     return true;
   }
 
+  /** Kick a locked door — Stake-weight (STR) decides if it bursts; sometimes you stub your foot. */
+  kickDoor(p: Player, nx: number, ny: number): boolean {
+    const chance = Math.max(0.15, 0.3 + abilityMod(p.str) * 0.08);
+    if (ROT.RNG.getUniform() < chance) {
+      this.level.tiles[ny][nx] = "door";
+      this.recomputeFOV();
+      this.log.add(`${this.sub(p)} ${this.verbS(p, "kick")} the door — it bursts open!`, "good");
+    } else {
+      this.log.add("The locked door holds fast. (kick again)", "dim");
+      if (ROT.RNG.getUniform() < 0.15) { p.hp -= 1; this.log.add("Ow — your foot smarts.", "dim"); if (p.hp <= 0) this.killPlayer(p); }
+    }
+    this.draw();
+    return true;
+  }
+
   /** Quaff from a testnet faucet underfoot — a random boon or bane. */
   quaffFaucet(p: Player): boolean {
     const r = ROT.RNG.getUniform();

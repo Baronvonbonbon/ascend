@@ -56,7 +56,10 @@ export class Level {
     const rooms = digger.getRooms();
     for (const room of rooms) {
       room.getDoors((x, y) => {
-        if (this.tiles[y]?.[x] === "floor") this.tiles[y][x] = "door";
+        if (this.tiles[y]?.[x] === "floor") {
+          const r = ROT.RNG.getUniform(); // some doors start closed (blocking sight) or locked
+          this.tiles[y][x] = r < 0.12 ? "doorLocked" : r < 0.42 ? "doorClosed" : "door";
+        }
       });
     }
 

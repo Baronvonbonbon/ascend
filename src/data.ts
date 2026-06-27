@@ -15,12 +15,14 @@ export const COLORS = {
   dim:       "#6c6a60",
 };
 
-export type TileType = "wall" | "floor" | "door" | "stairsDown" | "stairsUp" | "altar" | "portal" | "faucet" | "throne";
+export type TileType = "wall" | "floor" | "door" | "doorClosed" | "doorLocked" | "stairsDown" | "stairsUp" | "altar" | "portal" | "faucet" | "throne";
 
 export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: string }> = {
   wall:       { ch: "#", fg: COLORS.wall,   fgDim: COLORS.wallDim },
   floor:      { ch: "·", fg: COLORS.floor,  fgDim: COLORS.floorDim },
-  door:       { ch: "+", fg: COLORS.door,   fgDim: "#5a4520" },
+  door:       { ch: "'", fg: COLORS.door,   fgDim: "#5a4520" }, // an open doorway
+  doorClosed: { ch: "+", fg: COLORS.door,   fgDim: "#5a4520" }, // closed — blocks sight, open by walking in
+  doorLocked: { ch: "+", fg: "#d07040",     fgDim: "#5a3520" }, // locked — kick to break in
   stairsDown: { ch: ">", fg: COLORS.stairs, fgDim: "#6a5a28" },
   stairsUp:   { ch: "<", fg: COLORS.stairs, fgDim: "#6a5a28" },
   altar:      { ch: "_", fg: "#c0d0e0",     fgDim: "#4a5560" },

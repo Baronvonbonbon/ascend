@@ -497,6 +497,16 @@ export class Player extends Entity {
       if (this.game.coopMode === "coop") return false;
       this.game.attack(this, ally); return this.endTurn();
     }
+    // Doors: a closed one you push open (a turn, then walk through); a locked one you kick.
+    const tile = this.game.level.tileAt(nx, ny);
+    if (tile === "doorClosed") {
+      this.game.level.tiles[ny][nx] = "door";
+      this.game.recomputeFOV();
+      this.game.log.add("You open the door.", "dim");
+      this.game.draw();
+      return this.endTurn();
+    }
+    if (tile === "doorLocked") return this.game.kickDoor(this, nx, ny) ? this.endTurn() : false;
     if (!this.game.level.isPassable(nx, ny)) return false; // bumping a wall costs no turn
     // Displace — slip past a peaceful NPC (the Marketmaker) or your nominator; never attack a friend.
     if (foe && foe.peaceful) { foe.x = this.x; foe.y = this.y; this.game.log.add(`You slip past ${foe.name}.`, "dim"); }

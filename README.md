@@ -164,6 +164,11 @@ take a few tries to force); the loot spills onto the floor to pick up. And you c
 Marketmaker** — stepping into a peaceful NPC (or your nominator) **swaps places** instead of attacking, so
 no more accidental shop brawls; you only fight the keeper once you've provoked it by shoplifting.
 
+**Doors (Phase 9c):** doorways are now open (`'`), **closed** (`+` — blocks line of sight; walk into it to
+push it open and reveal the room), or **locked** (orange `+` — walk into it to **kick** it open; your
+**Stake-weight** (STR) decides how easily it bursts, and you might stub your foot). Closed doors keep
+monsters out of a room until you open them — useful for picking your fights.
+
 **Controls:** move **arrows/hjkl/yubn** · pick up `,` · inventory `i` · sheet `@` · wield `w` ·
 wear `W` · take off `T` · quaff `q` · read/study `r` · eat `e` · drop `d` · zap `z` · cast `Z` ·
 throw `t` · apply tool `a` · engrave `E` · pray `P` · offer `O` · descend `>` · ascend/up `<` · wait `.` · restart `R`.
