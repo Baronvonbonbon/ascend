@@ -13,6 +13,10 @@ import { walletBalancePas, buyDirect } from "./chain/bank";
 import { recordRun, readRecent, RunEntry } from "./chain/ledger";
 import { readGear, forgeGear, forgePrice } from "./chain/gear";
 import { RARITY } from "./chain/config";
+import type { Peer } from "./net/peer";
+import type { CoopMode, Cell, NetMsg } from "./net/protocol";
+
+const PARTNER_FG = "#5fd0d0"; // the co-op partner's @ renders teal
 
 const PRICE: Record<string, number> = { weapon: 6, armor: 5, potion: 4, scroll: 4, food: 2 };
 
@@ -41,6 +45,15 @@ export class Game {
   private over = false;
   private busy = false; // a wallet transaction is in flight — input is frozen
 
+  // ── co-op (host-authoritative over WebRTC) ──
+  acting!: Player;              // the player whose input is currently being processed
+  coPlayer: Player | null = null; // host-side: the guest's avatar (null in solo)
+  netRole: "solo" | "host" | "guest" = "solo";
+  coopMode: CoopMode = "coop";
+  private coop = false;        // this game session has two players
+  private peer: Peer | null = null;
+  private downed = new Set<Player>(); // players who have fallen this run
+
   constructor(screen: HTMLElement, logEl: HTMLElement) {
     this.display = new ROT.Display({
       width: W, height: H, fontSize: 18,
@@ -57,15 +70,29 @@ export class Game {
     this.over = false;
     this.defeatedBosses.clear();
     this.loadedRelics.clear();
+    this.downed.clear();
     this.ident = new Idents();
     this.level = new Level(W, MAP_H);
     this.player = new Player(this, this.level.start.x, this.level.start.y);
-    this.giveStartingKit();
-    this.pet = new Pet(this, this.level.start.x, this.level.start.y);
+    this.acting = this.player;
+    this.giveStartingKit(this.player);
+    if (this.coop) {
+      // Two adventurers descend together; perspective-neutral names for the shared log.
+      this.player.name = "Host";
+      const spot = this.adjacentFree(this.level.start.x, this.level.start.y) ?? this.level.start;
+      this.coPlayer = new Player(this, spot.x, spot.y);
+      this.coPlayer.name = "Guest";
+      this.giveStartingKit(this.coPlayer);
+      this.pet = null; // no nominators in co-op v1
+    } else {
+      this.coPlayer = null;
+      this.pet = new Pet(this, this.level.start.x, this.level.start.y);
+    }
     this.enterLevel();
     this.log.add(ROT.RNG.getItem(GREETINGS)!, "sys");
     for (const line of GRAY_PAPER) this.log.add(line, "dim");
-    this.log.add("Your nominator (d) pads at your heels — it backs you, and bites for you.", "dim");
+    if (this.coop) this.log.add(`Co-op (${this.coopMode}) — Host and Guest share this dungeon. Find the JAM together.`, "sys");
+    else this.log.add("Your nominator (d) pads at your heels — it backs you, and bites for you.", "dim");
     this.log.add("Keys: move · , pick up · p buy · F forge relic · P pray · z zap · t throw · E engrave · < up · > down · i/w/W/q/r/e/d items.", "dim");
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
@@ -99,6 +126,7 @@ export class Game {
    *  The contract rolls rarity on-chain (Common→Legendary), which lifts the enchant. */
   async forge(item: Item): Promise<void> {
     if (this.busy) return;
+    if (this.coop) { this.log.add("Shops & forging are solo-only in co-op for now.", "dim"); return; }
     if (!this.wallet) { this.log.add("Connect a wallet to forge a relic.", "bad"); return; }
     if (!isGear(item.type)) { this.log.add("Only equipment — weapons, armor, rings, wands — can be forged.", "dim"); return; }
     if (item.relic) { this.log.add(`${cap(this.ident.name(item.type))} is already an on-chain relic.`, "dim"); return; }
@@ -134,14 +162,14 @@ export class Game {
     try { this.recentRuns = await readRecent(12); } catch { /* offline is fine */ }
   }
 
-  private giveStartingKit(): void {
+  private giveStartingKit(who: Player): void {
     const dagger = ITEMS.find((i) => i.id === "dagger")!;
     const ration = ITEMS.find((i) => i.id === "ration")!;
-    const wielded = this.player.inventory.add(dagger);
+    const wielded = who.inventory.add(dagger);
     wielded.buc = "uncursed"; wielded.bucKnown = true;
-    this.player.weapon = wielded;
-    this.player.attackDmg = dagger.dmg!;
-    const r = this.player.inventory.add(ration); r.buc = "uncursed"; r.bucKnown = true;
+    who.weapon = wielded;
+    who.attackDmg = dagger.dmg!;
+    const r = who.inventory.add(ration); r.buc = "uncursed"; r.bucKnown = true;
   }
 
   /** Populate the current level and (re)build the turn schedule. */
@@ -149,6 +177,14 @@ export class Game {
     this.monsters = [];
     this.scheduler.clear();
     this.scheduler.add(this.player, true);
+    // The partner descends alongside — placed next to the host, sharing the schedule.
+    if (this.coPlayer && this.coPlayer.alive) {
+      const spot = this.adjacentFree(this.player.x, this.player.y);
+      if (spot) { this.coPlayer.x = spot.x; this.coPlayer.y = spot.y; }
+      else { this.coPlayer.x = this.player.x; this.coPlayer.y = this.player.y; }
+      this.coPlayer.depth = this.player.depth; // shared depth for the HUD
+      this.scheduler.add(this.coPlayer, true);
+    }
     this.spawnMonsters();
     this.spawnItems();
     this.spawnShop();
@@ -165,7 +201,7 @@ export class Game {
       if (spot) { this.pet.x = spot.x; this.pet.y = spot.y; }
       this.scheduler.add(this.pet, true);
     }
-    this.level.computeFOV(this.player.x, this.player.y);
+    this.recomputeFOV();
   }
 
   adjacentEnemy(x: number, y: number): Monster | undefined {
@@ -179,6 +215,28 @@ export class Game {
       if (this.level.isPassable(nx, ny) && !this.monsterAt(nx, ny)) return { x: nx, y: ny };
     }
     return null;
+  }
+
+  // ── co-op party helpers ──────────────────────────────────────────────────────
+  allPlayers(): Player[] { return this.coPlayer ? [this.player, this.coPlayer] : [this.player]; }
+  livingPlayers(): Player[] { return this.allPlayers().filter((p) => p.alive); }
+  playerAt(x: number, y: number): Player | undefined { return this.allPlayers().find((p) => p.alive && p.x === x && p.y === y); }
+  otherPlayerAt(self: Player, x: number, y: number): Player | undefined {
+    return this.allPlayers().find((p) => p !== self && p.alive && p.x === x && p.y === y);
+  }
+  /** The living party member closest (Chebyshev) to a point — whom a monster targets. */
+  nearestPlayer(x: number, y: number): Player {
+    const live = this.livingPlayers();
+    if (live.length === 0) return this.player;
+    const d = (p: Player) => Math.max(Math.abs(p.x - x), Math.abs(p.y - y));
+    return live.reduce((a, b) => (d(b) < d(a) ? b : a));
+  }
+  /** Union field-of-view over the whole living party (shared vision). */
+  recomputeFOV(): void {
+    const ps = this.livingPlayers();
+    const origin = ps[0] ?? this.player;
+    this.level.computeFOV(origin.x, origin.y);
+    for (let i = 1; i < ps.length; i++) this.level.addFOV(ps[i].x, ps[i].y);
   }
 
   descend(): void {
@@ -247,7 +305,8 @@ export class Game {
     const newDepth = this.player.depth - 1;
     if (newDepth < 1) return;
     this.player.depth = newDepth;
-    if (newDepth === 1 && this.player.hasJam) { this.win(); return; }
+    const holder = this.allPlayers().find((p) => p.hasJam);
+    if (newDepth === 1 && holder) { this.win(holder); return; }
     this.level = new Level(W, MAP_H);
     this.player.x = this.level.stairs.x; // you climb up INTO the down-stairs of the level above
     this.player.y = this.level.stairs.y;
@@ -316,7 +375,7 @@ export class Game {
   }
 
   pray(): void {
-    const p = this.player;
+    const p = this.acting;
     if (p.prayerCooldown > 0) { this.log.add("Gavin is unmoved — pray again later.", "dim"); return; }
     p.prayerCooldown = 130;
     p.hp = p.maxHp;
@@ -339,7 +398,7 @@ export class Game {
 
   /** Scratch a warding sigil (a Gray-Paper clause) at your feet; ordinary foes shrink from the tile. */
   engrave(): boolean {
-    const p = this.player;
+    const p = this.acting;
     const t = this.level.tileAt(p.x, p.y);
     if (t !== "floor" && t !== "door") { this.log.add("There's no dust here to scratch a sigil into.", "dim"); return false; }
     const LIFE = 14;
@@ -359,11 +418,18 @@ export class Game {
     this.level.engravings = this.level.engravings.filter((e) => e.life > 0);
   }
 
-  private win(): void {
+  private win(winner?: Player): void {
     if (this.over) return;
     this.over = true;
-    this.log.add("✦ You climb into the light, the JAM blazing in your grasp. ✦", "good");
-    this.log.add("ASCENSION! The chain needs no master. You have won, Seeker.", "sys");
+    const w = winner ?? this.player;
+    if (this.coop && this.coopMode === "race") {
+      this.log.add(`✦ ${cap(w.name)} seizes the JAM and ASCENDS — ${cap(w.name)} wins the race! ✦`, "good");
+    } else if (this.coop) {
+      this.log.add(`✦ ${cap(w.name)} carries the JAM into the light — the party ASCENDS together. You win! ✦`, "good");
+    } else {
+      this.log.add("✦ You climb into the light, the JAM blazing in your grasp. ✦", "good");
+      this.log.add("ASCENSION! The chain needs no master. You have won, Seeker.", "sys");
+    }
     this.log.add("Press R to begin a new descent.", "dim");
     this.draw();
     void this.recordResult(true);
@@ -423,38 +489,43 @@ export class Game {
     // Striking a peaceful shopkeeper provokes it — now it fights to the death.
     if (d instanceof Monster && d.def.keeper && d.peaceful) {
       d.peaceful = false; d.fg = "#ff5030";
-      this.log.add("You strike the Marketmaker — it roars \"Bad debt!\" and turns on you.", "bad");
+      this.log.add("The Marketmaker roars \"Bad debt!\" and turns lethal.", "bad");
     }
     // Fighting on a warded tile scuffs the sigil away faster.
-    if (a === this.player) { const e = this.level.engravingAt(this.player.x, this.player.y); if (e) e.life -= 3; }
+    if (a instanceof Player) { const e = this.level.engravingAt(a.x, a.y); if (e) e.life -= 3; }
     const [lo, hi] = a.attackDmg;
     let dmg = ROT.RNG.getUniformInt(lo, hi);
-    if (d === this.player && this.player.ac > 0) dmg = Math.max(1, dmg - this.player.ac); // armor soaks
+    if (d instanceof Player && d.ac > 0) dmg = Math.max(1, dmg - d.ac); // armor soaks
     d.hp -= dmg;
-    if (a === this.player) this.log.add(`You strike ${d.name} for ${dmg}.`, "good");
-    else if (d === this.player) {
-      this.log.add(`${cap(a.name)} hits you for ${dmg}.`, "bad");
-      if (a instanceof Monster && a.def.inflict && d.hp > 0 && ROT.RNG.getUniform() < 0.3) this.applyStatus(a.def.inflict);
+    if (a instanceof Player && d instanceof Monster) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg}.`, "good");
+    else if (a instanceof Monster && d instanceof Player) {
+      this.log.add(`${cap(a.name)} hits ${d.name} for ${dmg}.`, "bad");
+      if (a.def.inflict && d.hp > 0 && ROT.RNG.getUniform() < 0.3) this.applyStatus(d, a.def.inflict);
     }
+    else if (a instanceof Player && d instanceof Player) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg} — friendly fire!`, "bad");
     else if (a === this.pet) this.log.add(`Your nominator savages ${d.name} for ${dmg}.`, "good");
     else if (d === this.pet) this.log.add(`${cap(a.name)} mauls your nominator for ${dmg}.`, "bad");
     if (d.hp <= 0) this.kill(d);
   }
 
-  applyStatus(kind: "poison" | "confuse"): void {
-    if (kind === "poison") { this.player.poison = Math.max(this.player.poison, 6); this.log.add("You are poisoned!", "bad"); }
-    else { this.player.confused = Math.max(this.player.confused, 5); this.log.add("Your head spins — you're confused!", "bad"); }
+  /** Subject + verb agreement so the shared co-op log reads right ("You strike" / "Guest strikes"). */
+  private sub(p: Player): string { return p.name === "you" ? "You" : cap(p.name); }
+  private verbS(p: Player, base: string): string { return p.name === "you" ? base : base + "s"; }
+
+  applyStatus(target: Player, kind: "poison" | "confuse"): void {
+    if (kind === "poison") { target.poison = Math.max(target.poison, 6); this.log.add(`${target.name === "you" ? "You are" : target.name + " is"} poisoned!`, "bad"); }
+    else { target.confused = Math.max(target.confused, 5); this.log.add(`${target.name === "you" ? "Your head spins" : target.name + "'s head spins"} — confused!`, "bad"); }
   }
 
-  /** A ranged foe zaps the player (armor half-soaks; can still inflict status). */
+  /** A ranged foe zaps the nearest party member (armor half-soaks; can still inflict status). */
   rangedAttack(a: Monster): void {
-    const p = this.player;
+    const p = this.nearestPlayer(a.x, a.y);
     const [lo, hi] = a.attackDmg;
     let dmg = ROT.RNG.getUniformInt(lo, hi);
     if (p.ac > 0) dmg = Math.max(1, dmg - Math.floor(p.ac / 2));
     p.hp -= dmg;
-    this.log.add(`${cap(a.name)} zaps you from afar for ${dmg}!`, "bad");
-    if (a.def.inflict && p.hp > 0 && ROT.RNG.getUniform() < 0.3) this.applyStatus(a.def.inflict);
+    this.log.add(`${cap(a.name)} zaps ${p.name} from afar for ${dmg}!`, "bad");
+    if (a.def.inflict && p.hp > 0 && ROT.RNG.getUniform() < 0.3) this.applyStatus(p, a.def.inflict);
     if (p.hp <= 0) this.kill(p);
   }
 
@@ -473,8 +544,19 @@ export class Game {
     return false;
   }
 
-  killPlayer(): void {
-    this.gameOver();
+  killPlayer(p: Player = this.player): void {
+    this.downPlayer(p);
+  }
+
+  /** A player falls. Solo (or last to fall) → game over; in co-op the survivor fights on. */
+  private downPlayer(p: Player): void {
+    if (p.hp > 0) p.hp = 0; // a downed player is simply at 0 HP (alive is hp > 0)
+    if (this.downed.has(p)) return;
+    this.downed.add(p);
+    this.scheduler.remove(p);
+    if (this.livingPlayers().length === 0) { this.gameOver(); return; }
+    this.log.add(`${cap(p.name)} falls! The other adventurer presses on — recover the JAM.`, "bad");
+    this.draw();
   }
 
   // ── items ──────────────────────────────────────────────────────────────────
@@ -496,8 +578,8 @@ export class Game {
   }
 
   /** A thief snatches a random pack item (unequipping it if worn/wielded). Returns it, or null if the pack is bare. */
-  stealItem(): Item | null {
-    const p = this.player;
+  stealItem(target: Player): Item | null {
+    const p = target;
     if (p.inventory.items.length === 0) return null;
     const it = ROT.RNG.getItem(p.inventory.items)!;
     if (p.weapon === it) { p.weapon = null; p.applyWeapon(); }
@@ -509,7 +591,7 @@ export class Game {
 
   /** Add an item to the pack, rolling wand charges. NFT relics carry enchant + a relic mark; every item gets a BUC. */
   giveItem(type: ItemType, opts?: { enchant?: number; relic?: boolean; buc?: Buc; bucKnown?: boolean }): Item {
-    const it = this.player.inventory.add(type);
+    const it = this.acting.inventory.add(type);
     if (type.kind === "wand") it.charges = ROT.RNG.getUniformInt(3, 6);
     if (opts?.enchant) it.enchant = opts.enchant;
     if (opts?.relic) it.relic = true;
@@ -522,7 +604,7 @@ export class Game {
    *  a potion shatters on it. The item has already been removed from the pack. */
   throwItem(item: Item, dx: number, dy: number): void {
     const t = item.type;
-    let x = this.player.x, y = this.player.y;
+    let x = this.acting.x, y = this.acting.y;
     let lx = x, ly = y; // last open tile the projectile passed over
     let hit: Monster | undefined;
     for (let step = 0; step < 8; step++) {
@@ -576,16 +658,16 @@ export class Game {
     item.charges--;
 
     if (item.type.id === "wand_dig") {
-      let x = this.player.x, y = this.player.y, dug = 0;
+      let x = this.acting.x, y = this.acting.y, dug = 0;
       for (let step = 0; step < 8 && dug < 4; step++) {
         x += dx; y += dy;
         if (x < 1 || y < 1 || x >= W - 1 || y >= MAP_H - 1) break; // keep the border intact
         if (this.level.tileAt(x, y) === "wall") { this.level.tiles[y][x] = "floor"; dug++; }
       }
       this.log.add(dug ? `You bore through ${dug} wall${dug > 1 ? "s" : ""}.` : "The wand of digging finds no wall.", dug ? "good" : "dim");
-      this.level.computeFOV(this.player.x, this.player.y);
+      this.recomputeFOV();
     } else {
-      let x = this.player.x, y = this.player.y;
+      let x = this.acting.x, y = this.acting.y;
       let hit: Monster | undefined;
       for (let step = 0; step < 10; step++) {
         x += dx; y += dy;
@@ -610,20 +692,21 @@ export class Game {
       }
     }
 
-    if (item.charges <= 0) { this.player.inventory.remove(item); this.log.add(`The ${item.type.name} crumbles to dust.`, "dim"); }
+    if (item.charges <= 0) { this.acting.inventory.remove(item); this.log.add(`The ${item.type.name} crumbles to dust.`, "dim"); }
     this.draw();
   }
 
   tryPickup(): boolean {
-    const fi = this.level.itemAt(this.player.x, this.player.y);
+    const who = this.acting;
+    const fi = this.level.itemAt(who.x, who.y);
     if (!fi) { this.log.add("There is nothing here to pick up.", "dim"); return false; }
     if (fi.type.id === "jam") {
-      this.player.hasJam = true;
+      who.hasJam = true;
       this.level.items = this.level.items.filter((i) => i !== fi);
-      this.log.add("You seize the JAM! Finality is yours. Now ASCEND — climb back to the surface (press <).", "good");
+      this.log.add(`${who.name === "you" ? "You seize" : who.name + " seizes"} the JAM! Now ASCEND — climb back to the surface (press <).`, "good");
       return true;
     }
-    if (this.player.inventory.full) { this.log.add("Your pack is full.", "bad"); return false; }
+    if (who.inventory.full) { this.log.add("Your pack is full.", "bad"); return false; }
     // Lifting an unpaid ware is shoplifting — the Marketmaker takes it personally.
     if (fi.price) {
       const k = this.shopkeeper();
@@ -645,7 +728,7 @@ export class Game {
   }
 
   dropItem(item: Item): void {
-    const x = this.player.x, y = this.player.y;
+    const x = this.acting.x, y = this.acting.y;
     const fi = { x, y, type: item.type, enchant: item.enchant, relic: item.relic, buc: item.buc, bucKnown: item.bucKnown };
     // Gavin's altar reveals an item's sanctity when you set it down upon it.
     if (this.level.tileAt(x, y) === "altar") {
@@ -658,12 +741,13 @@ export class Game {
   }
 
   showInventory(): void {
-    const inv = this.player.inventory;
+    const who = this.acting;
+    const inv = who.inventory;
     if (inv.items.length === 0) { this.log.add("Your pack is empty.", "dim"); return; }
-    this.log.add("— Inventory —", "sys");
+    this.log.add(`— ${who.name === "you" ? "Inventory" : who.name + "'s pack"} —`, "sys");
     inv.items.forEach((it, i) => {
-      const welded = this.player.isWelded(it);
-      const eq = welded ? " (welded)" : it === this.player.weapon ? " (wielded)" : it === this.player.armor ? " (worn)" : it === this.player.ring ? " (on hand)" : "";
+      const welded = who.isWelded(it);
+      const eq = welded ? " (welded)" : it === who.weapon ? " (wielded)" : it === who.armor ? " (worn)" : it === who.ring ? " (on hand)" : "";
       const ch = it.charges != null ? ` [${it.charges}]` : "";
       const relic = it.relic ? ` +${it.enchant ?? 0} ✦` : "";
       const buc = it.bucKnown && it.buc ? `${it.buc} ` : "";
@@ -673,7 +757,7 @@ export class Game {
   }
 
   applyEffect(effect: EffectId, buc: Buc = "uncursed"): void {
-    const p = this.player;
+    const p = this.acting;
     switch (effect) {
       case "heal": {
         // Blessed finality mends more; a cursed draught barely closes the wound.
@@ -693,7 +777,7 @@ export class Game {
       case "teleport": {
         let pos = this.level.randomFloor(), t = 0;
         while (t < 40 && (this.monsterAt(pos.x, pos.y) || this.level.tileAt(pos.x, pos.y) === "stairsDown")) { pos = this.level.randomFloor(); t++; }
-        p.x = pos.x; p.y = pos.y; this.level.computeFOV(p.x, p.y);
+        p.x = pos.x; p.y = pos.y; this.recomputeFOV();
         this.log.add("You blink across the chain.", "sys"); break;
       }
       case "map": {
@@ -737,7 +821,7 @@ export class Game {
         break;
       }
     }
-    if (p.hp <= 0) this.killPlayer();
+    if (p.hp <= 0) this.killPlayer(p);
     this.draw();
   }
 
@@ -816,7 +900,8 @@ export class Game {
 
   async tryBuy(): Promise<void> {
     if (this.busy) return;
-    const fi = this.level.itemAt(this.player.x, this.player.y);
+    if (this.coop) { this.log.add("Shops & forging are solo-only in co-op for now.", "dim"); return; }
+    const fi = this.level.itemAt(this.acting.x, this.acting.y);
     if (!fi || !fi.price) { this.log.add("There is nothing for sale here.", "dim"); return; }
     if (!this.wallet) { this.log.add("Connect a wallet (button above) to buy.", "bad"); return; }
     if (this.player.pas < fi.price) { this.log.add(`Not enough PAS — ${this.ident.name(fi.type)} costs ${fi.price}, your wallet holds ${this.player.pas.toFixed(1)}.`, "bad"); return; }
@@ -841,7 +926,7 @@ export class Game {
   }
 
   private kill(d: Entity): void {
-    if (d === this.player) { this.gameOver(); return; }
+    if (d instanceof Player) { this.downPlayer(d); return; }
     if (d === this.pet) { this.log.add("Your nominator falls. You descend alone.", "bad"); this.scheduler.remove(this.pet); return; }
     const m = d as Monster;
     this.monsters = this.monsters.filter((x) => x !== m);
@@ -933,79 +1018,134 @@ export class Game {
 
   triggerTrap(trap: Trap): void {
     trap.revealed = true;
-    const p = this.player;
+    const p = this.acting;
     switch (trap.kind) {
       case "gas": { const d = ROT.RNG.getUniformInt(3, 7); p.hp -= d; this.log.add(`A gas-fee trap drains ${d} from you!`, "bad"); break; }
       case "slash": { const d = ROT.RNG.getUniformInt(6, 12); p.hp -= d; this.log.add(`A slashing trap bites for ${d}!`, "bad"); break; }
       case "reorg": {
         let pos = this.level.randomFloor(), t = 0;
         while (t < 40 && (this.monsterAt(pos.x, pos.y) || this.level.tileAt(pos.x, pos.y) === "stairsDown")) { pos = this.level.randomFloor(); t++; }
-        p.x = pos.x; p.y = pos.y; this.level.computeFOV(p.x, p.y);
+        p.x = pos.x; p.y = pos.y; this.recomputeFOV();
         this.log.add("A reorg trap flings you across the level!", "bad"); break;
       }
     }
-    if (p.hp <= 0) this.killPlayer();
+    if (p.hp <= 0) this.killPlayer(p);
+  }
+
+  // ── co-op session (host-authoritative over WebRTC) ───────────────────────────
+  /** The host runs the simulation for both players and streams frames + log to the guest. */
+  startCoopHost(peer: Peer, mode: CoopMode): void {
+    this.netRole = "host"; this.peer = peer; this.coopMode = mode; this.coop = true;
+    peer.onMessage((m: NetMsg) => { if (m?.t === "input" && typeof m.key === "string") this.handleRemoteInput(m.key); });
+    peer.onState((open) => {
+      if (open) return;
+      this.log.add("Partner disconnected — finishing solo.", "bad");
+      const c = this.coPlayer;
+      if (c) { c.cancelTurn(); this.scheduler.remove(c); this.coPlayer = null; this.draw(); } // unstick the shared clock
+    });
+    this.log.onAdd = (text, cls) => peer.send({ t: "log", text, cls }); // mirror the shared log
+    peer.send({ t: "start", mode });
+    this.log.add("Co-op hosted — you are the cream @ (Host); your partner is the teal @ (Guest).", "sys");
+    this.newGame(); // a fresh shared dungeon with two adventurers
+  }
+
+  /** The guest is a thin terminal: it forwards keys and renders the host's frames. */
+  startCoopGuest(peer: Peer): void {
+    this.netRole = "guest"; this.peer = peer; this.coop = true;
+    peer.onMessage((m: NetMsg) => this.onGuestMessage(m));
+    peer.onState((open) => { if (!open) this.log.add("Host disconnected — co-op ended.", "bad"); });
+    this.log.add("Linked as Guest — waiting for the host's dungeon…", "sys");
+  }
+
+  private handleRemoteInput(key: string): void {
+    if (this.over) { if (key === "r" || key === "R") this.newGame(); return; }
+    if (this.busy) return;
+    if (this.coPlayer && this.coPlayer.alive) this.coPlayer.feed(key);
+  }
+
+  private onGuestMessage(m: NetMsg): void {
+    if (m?.t === "start") this.log.add(`Shared dungeon started (${m.mode}). You are the teal @ (Guest).`, "sys");
+    else if (m?.t === "frame") this.renderFrame(m.cells, m.huds);
+    else if (m?.t === "log") this.log.paint(m.text, (m.cls ?? "") as "" | "good" | "bad" | "sys" | "dim");
+  }
+
+  /** Guest-side render of a host frame: paint the cells + this side's HUD. */
+  private renderFrame(cells: Cell[], huds: [string, string]): void {
+    this.display.clear();
+    for (const [x, y, ch, fg] of cells) this.display.draw(x, y, ch, fg, COLORS.bg);
+    this.display.drawText(1, MAP_H + 1, huds[1] || huds[0]);
   }
 
   // ── input + render ───────────────────────────────────────────────────────
   private onKey(e: KeyboardEvent): void {
+    if (e.ctrlKey || e.metaKey || e.altKey) return; // let browser shortcuts (refresh, copy, devtools) through
+    if (this.netRole === "guest") { this.peer?.send({ t: "input", key: e.key }); e.preventDefault(); return; }
     if (this.busy) { e.preventDefault(); return; } // frozen while a wallet tx settles
     if (this.over) {
       if (e.key === "r" || e.key === "R") this.newGame();
       return;
     }
-    if (this.player.handleKey(e)) e.preventDefault();
+    if (this.coop && !this.player.alive) { e.preventDefault(); return; } // host downed — spectate
+    this.player.feed(e.key);
+    e.preventDefault();
   }
 
-  draw(): void {
-    this.display.clear();
+  /** Build the renderable map as a flat cell list (shared by local paint + the co-op stream). */
+  private buildCells(): Cell[] {
+    const cells: Cell[] = [];
+    const vis = (x: number, y: number) => this.level.isVisible(x, y);
     for (let y = 0; y < MAP_H; y++) {
       for (let x = 0; x < W; x++) {
         const t = this.level.tileAt(x, y);
         if (!t) continue;
         const g = TILE_GLYPH[t];
-        if (this.level.isVisible(x, y)) this.display.draw(x, y, g.ch, g.fg, COLORS.bg);
-        else if (this.level.explored[y][x]) this.display.draw(x, y, g.ch, g.fgDim, COLORS.bg);
+        if (vis(x, y)) cells.push([x, y, g.ch, g.fg]);
+        else if (this.level.explored[y][x]) cells.push([x, y, g.ch, g.fgDim]);
       }
     }
-    for (const g of this.level.graves) {
-      if (this.level.isVisible(g.x, g.y)) this.display.draw(g.x, g.y, "‡", "#b0a890", COLORS.bg);
-    }
-    for (const t of this.level.traps) {
-      if (t.revealed && this.level.isVisible(t.x, t.y)) this.display.draw(t.x, t.y, "^", "#d06060", COLORS.bg);
-    }
-    for (const pr of this.level.portals) {
-      if (this.level.isVisible(pr.x, pr.y)) this.display.draw(pr.x, pr.y, "Ω", pr.chain.color, COLORS.bg);
-    }
-    for (const e of this.level.engravings) {
-      if (this.level.isVisible(e.x, e.y)) this.display.draw(e.x, e.y, "§", "#b0a060", COLORS.bg); // later layers (items/actors) cover it
-    }
-    for (const fi of this.level.items) {
-      if (this.level.isVisible(fi.x, fi.y)) this.display.draw(fi.x, fi.y, fi.type.ch, fi.type.fg, fi.price ? "#2a2208" : COLORS.bg);
-    }
+    for (const g of this.level.graves) if (vis(g.x, g.y)) cells.push([g.x, g.y, "‡", "#b0a890"]);
+    for (const t of this.level.traps) if (t.revealed && vis(t.x, t.y)) cells.push([t.x, t.y, "^", "#d06060"]);
+    for (const pr of this.level.portals) if (vis(pr.x, pr.y)) cells.push([pr.x, pr.y, "Ω", pr.chain.color]);
+    for (const e of this.level.engravings) if (vis(e.x, e.y)) cells.push([e.x, e.y, "§", "#b0a060"]);
+    for (const fi of this.level.items) if (vis(fi.x, fi.y)) cells.push([fi.x, fi.y, fi.type.ch, fi.type.fg]);
     for (const m of this.monsters) {
-      if (!m.alive || !this.level.isVisible(m.x, m.y)) continue;
-      const dormant = m.def.mimic && !m.revealed; // a honeypot shows as loot until sprung
-      this.display.draw(m.x, m.y, dormant ? m.disguiseCh : m.ch, dormant ? m.disguiseFg : m.fg, COLORS.bg);
+      if (!m.alive || !vis(m.x, m.y)) continue;
+      const dormant = m.def.mimic && !m.revealed;
+      cells.push([m.x, m.y, dormant ? m.disguiseCh : m.ch, dormant ? m.disguiseFg : m.fg]);
     }
-    if (this.pet && this.pet.alive && this.level.isVisible(this.pet.x, this.pet.y)) {
-      this.display.draw(this.pet.x, this.pet.y, this.pet.ch, this.pet.fg, COLORS.bg);
+    if (this.pet && this.pet.alive && vis(this.pet.x, this.pet.y)) cells.push([this.pet.x, this.pet.y, this.pet.ch, this.pet.fg]);
+    for (const pl of this.allPlayers()) {
+      if (pl.alive) cells.push([pl.x, pl.y, "@", pl === this.player ? pl.fg : PARTNER_FG]);
     }
-    this.display.draw(this.player.x, this.player.y, this.player.ch, this.player.fg, COLORS.bg);
+    return cells;
+  }
 
-    const p = this.player;
+  private buildHud(p: Player): string {
     const hpCol = p.hp <= p.maxHp * 0.3 ? COLORS.bad : COLORS.good;
     const hunger = p.hungerWord();
-    this.display.drawText(
-      1, MAP_H + 1,
+    return (
       `%c{${COLORS.dim}}HP %c{${hpCol}}${p.hp}%c{${COLORS.dim}}/${p.maxHp}  Depth %c{${COLORS.gold}}${p.depth}` +
       (this.currentChain ? `%c{${COLORS.dim}} @%c{${this.currentChain.color}}${this.currentChain.name}` : `%c{${COLORS.dim}} @%c{${COLORS.dim}}Relay`) +
       `%c{${COLORS.dim}}  AC %c{${COLORS.good}}${p.ac}` +
-      `%c{${COLORS.dim}}  PAS %c{${COLORS.gold}}${p.pas.toFixed(1)}` +
+      (this.coop ? "" : `%c{${COLORS.dim}}  PAS %c{${COLORS.gold}}${p.pas.toFixed(1)}`) +
       (hunger ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}${hunger}` : "") +
       (p.poison > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Psn` : "") +
       (p.confused > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Cfz` : "") +
-      (p.hasJam ? `%c{${COLORS.dim}}  %c{${COLORS.gold}}✦JAM — ASCEND (<)` : `%c{${COLORS.dim}}  JAM: depth ${MAX_DEPTH}`),
+      (p.hasJam ? `%c{${COLORS.dim}}  %c{${COLORS.gold}}✦JAM — ASCEND (<)` : `%c{${COLORS.dim}}  JAM: depth ${MAX_DEPTH}`)
     );
+  }
+
+  private buildHuds(): [string, string] {
+    return [this.buildHud(this.player), this.coPlayer ? this.buildHud(this.coPlayer) : ""];
+  }
+
+  draw(): void {
+    if (this.netRole === "guest") return; // the guest only paints frames it receives
+    const cells = this.buildCells();
+    const huds = this.buildHuds();
+    this.display.clear();
+    for (const [x, y, ch, fg] of cells) this.display.draw(x, y, ch, fg, COLORS.bg);
+    this.display.drawText(1, MAP_H + 1, huds[0]);
+    if (this.netRole === "host" && this.peer) this.peer.send({ t: "frame", cells, huds });
   }
 }

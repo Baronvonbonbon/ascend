@@ -85,6 +85,11 @@ export class Level {
 
   computeFOV(px: number, py: number, radius = 8): void {
     this.visible.clear();
+    this.addFOV(px, py, radius);
+  }
+
+  /** Add one viewpoint's field of view to the visible set (for multi-player union FOV). */
+  addFOV(px: number, py: number, radius = 8): void {
     this.fov.compute(px, py, radius, (x: number, y: number, _r: number, vis: number) => {
       if (vis > 0 && this.tiles[y]?.[x]) {
         this.visible.add(`${x},${y}`);

@@ -4,12 +4,20 @@ type Kind = "" | "good" | "bad" | "sys" | "dim";
 
 export class Log {
   private el: HTMLElement;
+  /** Co-op hook: the host mirrors every log line to the guest. */
+  onAdd: ((text: string, kind: Kind) => void) | null = null;
 
   constructor(el: HTMLElement) {
     this.el = el;
   }
 
   add(text: string, kind: Kind = "") {
+    this.paint(text, kind);
+    this.onAdd?.(text, kind);
+  }
+
+  /** Append a line without re-broadcasting it (used when rendering a remote log line). */
+  paint(text: string, kind: Kind = "") {
     const div = document.createElement("div");
     if (kind) div.className = `msg--${kind}`;
     div.textContent = text;

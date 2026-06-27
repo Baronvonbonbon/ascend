@@ -90,6 +90,9 @@ export class Player extends Entity {
   private pendingDir: Item | null = null; // a wand awaiting a zap direction
   private pendingThrow: Item | null = null; // an item awaiting a throw direction
   private resolveTurn: (() => void) | null = null;
+  // Interleaved co-op turns: keys are queued and consumed only on this player's turn.
+  private inputQueue: string[] = [];
+  private awaiting = false;
 
   constructor(game: Game, x: number, y: number) {
     super(game);
@@ -104,7 +107,35 @@ export class Player extends Entity {
 
   act(): Promise<void> {
     this.game.draw(); // start of the player's turn = monsters have moved
-    return new Promise((resolve) => { this.resolveTurn = resolve; });
+    return new Promise((resolve) => {
+      this.resolveTurn = resolve;
+      this.awaiting = true;
+      this.drainQueue(); // consume any input already queued for us
+    });
+  }
+
+  /** Queue a keystroke for this player; process it now if it's our turn. */
+  feed(key: string): void {
+    this.inputQueue.push(key);
+    if (this.inputQueue.length > 16) this.inputQueue.shift();
+    if (this.awaiting) this.drainQueue();
+  }
+
+  private drainQueue(): void {
+    while (this.awaiting && this.inputQueue.length) {
+      const key = this.inputQueue.shift()!;
+      const consumed = this.handleKey({ key } as KeyboardEvent);
+      if (consumed) { this.awaiting = false; break; } // endTurn() already resolved the turn
+    }
+  }
+
+  /** Release a pending turn without acting — used when a co-op partner drops out. */
+  cancelTurn(): void {
+    this.inputQueue = [];
+    this.awaiting = false;
+    const r = this.resolveTurn;
+    this.resolveTurn = null;
+    if (r) r();
   }
 
   private endTurn(): boolean {
@@ -115,7 +146,7 @@ export class Player extends Entity {
     if (this.poison > 0) {
       this.poison--; this.hp--;
       if (this.poison === 0) this.game.log.add("The poison passes.", "dim");
-      if (this.hp <= 0) { this.game.log.add("The poison takes you.", "bad"); this.game.killPlayer(); }
+      if (this.hp <= 0) { this.game.log.add(`The poison takes ${this.name}.`, "bad"); this.game.killPlayer(this); }
     }
     if (this.confused > 0 && --this.confused === 0) this.game.log.add("Your head clears.", "dim");
     // Natural regeneration (faster with a ring of regeneration; not while starving/poisoned).
@@ -135,8 +166,8 @@ export class Player extends Entity {
     else if (this.nutrition <= 0) {
       this.nutrition = 0;
       this.hp -= 1;
-      this.game.log.add("You are starving!", "bad");
-      if (this.hp <= 0) this.game.killPlayer();
+      this.game.log.add(`${this.name === "you" ? "You are" : this.name + " is"} starving!`, "bad");
+      if (this.hp <= 0) this.game.killPlayer(this);
     }
   }
 
@@ -149,6 +180,7 @@ export class Player extends Entity {
 
   /** Returns true if a turn was consumed (a key the engine should act on). */
   handleKey(e: KeyboardEvent): boolean {
+    this.game.acting = this; // the player whose action this is (co-op: host or guest avatar)
     if (this.pendingDir) return this.resolveZapDir(e);
     if (this.pendingThrow) return this.resolveThrowDir(e);
     if (this.pending) return this.resolveSelection(e);
@@ -329,9 +361,15 @@ export class Player extends Entity {
     const nx = this.x + dx, ny = this.y + dy;
     const foe = this.game.monsterAt(nx, ny);
     if (foe) { this.game.attack(this, foe); return this.endTurn(); }
+    // Bumping your co-op partner: blocked in pure co-op, a strike under friendly-fire / race.
+    const ally = this.game.otherPlayerAt(this, nx, ny);
+    if (ally) {
+      if (this.game.coopMode === "coop") return false;
+      this.game.attack(this, ally); return this.endTurn();
+    }
     if (!this.game.level.isPassable(nx, ny)) return false; // bumping a wall costs no turn
     this.x = nx; this.y = ny;
-    this.game.level.computeFOV(this.x, this.y);
+    this.game.recomputeFOV();
     const here = this.game.level.itemAt(this.x, this.y);
     if (here) {
       const nm = this.game.ident.name(here.type);
@@ -413,7 +451,7 @@ export class Monster extends Entity {
   }
 
   act(): void {
-    const p = this.game.player;
+    const p = this.game.nearestPlayer(this.x, this.y); // target the closer of the party
     if (!p.alive || !this.alive) return;
 
     // A dormant honeypot just waits, wearing its loot disguise, until something touches it.
@@ -428,7 +466,7 @@ export class Monster extends Entity {
     // A Gray-Paper ward beneath the player holds ordinary foes at bay — they won't
     // attack or close in. Bosses and the Censor fear no scripture.
     if (!this.def.boss && !this.def.fearless && this.game.level.engravingAt(p.x, p.y)) {
-      this.wanderStep(p);
+      this.wanderStep();
       return;
     }
 
@@ -438,7 +476,7 @@ export class Monster extends Entity {
     const dist = Math.max(Math.abs(this.x - p.x), Math.abs(this.y - p.y));
     // The rug pull: a thief adjacent to you snatches a pack item and blinks away.
     if (this.def.steals && dist === 1) {
-      const loot = this.game.stealItem();
+      const loot = this.game.stealItem(p);
       if (loot) {
         this.stolen = loot;
         const who = this.name.charAt(0).toUpperCase() + this.name.slice(1);
@@ -468,21 +506,22 @@ export class Monster extends Entity {
       path.shift(); // drop current tile
       if (path.length) {
         const [nx, ny] = path[0];
-        if (nx === p.x && ny === p.y) { this.game.attack(this, p); return; }
+        const tgt = this.game.playerAt(nx, ny);
+        if (tgt) { this.game.attack(this, tgt); return; }
         if (!this.game.monsterAt(nx, ny)) { this.x = nx; this.y = ny; }
       }
       return;
     }
 
     // Wander.
-    this.wanderStep(p);
+    this.wanderStep();
   }
 
-  /** A random shuffle into an open neighbour — never onto the player. */
-  private wanderStep(p: Player): void {
+  /** A random shuffle into an open neighbour — never onto a player. */
+  private wanderStep(): void {
     const d = ROT.RNG.getItem([[-1, 0], [1, 0], [0, -1], [0, 1]] as [number, number][])!;
     const nx = this.x + d[0], ny = this.y + d[1];
-    if (this.game.level.isPassable(nx, ny) && !this.game.monsterAt(nx, ny) && !(nx === p.x && ny === p.y)) {
+    if (this.game.level.isPassable(nx, ny) && !this.game.monsterAt(nx, ny) && !this.game.playerAt(nx, ny)) {
       this.x = nx; this.y = ny;
     }
   }
@@ -492,7 +531,7 @@ export class Monster extends Entity {
     let best: [number, number] | null = null, bestD = -1;
     for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [1, 1], [-1, -1], [1, -1], [-1, 1]] as [number, number][]) {
       const nx = this.x + dx, ny = this.y + dy;
-      if (!this.game.level.isPassable(nx, ny) || this.game.monsterAt(nx, ny) || (nx === p.x && ny === p.y)) continue;
+      if (!this.game.level.isPassable(nx, ny) || this.game.monsterAt(nx, ny) || this.game.playerAt(nx, ny)) continue;
       const d = Math.max(Math.abs(nx - p.x), Math.abs(ny - p.y));
       if (d > bestD) { bestD = d; best = [nx, ny]; }
     }
@@ -504,7 +543,7 @@ export class Monster extends Entity {
     for (let i = 0; i < 30; i++) {
       const pos = this.game.level.randomFloor();
       const d = Math.max(Math.abs(pos.x - p.x), Math.abs(pos.y - p.y));
-      if (d >= 8 && !this.game.monsterAt(pos.x, pos.y) && !(pos.x === p.x && pos.y === p.y)) { this.x = pos.x; this.y = pos.y; return; }
+      if (d >= 8 && !this.game.monsterAt(pos.x, pos.y) && !this.game.playerAt(pos.x, pos.y)) { this.x = pos.x; this.y = pos.y; return; }
     }
   }
 }

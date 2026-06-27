@@ -6,9 +6,6 @@ import { hostOffer, guestAnswer, Peer } from "./peer";
 import type { Game } from "../game";
 
 export type CoopMode = "solo" | "coop" | "coop-ff" | "race";
-const MODE_LABEL: Record<CoopMode, string> = {
-  solo: "Solo", coop: "Co-op", "coop-ff": "Co-op + friendly fire", race: "Race to the JAM",
-};
 
 export function initLobby(game: Game): void {
   const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T | null;
@@ -24,18 +21,8 @@ export function initLobby(game: Game): void {
 
   const connected = (peer: Peer, role: "host" | "guest", m: CoopMode) => {
     lobby.hidden = true;
-    game.log.add(`Co-op link established — you are the ${role}. Mode: ${MODE_LABEL[m]}.`, "sys");
-    game.log.add("Channel verified. Live same-dungeon sync is the next stage.", "dim");
-    let pinged = 0;
-    peer.onMessage((msg) => {
-      if (msg?.t === "hello") game.log.add(`Partner joined (${MODE_LABEL[(msg.mode as CoopMode) ?? m] ?? "?"}).`, "good");
-      else if (msg?.t === "ping") peer.send({ t: "pong", at: msg.at });
-      else if (msg?.t === "pong") game.log.add(`Partner round-trip: ${Date.now() - msg.at} ms — both directions live.`, "good");
-    });
-    peer.onState((open) => { if (!open) game.log.add("Partner disconnected.", "bad"); });
-    peer.send({ t: "hello", role, mode: m });
-    pinged = Date.now();
-    peer.send({ t: "ping", at: pinged });
+    if (role === "host") game.startCoopHost(peer, m);
+    else game.startCoopGuest(peer);
   };
 
   // ── Host flow ──
