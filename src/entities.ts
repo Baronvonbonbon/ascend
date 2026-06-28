@@ -63,6 +63,8 @@ export class Player extends Entity {
   illness = 0;         // turns until food poisoning kills you — cure fast
   blind = 0;           // turns of blindness — FOV shrinks to your fingertips
   intrinsics = new Set<string>(); // poisonResist, petrifyResist, fast (from eating corpses)
+  skillXp: Record<string, number> = {};   // landed hits per weapon-skill class (#enhance)
+  skillRank: Record<string, number> = {};  // 0 Unskilled · 1 Basic · 2 Skilled · 3 Expert
   private regenTimer = 0;
   hasJam = false;
   maxDepthReached = 1;
@@ -282,6 +284,7 @@ export class Player extends Entity {
       case "c": this.pendingChat = true; this.game.log.add("Chat in which direction? (a move key, Esc to cancel)", "sys"); return false;
       case ";": this.pendingLook = true; this.game.log.add("Look in which direction? (a move key, Esc to cancel)", "sys"); return false;
       case "/": this.pendingWhatIs = true; this.game.log.add("What is that symbol? (type any glyph, Esc to cancel)", "sys"); return false;
+      case "x": this.game.enhanceSkills(this); return false; // #enhance — a free review/advance
       case "a": return this.startSelect("apply");
       case "Z": return this.startCast();
       case "O": return this.game.offerCorpse(this) ? this.endTurn() : false;

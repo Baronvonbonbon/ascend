@@ -44,6 +44,7 @@ export interface ItemType {
   nutrition?: number;      // food
   effect?: EffectId;       // potion / scroll
   teaches?: string;        // spellbook — the spell id it studies into
+  skill?: string;          // weapon skill class (#enhance) — "blade" / "blunt"
   weight: number;          // spawn weight
 }
 
@@ -51,9 +52,9 @@ export type EffectId = "heal" | "harm" | "strength" | "teleport" | "map" | "iden
 
 export const ITEMS: ItemType[] = [
   // ── weapons ── )
-  { id: "dagger", kind: "weapon", name: "a debug dagger",      ch: ")", fg: "#cfcf9a", dmg: [2, 4], weight: 5 },
-  { id: "sword",  kind: "weapon", name: "a consensus sword",   ch: ")", fg: "#dfe6f0", dmg: [3, 6], weight: 3 },
-  { id: "mace",   kind: "weapon", name: "a validator's mace",  ch: ")", fg: "#c0a060", dmg: [4, 9], weight: 2 },
+  { id: "dagger", kind: "weapon", name: "a debug dagger",      ch: ")", fg: "#cfcf9a", dmg: [2, 4], skill: "blade", weight: 5 },
+  { id: "sword",  kind: "weapon", name: "a consensus sword",   ch: ")", fg: "#dfe6f0", dmg: [3, 6], skill: "blade", weight: 3 },
+  { id: "mace",   kind: "weapon", name: "a validator's mace",  ch: ")", fg: "#c0a060", dmg: [4, 9], skill: "blunt", weight: 2 },
   // ── armor ── [ (seven slots — wear one of each)
   { id: "shirt",  kind: "armor",  name: "a hashguard shirt",   ch: "[", fg: "#a0b0a0", ac: 1, slot: "shirt",  weight: 3 },
   { id: "vest",   kind: "armor",  name: "a firewall vest",     ch: "[", fg: "#9ac0c0", ac: 2, slot: "body",   weight: 5 },

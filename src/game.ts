@@ -26,6 +26,9 @@ const MAP_H = 30;
 const H = MAP_H + 2; // + a blank row + the status line
 const MEMPOOL_DEPTH = 5; // the Big Room special level — "the Mempool"
 const VAULT_CAP = 12; // a multisig vault holds up to this many stashed items
+const SKILL_RANKS = ["Unskilled", "Basic", "Skilled", "Expert"]; // weapon-skill ranks (#enhance)
+const SKILL_NEED = [0, 20, 60, 140]; // landed hits to reach each rank
+const SKILL_LABEL: Record<string, string> = { blade: "blades", blunt: "bludgeons", martial: "martial arts" };
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -873,8 +876,9 @@ export class Game {
     if (a instanceof Player) { const e = this.level.engravingAt(a.x, a.y); if (e) e.life -= 3; }
     const [lo, hi] = a.attackDmg;
     let dmg = ROT.RNG.getUniformInt(lo, hi);
-    if (a instanceof Player) dmg = Math.max(1, dmg + abilityMod(a.str)); // Stake-weight drives the blow
+    if (a instanceof Player) dmg = Math.max(1, dmg + abilityMod(a.str) + this.skillDmgBonus(a)); // Stake-weight + trained skill drive the blow
     d.hp -= dmg;
+    if (a instanceof Player && d instanceof Monster) this.noteSkillHit(a); // a landed blow trains the weapon's skill
     // A rust/corrosion striker (rust bug) eats away a random worn piece on a hit.
     if (a instanceof Monster && !a.cancelled && a.def.corrodes && d instanceof Player) this.corrodeArmor(d);
     if (a instanceof Player && d instanceof Monster) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg}.`, "good");
@@ -899,7 +903,8 @@ export class Game {
     if (roll === 20) return true;
     if (roll === 1) return false;
     let acc = 0, eva = 0;
-    if (a instanceof Player) acc = a.level + abilityMod(a.dex) + (a.weapon?.enchant ?? 0) - (a.blind > 0 ? 3 : 0) + Math.round(this.luckOf(a) / 3); // swinging blind; Fortune sways the roll
+    if (a instanceof Player) acc = a.level + abilityMod(a.dex) + (a.weapon?.enchant ?? 0) + this.skillAccBonus(a) - (a.blind > 0 ? 3 : 0) + Math.round(this.luckOf(a) / 3); // weapon mastery + Fortune sway the roll; blind swings miss
+
     else if (a instanceof Monster) acc = 2 + Math.floor(a.maxHp / 8);
     if (d instanceof Player) eva = abilityMod(d.dex) + Math.floor(d.level / 3) + Math.floor(d.ac / 2) + Math.round(this.luckOf(d) / 3); // armor is dodge now; Fortune helps you slip
     else if (d instanceof Monster) eva = d.def.speed ? Math.max(0, Math.floor((d.def.speed - 100) / 12)) : 0;
@@ -911,6 +916,42 @@ export class Game {
     let l = p.luck;
     for (const it of p.inventory.items) if (it.type.id === "hodlstone") l += it.buc === "blessed" ? 2 : it.buc === "cursed" ? -2 : 0;
     return Math.max(-13, Math.min(13, l));
+  }
+
+  // ── #enhance: weapon skills ──
+  private weaponSkillClass(p: Player): string { return p.weapon?.type.skill ?? "martial"; }
+  /** To-hit bonus from your trained rank with the wielded weapon's class. */
+  skillAccBonus(p: Player): number { return p.skillRank[this.weaponSkillClass(p)] ?? 0; }
+  /** A touch of extra damage at Skilled (+1) and Expert (+2). */
+  skillDmgBonus(p: Player): number { const r = p.skillRank[this.weaponSkillClass(p)] ?? 0; return r >= 3 ? 2 : r >= 2 ? 1 : 0; }
+
+  /** Tally a landed melee blow toward the wielded weapon's skill. */
+  noteSkillHit(p: Player): void {
+    const c = this.weaponSkillClass(p);
+    p.skillXp[c] = (p.skillXp[c] ?? 0) + 1;
+    const rank = p.skillRank[c] ?? 0;
+    if (rank < 3 && p.skillXp[c] === SKILL_NEED[rank + 1]) this.log.add(`${this.sub(p)} ${this.verbS(p, "feel")} more practiced with ${SKILL_LABEL[c] ?? c}. (press x to #enhance)`, "sys");
+  }
+
+  /** `x` / #enhance — advance any ready skill a rank; otherwise show the skill sheet. A free action. */
+  enhanceSkills(p: Player): void {
+    const classes = Object.keys(p.skillXp);
+    if (classes.length === 0) { this.log.add("You have landed no weapon blows yet — nothing to enhance.", "dim"); return; }
+    let advanced = false;
+    for (const c of classes) {
+      const rank = p.skillRank[c] ?? 0;
+      if (rank < 3 && (p.skillXp[c] ?? 0) >= SKILL_NEED[rank + 1]) {
+        p.skillRank[c] = rank + 1; advanced = true;
+        this.log.add(`${this.sub(p)} ${this.verbS(p, "advance")} to ${SKILL_RANKS[rank + 1]} with ${SKILL_LABEL[c] ?? c}!`, "good");
+      }
+    }
+    if (advanced) { this.draw(); return; }
+    this.log.add("— Weapon skills —", "sys");
+    for (const c of classes) {
+      const rank = p.skillRank[c] ?? 0, xp = p.skillXp[c] ?? 0;
+      const next = rank < 3 ? ` (${xp}/${SKILL_NEED[rank + 1]} to ${SKILL_RANKS[rank + 1]})` : " (maxed)";
+      this.log.add(`  ${SKILL_LABEL[c] ?? c}: ${SKILL_RANKS[rank]}${next}`, "dim");
+    }
   }
 
   /** Erode a random unproofed worn piece (rust/corrosion), reducing its evasion. */
