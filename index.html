@@ -29,6 +29,9 @@
       #charbar { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--dim); flex-wrap: wrap; justify-content: center; }
       #charbar select { font-family: inherit; font-size: 12px; color: var(--ink); background: #1c1c20; border: 1px solid #3a361f; border-radius: 4px; padding: 3px 8px; }
       #charbar .hint { color: var(--dim); }
+      #audiobar { display: flex; align-items: center; gap: 8px; font-size: 12px; justify-content: center; }
+      #audiobar button, #audiobar select { font-family: inherit; font-size: 12px; color: var(--gold); background: #1c1c20; border: 1px solid #3a361f; border-radius: 4px; padding: 3px 8px; cursor: pointer; }
+      #audiobar button.on { color: #76c66a; border-color: #2f6a28; }
       a { color: var(--gold); }
 
       /* ── co-op lobby ── */
@@ -67,7 +70,7 @@
         #log { height: 96px; }
       }
     </style>
-    <script type="module" crossorigin src="/ascend/assets/index-DyHkHy6n.js"></script>
+    <script type="module" crossorigin src="/ascend/assets/index-ByyA-ynA.js"></script>
   </head>
   <body>
     <div id="app">
@@ -81,6 +84,13 @@
           <option value="builder">Builder — versatile</option>
         </select>
         <span class="hint">press <b>R</b> to (re)start as this · <b>@</b> sheet</span>
+      </div>
+      <div id="audiobar">
+        <button id="music-toggle" title="Toggle music">♪ Music: off</button>
+        <select id="music-pick" title="Soundtrack">
+          <option value="auto">Auto (by area)</option>
+          <option value="shuffle">Shuffle all</option>
+        </select>
       </div>
       <div id="wallet">
         <button id="connect">Connect Wallet</button>
