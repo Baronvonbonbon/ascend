@@ -35,6 +35,11 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > resurrects** and won't stop — every ~45–75 turns (and on every new level) it
 > rises near you, a relentless 48-HP pursuer. Let it reach you and it may **snatch
 > the JAM and blink away**; the only way back is to **hunt it down and kill it**.
+>
+> **The maze of Hell (Phase 12e).** Gehennom (d9–11) is no longer ordinary rooms —
+> it generates as a **claustrophobic perfect maze** of narrow, lightless corridors,
+> stripped of all shops, faucets, thrones and altars. Only demons, traps, and the
+> hunting Censor await in the dark.
 > **Phase 4 — persistence & social** is in: when a run ends (death or ASCENSION)
 > it's recorded on-chain **gaslessly** (you sign, the relay submits) into the
 > **AscendLedger** Hall of Fame (`H` to view), and fallen heroes leave **bones**

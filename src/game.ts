@@ -263,14 +263,17 @@ export class Game {
     if (this.plane > 0) {
       this.setupPlane();
     } else {
+      const cozy = this.level.kind !== "maze"; // Gehennom's mazes have no shops, faucets, thrones, or chests
       this.spawnMonsters();
       this.spawnItems();
-      this.spawnShop();
-      this.placeAltar();
-      this.placeFeature("faucet", 0.3);
-      this.placeFeature("throne", 0.16);
-      this.placeChest(0.35);
-      this.placeBoulders();
+      if (cozy) {
+        this.spawnShop();
+        this.placeAltar();
+        this.placeFeature("faucet", 0.3);
+        this.placeFeature("throne", 0.16);
+        this.placeChest(0.35);
+        this.placeBoulders();
+      }
       this.maybePlaceBones();
       this.spawnTraps();
       this.placePortals();
@@ -331,13 +334,13 @@ export class Game {
   descend(): void {
     this.player.depth++;
     this.player.maxDepthReached = Math.max(this.player.maxDepthReached, this.player.depth);
-    const big = !this.currentChain && this.player.depth === MEMPOOL_DEPTH;
-    this.level = new Level(W, MAP_H, big ? "bigroom" : "normal");
+    this.level = new Level(W, MAP_H, this.currentChain ? "normal" : this.levelKindFor(this.player.depth));
     this.player.x = this.level.start.x;
     this.player.y = this.level.start.y;
     this.placeUpStair();
     this.enterLevel();
-    if (big) this.log.add("You descend into THE MEMPOOL — a vast open churn of pending chaos. Loot, and a swarm.", "bad");
+    if (this.level.kind === "bigroom") this.log.add("You descend into THE MEMPOOL — a vast open churn of pending chaos. Loot, and a swarm.", "bad");
+    else if (this.level.kind === "maze") this.log.add(`You descend into the maze of ${realmName(this.player.depth)} — narrow, lightless, and patient.`, "bad");
     else this.log.add(`You descend to depth ${this.player.depth} — ${realmName(this.player.depth)}.`, this.player.depth >= 7 ? "bad" : "sys");
     if (this.player.depth >= 7 && this.player.depth < MAX_DEPTH) this.log.add("Chaos thickens. Expect Kusama.", "bad");
     if (this.player.depth === MAX_DEPTH && !this.gehennomOpen) this.log.add("The foot of the relay. The vibrating square (≈) hums — perform the Invocation (I) with all three relics.", "bad");
@@ -405,7 +408,7 @@ export class Game {
       return;
     }
     this.player.depth = newDepth;
-    this.level = new Level(W, MAP_H);
+    this.level = new Level(W, MAP_H, this.levelKindFor(newDepth));
     this.player.x = this.level.stairs.x; // you climb up INTO the down-stairs of the level above
     this.player.y = this.level.stairs.y;
     if (newDepth > 1) this.placeUpStair();
@@ -517,6 +520,13 @@ export class Game {
   private placeUpStair(): void {
     const s = this.level.start;
     this.level.tiles[s.y][s.x] = "stairsUp";
+  }
+
+  /** Which level layout a depth uses: the Mempool big room, a Gehennom maze, or normal rooms. */
+  private levelKindFor(depth: number): "normal" | "bigroom" | "maze" {
+    if (depth === MEMPOOL_DEPTH) return "bigroom";
+    if (depth > MAX_DEPTH && depth < GEHENNOM_BOTTOM) return "maze"; // Gehennom 9–11: claustrophobic mazes
+    return "normal";
   }
 
   private placeJamAndBoss(): void {

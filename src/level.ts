@@ -25,13 +25,13 @@ export class Level {
   roomCenters: { x: number; y: number }[] = [];
   start = { x: 1, y: 1 };
   stairs = { x: 1, y: 1 };
-  readonly kind: "normal" | "bigroom";
+  readonly kind: "normal" | "bigroom" | "maze";
 
   private visible = new Set<string>();
   private fov: InstanceType<typeof ROT.FOV.PreciseShadowcasting>;
   private floors: { x: number; y: number }[] = [];
 
-  constructor(width: number, height: number, kind: "normal" | "bigroom" = "normal") {
+  constructor(width: number, height: number, kind: "normal" | "bigroom" | "maze" = "normal") {
     this.width = width;
     this.height = height;
     this.kind = kind;
@@ -43,8 +43,30 @@ export class Level {
         this.explored[y][x] = false;
       }
     }
-    if (kind === "bigroom") this.generateBigRoom(); else this.generate();
+    if (kind === "bigroom") this.generateBigRoom();
+    else if (kind === "maze") this.generateMaze();
+    else this.generate();
     this.fov = new ROT.FOV.PreciseShadowcasting((x, y) => this.lightPasses(x, y));
+  }
+
+  /** Gehennom: a claustrophobic perfect maze of narrow corridors (NetHack's Hell). */
+  private generateMaze(): void {
+    const maze = new ROT.Map.EllerMaze(this.width, this.height);
+    maze.create((x, y, wall) => {
+      if (!wall && x > 0 && y > 0 && x < this.width - 1 && y < this.height - 1) {
+        this.tiles[y][x] = "floor";
+        this.floors.push({ x, y });
+      }
+    });
+    if (this.floors.length === 0) { this.generate(); return; } // safety net
+    // start at one corner-most floor; the down-stair at the farthest reachable floor
+    this.start = this.floors.reduce((a, b) => (a.x + a.y <= b.x + b.y ? a : b));
+    let far = this.start, best = -1;
+    for (const f of this.floors) { const d = Math.abs(f.x - this.start.x) + Math.abs(f.y - this.start.y); if (d > best) { best = d; far = f; } }
+    this.stairs = { ...far };
+    this.tiles[this.stairs.y][this.stairs.x] = "stairsDown";
+    // sample floors as "room centres" so features/monsters scatter through the maze
+    this.roomCenters = ROT.RNG.shuffle(this.floors.slice()).slice(0, 16);
   }
 
   /** The Mempool: one vast open chamber (NetHack's Big Room) — a swarm arena. */
