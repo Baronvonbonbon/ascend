@@ -124,6 +124,7 @@ export class Player extends Entity {
   private pendingWrite: Item | null = null; // a contract deployer awaiting a scroll choice
   private pendingSpell = false;             // choosing a spell to cast
   private pendingCastDir: string | null = null; // a directional spell awaiting a direction
+  private pendingChat = false;              // choosing a direction to chat
   private castMenu: string[] = [];          // spell ids in the current cast menu order
   private resolveTurn: (() => void) | null = null;
   // Interleaved co-op turns: keys are queued and consumed only on this player's turn.
@@ -245,6 +246,7 @@ export class Player extends Entity {
     if (this.pendingApply) return this.resolveApplyDir(e);
     if (this.pendingWrite) return this.resolveWrite(e);
     if (this.pendingCastDir) return this.resolveCastDir(e);
+    if (this.pendingChat) return this.resolveChatDir(e);
     if (this.pendingSpell) return this.resolveCast(e);
     if (this.pending) return this.resolveSelection(e);
     const mv = MOVES[e.key];
@@ -271,6 +273,7 @@ export class Player extends Entity {
       case "t": return this.startSelect("throw");
       case "Q": return this.startSelect("quiver");
       case "f": return this.fireQuiver();
+      case "c": this.pendingChat = true; this.game.log.add("Chat in which direction? (a move key, Esc to cancel)", "sys"); return false;
       case "a": return this.startSelect("apply");
       case "Z": return this.startCast();
       case "O": return this.game.offerCorpse(this) ? this.endTurn() : false;
@@ -395,6 +398,17 @@ export class Player extends Entity {
     if (this.isWelded(this.quiver)) { this.quiver.bucKnown = true; this.game.log.add("Your readied missile is cursed to your hand!", "bad"); this.quiver = null; return false; }
     this.pendingThrow = this.quiver;
     this.game.log.add("Fire in which direction? (a move key, Esc to cancel)", "sys");
+    return false;
+  }
+
+  private resolveChatDir(e: KeyboardEvent): boolean {
+    this.pendingChat = false;
+    if (e.key === "Escape") { this.game.log.add("Never mind.", "dim"); return false; }
+    const mv = MOVES[e.key];
+    if (!mv) { this.game.log.add("That is not a direction.", "dim"); return false; }
+    const foe = this.game.monsterAt(this.x + mv[0], this.y + mv[1]);
+    if (!foe) { this.game.log.add("There's no one there to chat with.", "dim"); return false; }
+    this.game.chat(foe); // a free social action — costs no turn
     return false;
   }
 

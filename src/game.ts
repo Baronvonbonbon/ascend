@@ -511,6 +511,49 @@ export class Game {
     return true;
   }
 
+  /** `c` — chat with an adjacent monster. A free social action; lore, banter, or a taunt. */
+  chat(m: Monster): void {
+    const d = m.def;
+    let line: string;
+    if (d.keeper) {
+      line = m.peaceful
+        ? ROT.RNG.getItem([
+            "\"Welcome, anon. Pay the bill and the goods are yours — lift them and I'll have your keys.\"",
+            "\"Liquidity's deep today. Drop your PAS on the counter, no slippage.\"",
+            "\"I make markets in everything but trust. That, you bring yourself.\"",
+          ])!
+        : "\"THIEF! You'll settle this in blood, not blocks!\"";
+    } else if (d.boss) {
+      line = ROT.RNG.getItem([
+        `${cap(m.name)} regards you coldly: \"You are an unconfirmed transaction. I am finality.\"`,
+        `${cap(m.name)} sneers: \"Turn back, validator. The JAM is not for the likes of you.\"`,
+      ])!;
+    } else if (d.name.includes("oracle")) {
+      line = "The oracle intones: " + ROT.RNG.getItem([
+        "\"Seek the vibrating square where consensus trembles.\"",
+        "\"Three relics gate the Genesis: the Sigil, the Seal, and the Spec.\"",
+        "\"A blessed audit proofs your armour against the rust of forks.\"",
+        "\"The Censor fears only a finalized block — and a sharp blade.\"",
+      ])!;
+    } else if (m.peaceful) {
+      line = ROT.RNG.getItem([
+        `${cap(m.name)} nods to you and keeps watch.`,
+        `${cap(m.name)} murmurs, \"We nominate the same cause, friend.\"`,
+      ])!;
+    } else if (d.cowardly) {
+      line = `${cap(m.name)} whimpers, \"I'm just exit liquidity, please — don't!\"`;
+    } else if (d.steals) {
+      line = `${cap(m.name)} grins, eyeing your pack. \"Nice keys. Be a shame if they got... rugged.\"`;
+    } else {
+      line = ROT.RNG.getItem([
+        `${cap(m.name)} snarls and pays you no heed.`,
+        `${cap(m.name)} hisses something in raw bytecode.`,
+        `${cap(m.name)} bares its teeth — no words, only malice.`,
+      ])!;
+    }
+    this.log.add(line, m.peaceful ? "sys" : "dim");
+  }
+
   /** Kick a locked door — Stake-weight (STR) decides if it bursts; sometimes you stub your foot. */
   kickDoor(p: Player, nx: number, ny: number): boolean {
     const chance = Math.max(0.15, 0.3 + abilityMod(p.str) * 0.08);
