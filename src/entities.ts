@@ -285,6 +285,7 @@ export class Player extends Entity {
       case ";": this.pendingLook = true; this.game.log.add("Look in which direction? (a move key, Esc to cancel)", "sys"); return false;
       case "/": this.pendingWhatIs = true; this.game.log.add("What is that symbol? (type any glyph, Esc to cancel)", "sys"); return false;
       case "x": this.game.enhanceSkills(this); return false; // #enhance — a free review/advance
+      case "\\": this.game.showDiscoveries(); return false;   // discoveries screen
       case "a": return this.startSelect("apply");
       case "Z": return this.startCast();
       case "O": return this.game.offerCorpse(this) ? this.endTurn() : false;

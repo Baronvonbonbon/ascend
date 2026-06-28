@@ -137,6 +137,15 @@ export class Idents {
   name(t: ItemType): string {
     return this.isKnown(t) ? t.name : (this.appearance.get(t.id) ?? t.name);
   }
+
+  /** The discoveries screen (`\`): per-class lists of identified potion/scroll types. */
+  discoveries(): { kind: string; entries: { name: string; look: string }[]; unknown: number }[] {
+    return (["potion", "scroll"] as const).map((kind) => {
+      const all = ITEMS.filter((i) => i.kind === kind);
+      const entries = all.filter((t) => this.known.has(t.id)).map((t) => ({ name: t.name, look: this.appearance.get(t.id) ?? "" }));
+      return { kind, entries, unknown: all.length - entries.length };
+    });
+  }
 }
 
 const BY_ID = new Map<string, ItemType>(ITEMS.map((it) => [it.id, it]));

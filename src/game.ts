@@ -1535,6 +1535,23 @@ export class Game {
     this.level.items.push(fi);
   }
 
+  /** `\` — the discoveries screen: every potion/scroll type you've identified this run. */
+  showDiscoveries(): void {
+    const groups = this.ident.discoveries();
+    const total = groups.reduce((n, g) => n + g.entries.length, 0);
+    this.log.add(`— Discoveries (${total} identified) —`, "sys");
+    let any = false;
+    for (const g of groups) {
+      if (g.entries.length === 0) continue;
+      any = true;
+      this.log.add(`${cap(g.kind)}s:`, "sys");
+      for (const e of g.entries) this.log.add(`  ${e.name}${e.look ? ` — was "${e.look}"` : ""}`, "dim");
+    }
+    if (!any) this.log.add("Nothing identified yet — quaff, read, or use a scroll of identify.", "dim");
+    const unknown = groups.reduce((n, g) => n + g.unknown, 0);
+    if (unknown) this.log.add(`${unknown} potion/scroll type(s) still a mystery.`, "dim");
+  }
+
   showInventory(): void {
     const who = this.acting;
     const inv = who.inventory;
