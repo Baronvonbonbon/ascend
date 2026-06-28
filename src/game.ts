@@ -246,6 +246,7 @@ export class Game {
     this.placeFeature("faucet", 0.3);
     this.placeFeature("throne", 0.16);
     this.placeChest(0.35);
+    this.placeBoulders();
     this.maybePlaceBones();
     this.spawnTraps();
     this.placePortals();
@@ -436,6 +437,17 @@ export class Game {
     if (!centers.length) return;
     const c = ROT.RNG.getItem(centers)!;
     this.level.tiles[c.y][c.x] = tile;
+  }
+
+  /** Scatter pushable boulders in open rooms (≥3 open neighbours, so they can never seal a corridor). */
+  private placeBoulders(): void {
+    const open = (x: number, y: number) => ([[1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]).filter(([dx, dy]) => this.level.isPassable(x + dx, y + dy)).length >= 3;
+    const n = ROT.RNG.getUniformInt(0, this.level.kind === "bigroom" ? 5 : 2);
+    for (let i = 0; i < n; i++) {
+      let pos = this.level.randomFloor(), tries = 0;
+      while (tries < 40 && (this.level.tileAt(pos.x, pos.y) !== "floor" || !open(pos.x, pos.y) || this.level.itemAt(pos.x, pos.y) || this.level.boulderAt(pos.x, pos.y) || this.monsterAt(pos.x, pos.y) || (pos.x === this.player.x && pos.y === this.player.y))) { pos = this.level.randomFloor(); tries++; }
+      if (tries < 40) this.level.boulders.push({ x: pos.x, y: pos.y });
+    }
   }
 
   /** Drop a chest of loot on an unused room centre. */
@@ -983,7 +995,7 @@ export class Game {
       let hit: Monster | undefined;
       for (let step = 0; step < 10; step++) {
         x += dx; y += dy;
-        if (!this.level.isPassable(x, y)) break;
+        if (!this.level.isPassable(x, y) || this.level.boulderAt(x, y)) break; // a boulder stops a bolt
         const m = this.monsterAt(x, y); if (m) { hit = m; break; }
       }
       if (!hit) {
@@ -1042,6 +1054,8 @@ export class Game {
         if (!this.level.isPassable(nx, ny)) break; // boxed in
       }
       x = nx; y = ny;
+      const bldr = this.level.boulderAt(x, y);
+      if (bldr) { this.level.boulders = this.level.boulders.filter((z) => z !== bldr); this.log.add("A boulder shatters under the blast.", "dim"); break; } // the ray spends itself
       const m = this.monsterAt(x, y); if (m && m.alive) onHit(m);
       const pl = this.playerAt(x, y); if (pl) onHit(pl);
     }
@@ -1085,7 +1099,7 @@ export class Game {
     switch (id) {
       case "bolt": {
         let x = p.x, y = p.y; let hit: Monster | undefined;
-        for (let step = 0; step < 10; step++) { x += dx; y += dy; if (!this.level.isPassable(x, y)) break; const m = this.monsterAt(x, y); if (m) { hit = m; break; } }
+        for (let step = 0; step < 10; step++) { x += dx; y += dy; if (!this.level.isPassable(x, y) || this.level.boulderAt(x, y)) break; const m = this.monsterAt(x, y); if (m) { hit = m; break; } }
         if (!hit) this.log.add("The finality bolt streaks into the dark.", "dim");
         else { const d = ROT.RNG.getUniformInt(6, 12); hit.hp -= d; this.log.add(`Finality bolt strikes ${hit.name} for ${d}.`, "good"); if (hit.hp <= 0) { this.gainXp(p, hit.maxHp); this.kill(hit); } }
         break;
@@ -1647,6 +1661,7 @@ export class Game {
     for (const pr of this.level.portals) if (vis(pr.x, pr.y)) cells.push([pr.x, pr.y, "Ω", pr.chain.color]);
     for (const e of this.level.engravings) if (vis(e.x, e.y)) cells.push([e.x, e.y, "§", "#b0a060"]);
     for (const fi of this.level.items) if (vis(fi.x, fi.y)) cells.push([fi.x, fi.y, fi.type.ch, fi.type.fg]);
+    for (const b of this.level.boulders) if (vis(b.x, b.y)) cells.push([b.x, b.y, "0", "#9a8a6a"]);
     // Sense minds: blind+telepathy, or the sense-minds spell, reveals monsters out of sight.
     const sensed = this.livingPlayers().some((p) => (p.blind > 0 && p.intrinsics.has("telepathy")) || p.senseTurns > 0);
     for (const m of this.monsters) {

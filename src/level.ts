@@ -20,6 +20,7 @@ export class Level {
   graves: { x: number; y: number; label: string }[] = []; // bones of fallen heroes
   traps: Trap[] = [];
   engravings: Engraving[] = []; // Gray-Paper wards scratched in the dust
+  boulders: { x: number; y: number }[] = []; // pushable blocks (Sokoban-flavor)
   portals: Portal[] = []; // XCM portals to parachain branches
   roomCenters: { x: number; y: number }[] = [];
   start = { x: 1, y: 1 };
@@ -142,6 +143,10 @@ export class Level {
 
   engravingAt(x: number, y: number): Engraving | undefined {
     return this.engravings.find((e) => e.x === x && e.y === y && e.life > 0);
+  }
+
+  boulderAt(x: number, y: number): { x: number; y: number } | undefined {
+    return this.boulders.find((b) => b.x === x && b.y === y);
   }
 
   revealAll(): void {

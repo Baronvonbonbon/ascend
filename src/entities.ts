@@ -508,6 +508,15 @@ export class Player extends Entity {
     }
     if (tile === "doorLocked") return this.game.kickDoor(this, nx, ny) ? this.endTurn() : false;
     if (!this.game.level.isPassable(nx, ny)) return false; // bumping a wall costs no turn
+    // Push a boulder one tile if the space beyond is clear; otherwise it won't budge.
+    const boulder = this.game.level.boulderAt(nx, ny);
+    if (boulder) {
+      const bx = nx + dx, by = ny + dy;
+      if (this.game.level.isPassable(bx, by) && !this.game.level.boulderAt(bx, by) && !this.game.monsterAt(bx, by) && !this.game.playerAt(bx, by)) {
+        boulder.x = bx; boulder.y = by;
+        this.game.log.add("You heave the boulder forward.", "dim");
+      } else { this.game.log.add("The boulder won't budge — break it (a fire ray) or go around.", "dim"); return false; }
+    }
     // Displace — slip past a peaceful NPC (the Marketmaker) or your nominator; never attack a friend.
     if (foe && foe.peaceful) { foe.x = this.x; foe.y = this.y; this.game.log.add(`You slip past ${foe.name}.`, "dim"); }
     const pet = this.game.pet;
@@ -666,7 +675,7 @@ export class Monster extends Entity {
         const [nx, ny] = path[0];
         const tgt = this.game.playerAt(nx, ny);
         if (tgt) { this.game.attack(this, tgt); return; }
-        if (!this.game.monsterAt(nx, ny)) { this.x = nx; this.y = ny; }
+        if (!this.game.monsterAt(nx, ny) && !this.game.level.boulderAt(nx, ny)) { this.x = nx; this.y = ny; }
       }
       return;
     }
@@ -679,7 +688,7 @@ export class Monster extends Entity {
   private wanderStep(): void {
     const d = ROT.RNG.getItem([[-1, 0], [1, 0], [0, -1], [0, 1]] as [number, number][])!;
     const nx = this.x + d[0], ny = this.y + d[1];
-    if (this.game.level.isPassable(nx, ny) && !this.game.monsterAt(nx, ny) && !this.game.playerAt(nx, ny)) {
+    if (this.game.level.isPassable(nx, ny) && !this.game.monsterAt(nx, ny) && !this.game.playerAt(nx, ny) && !this.game.level.boulderAt(nx, ny)) {
       this.x = nx; this.y = ny;
     }
   }
@@ -689,7 +698,7 @@ export class Monster extends Entity {
     let best: [number, number] | null = null, bestD = -1;
     for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [1, 1], [-1, -1], [1, -1], [-1, 1]] as [number, number][]) {
       const nx = this.x + dx, ny = this.y + dy;
-      if (!this.game.level.isPassable(nx, ny) || this.game.monsterAt(nx, ny) || this.game.playerAt(nx, ny)) continue;
+      if (!this.game.level.isPassable(nx, ny) || this.game.monsterAt(nx, ny) || this.game.playerAt(nx, ny) || this.game.level.boulderAt(nx, ny)) continue;
       const d = Math.max(Math.abs(nx - p.x), Math.abs(ny - p.y));
       if (d > bestD) { bestD = d; best = [nx, ny]; }
     }

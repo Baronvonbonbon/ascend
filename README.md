@@ -175,6 +175,11 @@ your **Insight** (WIS) reveals **hidden traps** and **hidden doors** (which look
 **disarm** (DEX) any revealed trap next to you. So a **reorg trap** blocking a corridor is no longer a dead
 end — step up beside it, press `s` to disarm it, and walk on.
 
+**Boulders (Phase 9g):** **boulders** (`0`) sit in some rooms — walk into one to **shove it** a tile (if
+the space beyond is clear). They block you, bolts, *and* monsters, so you can push one into a doorway to
+**wall off pursuers**; a **wand of immolation** (fire ray) shatters a stuck one. (They only spawn in open
+rooms, so they can never seal your only path — the groundwork for a future Consensus Vault puzzle.)
+
 **Controls:** move **arrows/hjkl/yubn** · pick up `,` · inventory `i` · sheet `@` · wield `w` ·
 wear `W` · take off `T` · quaff `q` · read/study `r` · eat `e` · drop `d` · zap `z` · cast `Z` ·
 throw `t` · apply tool `a` · engrave `E` · pray `P` · offer `O` · descend `>` · ascend/up `<` · wait `.` · restart `R`.
