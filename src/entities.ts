@@ -655,6 +655,11 @@ export class Monster extends Entity {
     if (!this.cancelled && this.def.splits && this.splitsLeft > 0 && ROT.RNG.getUniform() < 0.05 && this.game.spawnSybilNear(this)) return;
     // A conjurer summons reinforcements.
     if (!this.cancelled && this.def.summons && this.game.level.isVisible(this.x, this.y) && ROT.RNG.getUniform() < 0.1 && this.game.summonNear(this)) return;
+    // Breeders multiply when a mate of their kind is adjacent.
+    if (!this.cancelled && this.def.breeds && ROT.RNG.getUniform() < 0.06) {
+      const mate = this.game.monsters.find((o) => o !== this && o.alive && o.def === this.def && Math.max(Math.abs(o.x - this.x), Math.abs(o.y - this.y)) === 1);
+      if (mate && this.game.breedNear(this)) return;
+    }
 
     const dist = Math.max(Math.abs(this.x - p.x), Math.abs(this.y - p.y));
     // The rug pull: a thief adjacent to you snatches a pack item and blinks away.

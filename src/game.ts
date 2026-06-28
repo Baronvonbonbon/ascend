@@ -852,6 +852,23 @@ export class Game {
     });
   }
 
+  /** A breeder multiplies into an adjacent free cell — capped per kind so it can't runaway-swarm. */
+  breedNear(m: Monster): boolean {
+    const kin = this.monsters.reduce((n, o) => n + (o.alive && o.def === m.def ? 1 : 0), 0);
+    if (kin >= 10 || this.monsters.length >= 30) return false;
+    const offs = ROT.RNG.shuffle([[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]] as [number, number][]);
+    for (const [dx, dy] of offs) {
+      const nx = m.x + dx, ny = m.y + dy;
+      if (this.level.isPassable(nx, ny) && !this.monsterAt(nx, ny) && !this.playerAt(nx, ny) && !this.level.boulderAt(nx, ny)) {
+        const s = new Monster(this, m.def, nx, ny);
+        this.monsters.push(s); this.scheduler.add(s, true);
+        this.log.add(`${cap(m.name)} multiplies!`, "bad");
+        return true;
+      }
+    }
+    return false;
+  }
+
   /** A conjurer summons a depth-appropriate ally into an adjacent free cell. */
   summonNear(m: Monster): boolean {
     if (this.monsters.length >= 30) return false;
