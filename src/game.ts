@@ -1330,7 +1330,7 @@ export class Game {
     this.log.add(`— ${who.name === "you" ? "Inventory" : who.name + "'s pack"} —`, "sys");
     inv.items.forEach((it, i) => {
       const welded = who.isWelded(it);
-      const eq = welded ? " (welded)" : it === who.weapon ? " (wielded)" : who.wornArmor.includes(it) ? " (worn)" : it === who.ring ? " (on hand)" : "";
+      const eq = welded ? " (welded)" : it === who.weapon ? " (wielded)" : who.wornArmor.includes(it) ? " (worn)" : it === who.ring ? " (on hand)" : it === who.quiver ? " (at the ready)" : "";
       const ch = it.charges != null ? ` [${it.charges}]` : "";
       const relic = it.relic ? ` +${it.enchant ?? 0} ✦` : "";
       const buc = it.bucKnown && it.buc ? `${it.buc} ` : "";

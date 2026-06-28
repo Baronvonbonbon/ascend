@@ -4,13 +4,14 @@ import { COLORS, MonsterDef, SPELLS, spellById } from "./data";
 import { Inventory, Item } from "./inventory";
 import { bucDelta, ITEMS, ItemType, ArmorSlot } from "./items";
 
-type Verb = "wield" | "wear" | "takeoff" | "quaff" | "read" | "eat" | "drop" | "zap" | "throw" | "forge" | "apply";
+type Verb = "wield" | "wear" | "takeoff" | "quaff" | "read" | "eat" | "drop" | "zap" | "throw" | "forge" | "apply" | "quiver";
 const VERB_PROMPT: Record<Verb, string> = {
   wield: "Wield which weapon?", wear: "Wear/put on which item?",
   quaff: "Quaff which potion?", read: "Read which scroll?",
   eat: "Eat what?", drop: "Drop which item?", zap: "Zap which wand?",
   throw: "Throw which item?", forge: "Forge which piece of gear into an NFT relic?",
   takeoff: "Take off which worn piece?", apply: "Apply which tool?",
+  quiver: "Ready which item in your quiver?",
 };
 
 export abstract class Entity {
@@ -118,6 +119,7 @@ export class Player extends Entity {
   private pending: Verb | null = null;
   private pendingDir: Item | null = null; // a wand awaiting a zap direction
   private pendingThrow: Item | null = null; // an item awaiting a throw direction
+  quiver: Item | null = null;               // readied missile for the `f`ire command
   private pendingApply: Item | null = null; // a tool awaiting a direction (excavator / state reader)
   private pendingWrite: Item | null = null; // a contract deployer awaiting a scroll choice
   private pendingSpell = false;             // choosing a spell to cast
@@ -267,6 +269,8 @@ export class Player extends Entity {
       case "d": return this.startSelect("drop");
       case "z": return this.startSelect("zap");
       case "t": return this.startSelect("throw");
+      case "Q": return this.startSelect("quiver");
+      case "f": return this.fireQuiver();
       case "a": return this.startSelect("apply");
       case "Z": return this.startCast();
       case "O": return this.game.offerCorpse(this) ? this.endTurn() : false;
@@ -303,6 +307,13 @@ export class Player extends Entity {
       if (this.isWelded(item)) { item.bucKnown = true; this.game.log.add(`You can't release ${this.game.ident.name(item.type)} — it's cursed!`, "bad"); return false; }
       this.pendingThrow = item;
       this.game.log.add("Throw in which direction? (a move key, Esc to cancel)", "sys");
+      return false;
+    }
+    if (verb === "quiver") {
+      if (item.type.kind !== "weapon" && item.type.kind !== "potion") { this.game.log.add("That won't fly true — quiver a weapon or potion.", "dim"); return false; }
+      if (this.isWelded(item)) { item.bucKnown = true; this.game.log.add(`You can't ready ${this.game.ident.name(item.type)} — it's cursed to your hand!`, "bad"); return false; }
+      this.quiver = item;
+      this.game.log.add(`You ready ${this.game.ident.name(item.type)} in your quiver. (f to fire)`, "good");
       return false;
     }
     if (verb === "apply") {
@@ -372,6 +383,21 @@ export class Player extends Entity {
     return this.game.castSpell(id, mv[0], mv[1]) ? this.endTurn() : false;
   }
 
+  /** `f` — fire the readied quiver item. */
+  private fireQuiver(): boolean {
+    this.game.acting = this;
+    if (!this.quiver || !this.inventory.items.includes(this.quiver)) {
+      // quiver empty or its item is gone — try to auto-load the first throwable
+      this.quiver = this.inventory.items.find((it) => it.type.kind === "weapon" || it.type.kind === "potion") ?? null;
+      if (!this.quiver) { this.game.log.add("You have nothing readied to fire. (Q to ready a missile)", "dim"); return false; }
+      this.game.log.add(`You ready ${this.game.ident.name(this.quiver.type)} in your quiver.`, "dim");
+    }
+    if (this.isWelded(this.quiver)) { this.quiver.bucKnown = true; this.game.log.add("Your readied missile is cursed to your hand!", "bad"); this.quiver = null; return false; }
+    this.pendingThrow = this.quiver;
+    this.game.log.add("Fire in which direction? (a move key, Esc to cancel)", "sys");
+    return false;
+  }
+
   private resolveThrowDir(e: KeyboardEvent): boolean {
     const item = this.pendingThrow!;
     this.pendingThrow = null;
@@ -380,6 +406,8 @@ export class Player extends Entity {
     if (!mv) { this.game.log.add("That is not a direction.", "dim"); return false; }
     this.unequip(item); this.inventory.remove(item);
     this.game.throwItem(item, mv[0], mv[1]);
+    // auto-refill the quiver with the next missile of the same type, else clear it
+    if (this.quiver === item) this.quiver = this.inventory.items.find((it) => it.type === item.type) ?? null;
     return this.endTurn();
   }
 
