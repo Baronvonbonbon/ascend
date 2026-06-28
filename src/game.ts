@@ -16,6 +16,7 @@ import { readGear, forgeGear, forgePrice } from "./chain/gear";
 import { claimDeed, readDeed, deedConfigured } from "./chain/deed";
 import { RARITY } from "./chain/config";
 import type { Peer } from "./net/peer";
+import { MusicEngine } from "./audio/music";
 import type { CoopMode, Cell, NetMsg } from "./net/protocol";
 
 const PARTNER_FG = "#5fd0d0"; // the co-op partner's @ renders teal
@@ -68,6 +69,7 @@ export class Game {
   private questDone = false;                      // your nemesis is slain and the artifact claimed
   private loadedRelics = new Set<number>();      // NFT relic tokenIds already pulled into this run's pack
   wallet: Wallet | null = null;
+  readonly music = new MusicEngine(); // procedural area soundtracks + danger tension layer
   onWallet?: (address: string, pas: number) => void;
   recentRuns: RunEntry[] = []; // leaderboard cache + bones pool
   private scheduler = new ROT.Scheduler.Speed<Entity>(); // fast/slow actors act more/less often
@@ -361,6 +363,7 @@ export class Game {
       this.scheduler.add(this.pet, true);
     }
     this.recomputeFOV();
+    this.music.setArea(this.currentAreaId()); // crossfade to this area's soundtrack
   }
 
   adjacentEnemy(x: number, y: number): Monster | undefined {
@@ -635,6 +638,33 @@ export class Game {
   private placeUpStair(): void {
     const s = this.level.start;
     this.level.tiles[s.y][s.x] = "stairsUp";
+  }
+
+  /** The music area id for the current location (drives the soundtrack). */
+  private currentAreaId(): string {
+    if (this.plane > 0) return this.plane === PLANES.length ? "genesis" : "planes";
+    if (this.inQuest || this.currentChain) return "elsewhere";
+    const d = this.player.depth;
+    if (this.level?.kind === "bigroom") return "mempool";
+    if (d >= GEHENNOM_BOTTOM) return "sanctum";
+    if (d > MAX_DEPTH) return "gehennom";
+    if (d === MAX_DEPTH) return "relay";
+    if (d >= 7) return "kusama";
+    if (d >= 4) return "parachain";
+    return "legacy";
+  }
+
+  /** 0..1 danger for the music tension layer: adjacency, bosses, and the Censor hunt. */
+  private dangerLevel(): number {
+    let danger = 0;
+    const near = (m: Monster) => this.livingPlayers().some((p) => Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) <= 1);
+    for (const m of this.monsters) {
+      if (!m.alive || m.peaceful) continue;
+      if (near(m)) danger = Math.max(danger, 0.55);
+      if ((m.def.boss || m.isHunter || m.def === MOLOCH || m.def === CENSOR) && this.level.isVisible(m.x, m.y)) danger = Math.max(danger, 0.9);
+    }
+    if (this.jamStolen) danger = Math.max(danger, 0.5);
+    return danger;
   }
 
   /** Which level layout a depth uses: the Mempool big room, a Gehennom maze, or normal rooms. */
@@ -2489,6 +2519,7 @@ export class Game {
 
   draw(): void {
     if (this.netRole === "guest") return; // the guest only paints frames it receives
+    if (this.player) this.music.setDanger(this.dangerLevel()); // tension layer follows the threat
     const cells = this.buildCells();
     const huds = this.buildHuds();
     this.display.clear();

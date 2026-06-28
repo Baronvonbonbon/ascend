@@ -240,6 +240,13 @@ pair of them sit together and they'll multiply into a swarm, so don't ignore a c
 wear `W` · take off `T` · quaff `q` · read/study `r` · eat `e` · drop `d` · zap `z` · cast `Z` ·
 throw `t` · quiver `Q` · fire `f` · chat `c` · look `;` · what-is `/` · enhance skills `x` · discoveries `\` · open/force `o` · close `C` · kick `K` · dip `D` · name `N` · trap-ID `^` · two-weapon `X` · ride `M` · invoke `I` · audit `A` · apply tool `a` · engrave `E` · pray `P` · offer `O` · descend `>` · ascend/up `<` · wait `.` · restart `R`.
 
+**Audio:** a **♪ Music** toggle and a **soundtrack picker** sit in the header. The music is
+**fully procedural** (Web Audio — no asset files): ten bespoke generative ambient tracks, one per
+area (Legacy Stack → Parachain Reaches → Kusama Deeps → the Mempool → the Foot of the Relay →
+Gehennom → Moloch's Sanctum → the Planes → the Genesis Plane → Elsewhere), crossfading as you
+travel. **Auto (by area)** follows where you are; **Shuffle all** rotates; or pin one track. A
+**tension layer** swells in over the ambience when foes close, a boss looms, or the Censor hunts.
+
 `npm run build` → typecheck + production bundle in `dist/`.
 
 ## Stack

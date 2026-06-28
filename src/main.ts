@@ -37,6 +37,31 @@ if (screen && logEl) {
     const deck = document.getElementById("touch-deck");
     if (more && deck) more.addEventListener("click", () => deck.classList.toggle("open"));
   }
+
+  // ── audio: master toggle + soundtrack picker (procedural Web Audio) ──
+  const musicBtn = document.getElementById("music-toggle") as HTMLButtonElement | null;
+  const musicPick = document.getElementById("music-pick") as HTMLSelectElement | null;
+  if (musicPick) {
+    for (const t of game.music.trackList) {
+      const o = document.createElement("option"); o.value = t.id; o.textContent = t.name; musicPick.appendChild(o);
+    }
+    musicPick.value = game.music.mode;
+    musicPick.onchange = () => { game.music.resume(); game.music.setMode(musicPick.value); };
+  }
+  if (musicBtn) {
+    const sync = () => { musicBtn.textContent = `♪ Music: ${game.music.enabled ? "on" : "off"}`; musicBtn.classList.toggle("on", game.music.enabled); };
+    musicBtn.onclick = () => { game.music.toggle(); sync(); };
+    sync();
+  }
+  // The Web Audio context needs a user gesture; resume (and honour a saved "on") on first interaction.
+  const kick = () => {
+    game.music.resume();
+    if (game.music.enabled) game.music.setEnabled(true);
+    window.removeEventListener("pointerdown", kick);
+    window.removeEventListener("keydown", kick);
+  };
+  window.addEventListener("pointerdown", kick);
+  window.addEventListener("keydown", kick);
 } else {
   document.body.textContent = "Ascend failed to find its mount points.";
 }
