@@ -46,6 +46,12 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > proof that *this* wallet ascended, recording your depth and epoch. It can't be
 > bought or sold, only earned. (Deploy the contract with `node scripts/compile.mjs
 > && node scripts/deploy-deed.mjs`, then paste the address into `src/chain/config.ts`.)
+>
+> **Conducts (Phase 13a).** Five self-imposed vows track themselves from turn one —
+> **Pacifist** (never kill by your own hand), **Illiterate** (read/engrave nothing),
+> **Self-custodian** (pray/sit/sacrifice never), **Vegetarian** (eat no corpse), and
+> **Bankless** (buy/forge nothing). The character sheet (`@`) shows which you still
+> hold; the death/ascension screen reports every vow kept. A challenge layer for the bold.
 > **Phase 4 — persistence & social** is in: when a run ends (death or ASCENSION)
 > it's recorded on-chain **gaslessly** (you sign, the relay submits) into the
 > **AscendLedger** Hall of Fame (`H` to view), and fallen heroes leave **bones**

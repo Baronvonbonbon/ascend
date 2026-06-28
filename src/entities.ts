@@ -80,6 +80,7 @@ export class Player extends Entity {
   luck = 0; // Fortune (−13..+13) from altar offerings — sways every roll
   ethos = "Balance"; // Order / Balance / Chaos
   favor = 0; crowned = false; title = ""; // standing with your Architect; crowning
+  conducts = new Set<string>(["pacifist", "illiterate", "atheist", "vegetarian", "bankless"]); // vows kept until broken (Phase 13a)
   // Phase 8 — polymorph self ("fork")
   polyForm: MonsterDef | null = null;
   polyTurns = 0; savedHp = 0; savedMaxHp = 0;
@@ -619,6 +620,7 @@ export class Player extends Entity {
       case "read":
         if (t.kind === "spellbook") return this.game.studySpellbook(item) ? this.endTurn() : false;
         if (t.kind !== "scroll") { this.game.log.add("There is nothing to read.", "dim"); return false; }
+        this.game.breakConduct(this, "illiterate"); // reading a scroll ends Illiterate
         ident.learn(t); this.game.log.add(`You read ${t.name}.`);
         this.inventory.remove(item); this.unequip(item);
         this.game.applyEffect(t.effect!, item.buc); return this.endTurn();
@@ -743,6 +745,7 @@ export class Player extends Entity {
       this.game.log.add("You can only pray at an altar (_).", "dim");
       return false;
     }
+    this.game.breakConduct(this, "atheist"); // praying ends Self-custodian
     this.game.pray();
     return this.endTurn();
   }

@@ -34,6 +34,14 @@ const PLANES = [ // the ascent above the surface — climb them with the JAM to 
   { name: "the Genesis Plane", flavor: "The first block hangs frozen above an altar of pure intent. Offer the JAM (O)." },
 ];
 const RELIC_DEPTH: Record<number, string> = { 5: "bell", 6: "candelabrum", 7: "graybook" }; // where each invocation relic awaits
+// Conducts (Phase 13a) — self-imposed vows, kept until an action breaks them.
+const CONDUCTS: { id: string; label: string; note: string }[] = [
+  { id: "pacifist",   label: "Pacifist",       note: "shed no blood by your own hand" },
+  { id: "illiterate", label: "Illiterate",     note: "read no scroll, studied no runtime, engraved no word" },
+  { id: "atheist",    label: "Self-custodian", note: "knelt to no altar, sat no throne, made no offering" },
+  { id: "vegetarian", label: "Vegetarian",     note: "ate no corpse" },
+  { id: "bankless",   label: "Bankless",       note: "bought nothing, forged nothing — touched no market" },
+];
 const VAULT_CAP = 12; // a multisig vault holds up to this many stashed items
 const SKILL_RANKS = ["Unskilled", "Basic", "Skilled", "Expert"]; // weapon-skill ranks (#enhance)
 const SKILL_NEED = [0, 20, 60, 140]; // landed hits to reach each rank
@@ -175,6 +183,7 @@ export class Game {
     });
     if (!r.ok) { this.busy = false; this.log.add(`The forge fails — ${r.error}.`, "bad"); this.draw(); return; }
 
+    this.breakConduct(this.player, "bankless"); // forging on-chain ends Bankless
     // The held item *becomes* the forged relic (rarity bonus baked into its enchant).
     item.relic = true; item.enchant = r.enchant ?? base; item.buc = "blessed"; item.bucKnown = true;
     if (item === this.player.weapon) this.player.applyWeapon();
@@ -227,7 +236,11 @@ export class Game {
   private xpForLevel(L: number): number { return 10 * L * (L - 1); }
 
   /** Award XP to a player and level them up ("reach an epoch"), gaining max HP. */
-  gainXp(p: Player, amount: number): void {
+  /** Remove a vow from a player's kept set (silently — revealed only at the end). */
+  breakConduct(p: Player, id: string): void { p.conducts.delete(id); }
+
+  gainXp(p: Player, amount: number, fromKill = true): void {
+    if (fromKill) this.breakConduct(p, "pacifist"); // a kill by your own hand ends Pacifist
     if (!p.alive || amount <= 0) return;
     p.xp += amount;
     while (p.level < 20 && p.xp >= this.xpForLevel(p.level + 1)) {
@@ -248,6 +261,17 @@ export class Game {
     if (intr.length) this.log.add(`  Intrinsics: ${intr.join(", ")}.`, "good");
     if (p.spells.size) this.log.add(`  Energy ${p.energy}/${p.maxEnergy}. Extrinsics: ${[...p.spells].map((id) => spellById(id)?.name ?? id).join(", ")}. (Z to cast)`, "sys");
     this.log.add(`  Ethos: ${p.ethos}, favor ${p.favor}${p.crowned ? " — Technical Fellowship " + p.title : ""}.`, "dim");
+    const kept = CONDUCTS.filter((c) => p.conducts.has(c.id));
+    if (kept.length) this.log.add(`  Vows kept: ${kept.map((c) => c.label).join(", ")}.`, "good");
+    else this.log.add("  Vows kept: none — you walk no narrow path.", "dim");
+  }
+
+  /** A line summarising the vows a player still holds (for the death/ascension screen). */
+  private conductReport(p: Player): void {
+    const kept = CONDUCTS.filter((c) => p.conducts.has(c.id));
+    if (!kept.length) return;
+    this.log.add("— Vows kept this run —", "sys");
+    for (const c of kept) this.log.add(`  ${c.label}: ${c.note}.`, "good");
   }
 
   /** Populate the current level and (re)build the turn schedule. */
@@ -974,12 +998,13 @@ export class Game {
 
   /** Sit the Sudo Throne underfoot — raw privilege, for better or worse. */
   sitThrone(p: Player): boolean {
+    this.breakConduct(p, "atheist"); // claiming a throne ends Self-custodian
     const r = ROT.RNG.getUniform();
     if (r < 0.25) { p.hp = p.maxHp; p.luck = Math.min(13, p.luck + 1); this.log.add(`${this.sub(p)} ${this.verbS(p, "sit")} the Sudo Throne — power flows. (full HP, Fortune up)`, "good"); }
     else if (r < 0.40) { const eq = [p.weapon, ...p.wornArmor, p.ring].filter((x): x is Item => !!x && x.buc !== "cursed"); if (eq.length) { const it = ROT.RNG.getItem(eq)!; it.buc = "cursed"; it.bucKnown = true; p.recomputeAC(); p.applyWeapon(); this.log.add(`A surge of raw sudo — your ${this.ident.name(it.type)} is cursed!`, "bad"); } else this.log.add("A jolt of sudo finds no purchase.", "dim"); }
     else if (r < 0.55) { let pos = this.level.randomFloor(), t = 0; while (t < 40 && (this.monsterAt(pos.x, pos.y) || this.level.tileAt(pos.x, pos.y) === "stairsDown")) { pos = this.level.randomFloor(); t++; } p.x = pos.x; p.y = pos.y; this.recomputeFOV(); this.log.add("The throne flings you across the level!", "bad"); }
     else if (r < 0.70) { for (const it of p.inventory.items) this.ident.learn(it.type); this.log.add("Privileged insight — your pack is identified.", "sys"); }
-    else if (r < 0.82) { this.gainXp(p, Math.max(10, this.xpForLevel(p.level + 1) - p.xp + 1)); this.log.add("Authority flows into you — you feel experienced.", "good"); }
+    else if (r < 0.82) { this.gainXp(p, Math.max(10, this.xpForLevel(p.level + 1) - p.xp + 1), false); this.log.add("Authority flows into you — you feel experienced.", "good"); }
     else if (r < 0.92) { const spot = this.adjacentFree(p.x, p.y); if (spot) { const def = ROT.RNG.getItem(MONSTERS.filter((m) => m.weight > 0))!; this.monsters.push(new Monster(this, def, spot.x, spot.y)); this.scheduler.add(this.monsters[this.monsters.length - 1], true); } this.log.add("A throne guardian materializes!", "bad"); }
     else { this.level.tiles[p.y][p.x] = "floor"; this.log.add("The throne crumbles to dust beneath you.", "dim"); }
     if (p.hp <= 0) this.killPlayer(p);
@@ -1083,6 +1108,7 @@ export class Game {
       }
     }
     if (!fi || !fi.corpse) { this.log.add("There's no corpse on or beside the altar to offer. (kill something near it)", "dim"); return false; }
+    this.breakConduct(p, "atheist"); // sacrificing at an altar ends Self-custodian
     const rotten = this.turn - fi.corpse.born > 60;
     const name = fi.corpse.def.name;
     this.level.items = this.level.items.filter((i) => i !== fi);
@@ -1112,6 +1138,7 @@ export class Game {
     const p = this.acting;
     const t = this.level.tileAt(p.x, p.y);
     if (t !== "floor" && t !== "door") { this.log.add("There's no dust here to scratch a sigil into.", "dim"); return false; }
+    this.breakConduct(p, "illiterate"); // writing words ends Illiterate
     const LIFE = 14;
     const e = this.level.engravingAt(p.x, p.y);
     if (e) { e.life = LIFE; this.log.add("You re-scratch the Gray-Paper sigil — its lines sharpen.", "sys"); }
@@ -1142,6 +1169,7 @@ export class Game {
       this.log.add("✦ You climb into the light, the JAM blazing in your grasp. ✦", "good");
       this.log.add("ASCENSION! The chain needs no master. You have won, Seeker.", "sys");
     }
+    this.conductReport(w);
     this.log.add("Press R to begin a new descent.", "dim");
     this.draw();
     void this.recordResult(true);
@@ -1169,6 +1197,7 @@ export class Game {
     this.player.hp = 0;
     this.log.add(ROT.RNG.getItem(DEATHS)!, "bad");
     this.log.add(`You fell at depth ${this.player.depth} (deepest ${this.player.maxDepthReached}). Press R to try again.`, "sys");
+    this.conductReport(this.player);
     this.draw();
     void this.recordResult(false);
     void this.showHallOfFame();
@@ -1640,6 +1669,7 @@ export class Game {
     const s = sid ? spellById(sid) : undefined;
     if (!sid || !s) { this.log.add("There's nothing to study here.", "dim"); return false; }
     const p = this.acting;
+    this.breakConduct(p, "illiterate"); // studying a runtime ends Illiterate
     if (p.spells.has(sid)) { this.log.add(`You already grok ${s.name}.`, "dim"); return true; }
     const chance = Math.max(0.2, Math.min(0.95, 0.35 + abilityMod(p.int) * 0.08 + p.level * 0.03));
     if (ROT.RNG.getUniform() < chance) {
@@ -1806,6 +1836,7 @@ export class Game {
     if (idx < 0 || idx >= WRITABLE_SCROLLS.length) { this.log.add("No such scroll on the menu.", "dim"); return false; }
     if ((marker.charges ?? 0) <= 0) { this.log.add("The contract deployer is out of gas.", "dim"); return false; }
     const p = this.acting;
+    this.breakConduct(p, "illiterate"); // writing a scroll ends Illiterate
     if (p.inventory.full) { this.log.add("Your pack is full.", "bad"); return false; }
     const t = itemById(WRITABLE_SCROLLS[idx]);
     if (!t) return false;
@@ -1850,6 +1881,7 @@ export class Game {
     const fi = this.level.items.find((i) => i.x === p.x && i.y === p.y && i.corpse);
     if (!fi || !fi.corpse) return false;
     const { def, born } = fi.corpse;
+    this.breakConduct(p, "vegetarian"); // eating a corpse ends Vegetarian
     this.level.items = this.level.items.filter((i) => i !== fi);
     p.nutrition += Math.max(50, Math.min(600, def.hp * 12));
     this.log.add(`${this.sub(p)} ${this.verbS(p, "eat")} the ${def.name} corpse.`, "good");
@@ -2103,6 +2135,7 @@ export class Game {
     });
     if (!r.ok) { this.busy = false; this.log.add(`The deal falls through — ${r.error}.`, "bad"); this.draw(); return; }
 
+    this.breakConduct(this.acting, "bankless"); // a purchase ends Bankless
     this.giveItem(fi.type, { enchant: fi.enchant, relic: fi.relic, buc: fi.buc, bucKnown: fi.bucKnown });
     this.level.items = this.level.items.filter((i) => i !== fi);
     this.player.pas = await walletBalancePas(this.wallet.address);
