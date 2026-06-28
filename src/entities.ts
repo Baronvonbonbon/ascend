@@ -125,6 +125,8 @@ export class Player extends Entity {
   private pendingSpell = false;             // choosing a spell to cast
   private pendingCastDir: string | null = null; // a directional spell awaiting a direction
   private pendingChat = false;              // choosing a direction to chat
+  private pendingLook = false;              // farlook (;) — choosing a direction to examine
+  private pendingWhatIs = false;            // what-is (/) — awaiting a glyph to identify
   private castMenu: string[] = [];          // spell ids in the current cast menu order
   private resolveTurn: (() => void) | null = null;
   // Interleaved co-op turns: keys are queued and consumed only on this player's turn.
@@ -247,6 +249,8 @@ export class Player extends Entity {
     if (this.pendingWrite) return this.resolveWrite(e);
     if (this.pendingCastDir) return this.resolveCastDir(e);
     if (this.pendingChat) return this.resolveChatDir(e);
+    if (this.pendingLook) return this.resolveLookDir(e);
+    if (this.pendingWhatIs) { this.pendingWhatIs = false; if (e.key !== "Escape") this.game.whatIs(e.key); else this.game.log.add("Never mind.", "dim"); return false; }
     if (this.pendingSpell) return this.resolveCast(e);
     if (this.pending) return this.resolveSelection(e);
     const mv = MOVES[e.key];
@@ -274,6 +278,8 @@ export class Player extends Entity {
       case "Q": return this.startSelect("quiver");
       case "f": return this.fireQuiver();
       case "c": this.pendingChat = true; this.game.log.add("Chat in which direction? (a move key, Esc to cancel)", "sys"); return false;
+      case ";": this.pendingLook = true; this.game.log.add("Look in which direction? (a move key, Esc to cancel)", "sys"); return false;
+      case "/": this.pendingWhatIs = true; this.game.log.add("What is that symbol? (type any glyph, Esc to cancel)", "sys"); return false;
       case "a": return this.startSelect("apply");
       case "Z": return this.startCast();
       case "O": return this.game.offerCorpse(this) ? this.endTurn() : false;
@@ -409,6 +415,15 @@ export class Player extends Entity {
     const foe = this.game.monsterAt(this.x + mv[0], this.y + mv[1]);
     if (!foe) { this.game.log.add("There's no one there to chat with.", "dim"); return false; }
     this.game.chat(foe); // a free social action — costs no turn
+    return false;
+  }
+
+  private resolveLookDir(e: KeyboardEvent): boolean {
+    this.pendingLook = false;
+    if (e.key === "Escape") { this.game.log.add("Never mind.", "dim"); return false; }
+    const mv = MOVES[e.key];
+    if (!mv) { this.game.log.add("That is not a direction.", "dim"); return false; }
+    this.game.lookAt(this.x + mv[0], this.y + mv[1]); // a free survey — costs no turn
     return false;
   }
 

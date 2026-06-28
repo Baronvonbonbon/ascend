@@ -554,6 +554,72 @@ export class Game {
     this.log.add(line, m.peaceful ? "sys" : "dim");
   }
 
+  /** `/` — identify a glyph from the symbol legend (a free lookup). */
+  whatIs(key: string): void {
+    const feat: Record<string, string> = {
+      "@": "the adventurer — you, or a fellow delver",
+      "#": "a wall (or, just maybe, a hidden door — search it)",
+      "·": "ordinary floor", ".": "ordinary floor",
+      "'": "an open doorway",
+      "+": "a closed door — or a spellbook (a runtime to study)",
+      ">": "a staircase down, deeper toward the JAM", "<": "a staircase up",
+      "_": "an altar — offer a corpse (O) here for favor", "Ω": "an XCM portal to a parachain realm",
+      "{": "a testnet faucet — q to quaff it", "\\": "the Sudo Throne — s to sit on it",
+      "0": "a boulder — walk into it to shove it", "§": "a warding engraving",
+      ")": "a weapon", "[": "a piece of armor", "(": "a tool, or a chest",
+      "!": "a potion", "?": "a scroll", "=": "a ring", "/": "a wand",
+      "%": "food — or a corpse you can eat (e)", "*": "an amulet or gem",
+    };
+    const mons = [...MONSTERS, SHOPKEEPER, HONEYPOT, CENSOR, ...Object.values(MINIBOSSES)].find((m) => m.ch === key);
+    const parts: string[] = [];
+    if (mons) parts.push(mons.name);
+    if (feat[key]) parts.push(feat[key]);
+    if (parts.length === 0) { this.log.add(`'${key}' isn't a symbol you recognize.`, "dim"); return; }
+    this.log.add(`${key} — ${parts.join("; or ")}.`, "sys");
+  }
+
+  /** `;` — farlook the tile in a direction (monster, item, or terrain). A free survey. */
+  lookAt(x: number, y: number): void {
+    if (!this.level.tileAt(x, y)) { this.log.add("That's beyond the dungeon's edge.", "dim"); return; }
+    const m = this.monsterAt(x, y);
+    if (m && (m.revealed || !m.def.mimic)) {
+      const r = m.hp / m.maxHp;
+      const band = r >= 1 ? "unhurt" : r > 0.66 ? "lightly wounded" : r > 0.33 ? "moderately wounded" : r > 0.12 ? "heavily wounded" : "near death";
+      const tags: string[] = [];
+      if (m.peaceful) tags.push("peaceful"); else tags.push("hostile");
+      if (m.def.boss || m.def.keeper) tags.push("formidable");
+      if (m.def.ranged) tags.push("ranged");
+      if (m.def.breath) tags.push("breath-weapon");
+      if (m.def.summons) tags.push("summoner");
+      if (m.def.heals) tags.push("healer");
+      if (m.def.steals) tags.push("thief");
+      if (m.def.breeds || m.def.splits) tags.push("breeder");
+      if (m.def.corpseEffect === "petrify") tags.push("petrifying");
+      if (m.sleepTurns > 0) tags.push("asleep");
+      if (m.cancelled) tags.push("nullified");
+      this.log.add(`You see ${m.name} — ${band} (${tags.join(", ")}).`, "sys");
+      return;
+    }
+    const it = this.level.itemAt(x, y);
+    if (it) {
+      const what = it.corpse ? `the corpse of ${it.corpse.def.name}` : it.chest ? `a ${it.chest.locked ? "locked " : ""}chest` : this.ident.name(it.type);
+      this.log.add(`You see ${what} lying there.`, "sys");
+      return;
+    }
+    const trap = this.level.trapAt(x, y);
+    if (trap && trap.revealed) { this.log.add(`You see a ${this.trapName(trap.kind)}.`, "sys"); return; }
+    if (this.level.engravingAt(x, y)) { this.log.add("You see a warding engraving (§) scratched here.", "sys"); return; }
+    if (this.level.boulderAt(x, y)) { this.log.add("You see a boulder (0).", "sys"); return; }
+    const t = this.level.tileAt(x, y);
+    const names: Partial<Record<TileType, string>> = {
+      wall: "a wall", floor: "bare floor", door: "an open doorway", doorClosed: "a closed door",
+      doorLocked: "a locked door", doorHidden: "a wall", stairsDown: "a staircase down",
+      stairsUp: "a staircase up", altar: "an altar", portal: "an XCM portal", faucet: "a faucet",
+      throne: "the Sudo Throne",
+    };
+    this.log.add(`You see ${names[t!] ?? "nothing notable"}.`, "dim");
+  }
+
   /** Kick a locked door — Stake-weight (STR) decides if it bursts; sometimes you stub your foot. */
   kickDoor(p: Player, nx: number, ny: number): boolean {
     const chance = Math.max(0.15, 0.3 + abilityMod(p.str) * 0.08);
