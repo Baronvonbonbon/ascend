@@ -8,6 +8,9 @@ export const CHAIN = {
   ascendBank: "0x3D35694e11d2D5E3B6977C3Fd2683f52E57FcD31",
   ascendLedger: "0x56068D03943fD76D4D6D86A81e31895b884ccaa5",
   ascendGear: "0xFbE3c0de4C67d19Ea366f2Bf69BC5a4c83492d7D",
+  // Soulbound proof-of-ascension NFT. Zero until deployed — the client no-ops the
+  // deed mint while this is unset. Deploy with scripts/deploy-deed.mjs, then paste here.
+  ascendDeed: "0x0000000000000000000000000000000000000000",
   relayUrl: "https://relay.javcon.io",
 };
 
@@ -29,6 +32,14 @@ export const LEDGER_ABI = [
   "function recordNonce(address) view returns (uint256)",
   "function runCount() view returns (uint256)",
   "function runsRange(uint256 start, uint256 n) view returns (tuple(address player, uint16 depth, bool won, uint64 time)[])",
+];
+
+// AscendDeed (soulbound ERC-721) — the proof-of-ascension trophy. Permissionless
+// direct claim from the winner's own wallet (no relay); one per address, non-transferable.
+export const DEED_ABI = [
+  "function claim(uint16 depth, uint32 epoch) returns (uint256)",
+  "function hasDeed(address) view returns (bool)",
+  "function deedOf(address) view returns (uint256 tokenId, uint16 depth, uint64 time, uint32 epoch)",
 ];
 
 export const BANK_ABI = [

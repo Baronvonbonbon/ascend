@@ -40,6 +40,12 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > it generates as a **claustrophobic perfect maze** of narrow, lightless corridors,
 > stripped of all shops, faucets, thrones and altars. Only demons, traps, and the
 > hunting Censor await in the dark.
+>
+> **The Deed of Ascension (Phase 12f).** Win for real and — if you've connected a
+> wallet — you mint a **soulbound, non-transferable NFT** (`AscendDeed`): permanent
+> proof that *this* wallet ascended, recording your depth and epoch. It can't be
+> bought or sold, only earned. (Deploy the contract with `node scripts/compile.mjs
+> && node scripts/deploy-deed.mjs`, then paste the address into `src/chain/config.ts`.)
 > **Phase 4 — persistence & social** is in: when a run ends (death or ASCENSION)
 > it's recorded on-chain **gaslessly** (you sign, the relay submits) into the
 > **AscendLedger** Hall of Fame (`H` to view), and fallen heroes leave **bones**

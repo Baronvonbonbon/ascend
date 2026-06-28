@@ -13,6 +13,7 @@ import { connectWallet, Wallet } from "./chain/wallet";
 import { walletBalancePas, buyDirect } from "./chain/bank";
 import { recordRun, readRecent, RunEntry } from "./chain/ledger";
 import { readGear, forgeGear, forgePrice } from "./chain/gear";
+import { claimDeed, readDeed, deedConfigured } from "./chain/deed";
 import { RARITY } from "./chain/config";
 import type { Peer } from "./net/peer";
 import type { CoopMode, Cell, NetMsg } from "./net/protocol";
@@ -148,6 +149,8 @@ export class Game {
       this.log.add(`✦ ${added} on-chain relic${added > 1 ? "s" : ""} materialise in your pack (yours forever — tradeable).`, "good");
       this.draw();
     }
+    const deed = await readDeed(this.wallet.address);
+    if (deed) this.log.add(`✦ This wallet bears a soulbound Deed of Ascension (#${deed.tokenId}, depth ${deed.depth}) — you have ascended before.`, "good");
   }
 
   /** Forge a held piece of gear into a tradeable NFT relic — a direct wallet tx.
@@ -1142,7 +1145,21 @@ export class Game {
     this.log.add("Press R to begin a new descent.", "dim");
     this.draw();
     void this.recordResult(true);
+    void this.mintDeed(w);
     void this.showHallOfFame();
+  }
+
+  /** On a true ascension, mint the winner's soulbound Deed of Ascension (their own wallet pays). */
+  private async mintDeed(w: Player): Promise<void> {
+    if (!this.wallet) { return; }
+    if (!deedConfigured()) { this.log.add("(deploy AscendDeed to mint your soulbound Deed of Ascension)", "dim"); return; }
+    const existing = await readDeed(this.wallet.address);
+    if (existing) { this.log.add(`Your soulbound Deed of Ascension (#${existing.tokenId}) already adorns this wallet.`, "good"); return; }
+    this.log.add("Confirm in your wallet to mint your soulbound Deed of Ascension…", "sys"); this.draw();
+    const r = await claimDeed(this.wallet.provider, w.maxDepthReached, w.level, (h) => this.log.add(`Minting deed… ${h.slice(0, 10)}…`, "dim"));
+    if (r.ok) this.log.add("✦ A soulbound Deed of Ascension is minted to your wallet — proof, forever, that you ascended. It cannot be sold, only earned. ✦", "good");
+    else this.log.add(`Deed mint: ${r.error}`, "dim");
+    this.draw();
   }
 
   private gameOver(): void {
