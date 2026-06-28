@@ -4,7 +4,7 @@ import { COLORS, MonsterDef, SPELLS, spellById } from "./data";
 import { Inventory, Item } from "./inventory";
 import { bucDelta, ITEMS, ItemType, ArmorSlot } from "./items";
 
-type Verb = "wield" | "wear" | "takeoff" | "quaff" | "read" | "eat" | "drop" | "zap" | "throw" | "forge" | "apply" | "quiver";
+type Verb = "wield" | "wear" | "takeoff" | "quaff" | "read" | "eat" | "drop" | "zap" | "throw" | "forge" | "apply" | "quiver" | "name" | "offhand";
 const VERB_PROMPT: Record<Verb, string> = {
   wield: "Wield which weapon?", wear: "Wear/put on which item?",
   quaff: "Quaff which potion?", read: "Read which scroll?",
@@ -12,6 +12,7 @@ const VERB_PROMPT: Record<Verb, string> = {
   throw: "Throw which item?", forge: "Forge which piece of gear into an NFT relic?",
   takeoff: "Take off which worn piece?", apply: "Apply which tool?",
   quiver: "Ready which item in your quiver?",
+  name: "Name which item?", offhand: "Wield which weapon in your off-hand?",
 };
 
 export abstract class Entity {
@@ -65,6 +66,8 @@ export class Player extends Entity {
   intrinsics = new Set<string>(); // poisonResist, petrifyResist, fast (from eating corpses)
   skillXp: Record<string, number> = {};   // landed hits per weapon-skill class (#enhance)
   skillRank: Record<string, number> = {};  // 0 Unskilled · 1 Basic · 2 Skilled · 3 Expert
+  offhand: Item | null = null;             // a second weapon for #twoweapon (X)
+  riding = false;                          // mounted on the steed (#ride / M)
   private regenTimer = 0;
   hasJam = false;
   maxDepthReached = 1;
@@ -130,6 +133,11 @@ export class Player extends Entity {
   private pendingChat = false;              // choosing a direction to chat
   private pendingLook = false;              // farlook (;) — choosing a direction to examine
   private pendingWhatIs = false;            // what-is (/) — awaiting a glyph to identify
+  private pendingOpen = false;              // open (o) — choosing a direction (door / locked = force)
+  private pendingClose = false;             // close (C) — choosing a door direction
+  private pendingKick = false;              // kick (K) — choosing a direction
+  private pendingName: Item | null = null;  // name (N) — the item being labelled
+  private nameBuf = "";                     // accumulating typed text for #name
   private castMenu: string[] = [];          // spell ids in the current cast menu order
   private resolveTurn: (() => void) | null = null;
   // Interleaved co-op turns: keys are queued and consumed only on this player's turn.
@@ -149,9 +157,11 @@ export class Player extends Entity {
 
   getSpeed(): number {
     const haste = this.hasteTurns > 0 ? 50 : 0; // overclock spell
-    if (this.polyForm) return Math.max(20, this.polyForm.speed ?? 100) + haste; // move as your fork
+    if (this.riding && !(this.game.pet?.alive)) this.riding = false; // steed lost — you're afoot again
+    const ride = this.riding ? 30 : 0;           // a nominator steed quickens your stride
+    if (this.polyForm) return Math.max(20, this.polyForm.speed ?? 100) + haste + ride; // move as your fork
     const base = this.intrinsics.has("fast") ? 130 : 100; // intrinsic speed from a fork-daemon corpse
-    return base + haste;
+    return base + haste + ride;
   }
 
   act(): Promise<void> {
@@ -255,6 +265,10 @@ export class Player extends Entity {
     if (this.pendingChat) return this.resolveChatDir(e);
     if (this.pendingLook) return this.resolveLookDir(e);
     if (this.pendingWhatIs) { this.pendingWhatIs = false; if (e.key !== "Escape") this.game.whatIs(e.key); else this.game.log.add("Never mind.", "dim"); return false; }
+    if (this.pendingOpen) return this.resolveOpenDir(e);
+    if (this.pendingClose) return this.resolveCloseDir(e);
+    if (this.pendingKick) return this.resolveKickDir(e);
+    if (this.pendingName) return this.resolveName(e);
     if (this.pendingSpell) return this.resolveCast(e);
     if (this.pending) return this.resolveSelection(e);
     const mv = MOVES[e.key];
@@ -273,7 +287,18 @@ export class Player extends Entity {
       case "W": return this.startSelect("wear");
       case "q": return this.game.level.tileAt(this.x, this.y) === "faucet" ? (this.game.quaffFaucet(this) ? this.endTurn() : false) : this.startSelect("quaff");
       case "s": return this.game.level.tileAt(this.x, this.y) === "throne" ? (this.game.sitThrone(this) ? this.endTurn() : false) : (this.game.search(this) ? this.endTurn() : false);
-      case "o": return this.game.openChest(this) ? this.endTurn() : false;
+      case "o": // a chest underfoot opens directly; otherwise pick a direction to open a door
+        if (this.game.chestUnderfoot(this)) return this.game.openChest(this) ? this.endTurn() : false;
+        this.pendingOpen = true; this.game.log.add("Open in which direction? (a move key, Esc to cancel)", "sys"); return false;
+      case "C": this.pendingClose = true; this.game.log.add("Close a door in which direction? (a move key, Esc to cancel)", "sys"); return false;
+      case "K": this.pendingKick = true; this.game.log.add("Kick in which direction? (a move key, Esc to cancel)", "sys"); return false;
+      case "D": return this.game.dipWeapon(this) ? this.endTurn() : false;
+      case "N": return this.startSelect("name");
+      case "^": this.game.identifyTrap(this); return false;
+      case "X": // toggle two-weapon: off → choose an off-hand; on → sheathe it
+        if (this.offhand) { this.game.setOffhand(this, null); return false; }
+        return this.startSelect("offhand");
+      case "M": return this.game.toggleRide(this) ? this.endTurn() : false;
       case "r": return this.startSelect("read");
       case "e": return this.game.eatFloorCorpse(this) ? this.endTurn() : this.startSelect("eat");
       case "d": return this.startSelect("drop");
@@ -330,6 +355,18 @@ export class Player extends Entity {
       this.quiver = item;
       this.game.log.add(`You ready ${this.game.ident.name(item.type)} in your quiver. (f to fire)`, "good");
       return false;
+    }
+    if (verb === "name") {
+      this.pendingName = item;
+      this.nameBuf = item.label ?? "";
+      this.game.log.add(`Call ${this.game.ident.name(item.type)}: ${this.nameBuf}_  (type a name, Enter to set, Esc to cancel)`, "sys");
+      return false;
+    }
+    if (verb === "offhand") {
+      if (item.type.kind !== "weapon") { this.game.log.add("Only a weapon can go in your off-hand.", "dim"); return false; }
+      if (item === this.weapon) { this.game.log.add("That's your main weapon already.", "dim"); return false; }
+      if (this.isWelded(item)) { item.bucKnown = true; this.game.log.add("It's cursed — it won't sit in the off-hand.", "bad"); return false; }
+      return this.game.setOffhand(this, item) ? this.endTurn() : false;
     }
     if (verb === "apply") {
       if (item.type.kind !== "tool") { this.game.log.add("That isn't a tool you can apply.", "dim"); return false; }
@@ -457,6 +494,47 @@ export class Player extends Entity {
     return false;
   }
 
+  private resolveOpenDir(e: KeyboardEvent): boolean {
+    this.pendingOpen = false;
+    if (e.key === "Escape") { this.game.log.add("Never mind.", "dim"); return false; }
+    const mv = MOVES[e.key];
+    if (!mv) { this.game.log.add("That is not a direction.", "dim"); return false; }
+    return this.game.openDir(this, mv[0], mv[1]) ? this.endTurn() : false;
+  }
+
+  private resolveCloseDir(e: KeyboardEvent): boolean {
+    this.pendingClose = false;
+    if (e.key === "Escape") { this.game.log.add("Never mind.", "dim"); return false; }
+    const mv = MOVES[e.key];
+    if (!mv) { this.game.log.add("That is not a direction.", "dim"); return false; }
+    return this.game.closeDoor(this, mv[0], mv[1]) ? this.endTurn() : false;
+  }
+
+  private resolveKickDir(e: KeyboardEvent): boolean {
+    this.pendingKick = false;
+    if (e.key === "Escape") { this.game.log.add("Never mind.", "dim"); return false; }
+    const mv = MOVES[e.key];
+    if (!mv) { this.game.log.add("That is not a direction.", "dim"); return false; }
+    return this.game.kick(this, mv[0], mv[1]) ? this.endTurn() : false;
+  }
+
+  private resolveName(e: KeyboardEvent): boolean {
+    const item = this.pendingName!;
+    if (e.key === "Escape") { this.pendingName = null; this.game.log.add("Never mind.", "dim"); return false; }
+    if (e.key === "Enter") {
+      this.pendingName = null;
+      const name = this.nameBuf.trim();
+      item.label = name || undefined;
+      this.game.log.add(name ? `You name it "${name}".` : "You clear its name.", "dim");
+      return false;
+    }
+    if (e.key === "Backspace") this.nameBuf = this.nameBuf.slice(0, -1);
+    else if (e.key.length === 1 && this.nameBuf.length < 24) this.nameBuf += e.key;
+    else return false;
+    this.game.log.add(`Call ${this.game.ident.name(item.type)}: ${this.nameBuf}_`, "sys");
+    return false;
+  }
+
   private resolveThrowDir(e: KeyboardEvent): boolean {
     const item = this.pendingThrow!;
     this.pendingThrow = null;
@@ -560,6 +638,8 @@ export class Player extends Entity {
 
   private unequip(item: Item): void {
     if (this.weapon === item) { this.weapon = null; this.applyWeapon(); }
+    if (this.offhand === item) this.offhand = null;
+    if (this.quiver === item) this.quiver = null;
     if (this.wornArmor.includes(item)) { this.wornArmor = this.wornArmor.filter((a) => a !== item); this.recomputeAC(); }
     if (this.ring === item) { this.applyRing(item, false); this.ring = null; }
   }
@@ -609,6 +689,7 @@ export class Player extends Entity {
     const pet = this.game.pet;
     if (pet && pet.alive && pet.x === nx && pet.y === ny) { pet.x = this.x; pet.y = this.y; }
     this.x = nx; this.y = ny;
+    if (this.riding && pet && pet.alive) { pet.x = this.x; pet.y = this.y; } // the steed carries you along
     this.game.recomputeFOV();
     const here = this.game.level.itemAt(this.x, this.y);
     if (here) {
@@ -844,6 +925,7 @@ export class Pet extends Entity {
   act(): void {
     if (!this.alive) return;
     const p = this.game.player;
+    if (p.riding) { this.x = p.x; this.y = p.y; return; } // ridden — it moves only with its rider
 
     const foe = this.game.adjacentEnemy(this.x, this.y);
     if (foe) { this.game.attack(this, foe); return; }

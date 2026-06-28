@@ -193,7 +193,7 @@ pair of them sit together and they'll multiply into a swarm, so don't ignore a c
 
 **Controls:** move **arrows/hjkl/yubn** · pick up `,` · inventory `i` · sheet `@` · wield `w` ·
 wear `W` · take off `T` · quaff `q` · read/study `r` · eat `e` · drop `d` · zap `z` · cast `Z` ·
-throw `t` · quiver `Q` · fire `f` · chat `c` · look `;` · what-is `/` · enhance skills `x` · discoveries `\` · apply tool `a` · engrave `E` · pray `P` · offer `O` · descend `>` · ascend/up `<` · wait `.` · restart `R`.
+throw `t` · quiver `Q` · fire `f` · chat `c` · look `;` · what-is `/` · enhance skills `x` · discoveries `\` · open/force `o` · close `C` · kick `K` · dip `D` · name `N` · trap-ID `^` · two-weapon `X` · ride `M` · apply tool `a` · engrave `E` · pray `P` · offer `O` · descend `>` · ascend/up `<` · wait `.` · restart `R`.
 
 `npm run build` → typecheck + production bundle in `dist/`.
 

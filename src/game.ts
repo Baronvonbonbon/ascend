@@ -465,13 +465,143 @@ export class Game {
     this.level.items.push({ x: c.x, y: c.y, type: CHEST, chest: { locked: ROT.RNG.getUniform() < 0.5 } });
   }
 
+  chestUnderfoot(p: Player): boolean {
+    return this.level.items.some((i) => i.chest && i.x === p.x && i.y === p.y);
+  }
+
+  /** Does this attempt to force a lock succeed? Weapons help; a missed swing may ding the blade. */
+  private tryForce(p: Player): boolean {
+    const armed = !!p.weapon;
+    const chance = armed ? Math.max(0.25, 0.5 + abilityMod(p.str) * 0.08) : Math.max(0.15, 0.3 + abilityMod(p.str) * 0.05);
+    if (ROT.RNG.getUniform() < chance) return true;
+    if (armed && !p.weapon!.proofed && ROT.RNG.getUniform() < 0.12) {
+      p.weapon!.erosion = Math.min(3, (p.weapon!.erosion ?? 0) + 1);
+      this.log.add(`Your ${this.ident.name(p.weapon!.type)} scrapes and dulls against the lock.`, "dim");
+    }
+    return false;
+  }
+
+  /** `o` in a direction — open a door (force it with your weapon if locked). */
+  openDir(p: Player, dx: number, dy: number): boolean {
+    const nx = p.x + dx, ny = p.y + dy;
+    const tile = this.level.tileAt(nx, ny);
+    const fi = this.level.items.find((i) => i.chest && i.x === nx && i.y === ny);
+    if (fi) { this.log.add("Step onto the chest, then press o to open it.", "dim"); return false; }
+    if (tile === "door") { this.log.add("That door is already open.", "dim"); return false; }
+    if (tile === "doorClosed") { this.level.tiles[ny][nx] = "door"; this.recomputeFOV(); this.log.add(`${this.sub(p)} ${this.verbS(p, "open")} the door.`, "dim"); this.draw(); return true; }
+    if (tile === "doorLocked") {
+      const how = p.weapon ? `force the door with ${this.ident.name(p.weapon.type)}` : "shoulder the door";
+      if (!this.tryForce(p)) { this.log.add(`You ${how} — the lock holds. (try again, or K to kick)`, "dim"); return true; }
+      this.level.tiles[ny][nx] = "door"; this.recomputeFOV();
+      this.log.add(`${this.sub(p)} ${this.verbS(p, "force")} the door open.`, "good"); this.draw(); return true;
+    }
+    this.log.add("There's nothing there to open.", "dim"); return false;
+  }
+
+  /** `C` in a direction — close an open door, sealing it (blocks sight + pursuers). */
+  closeDoor(p: Player, dx: number, dy: number): boolean {
+    const nx = p.x + dx, ny = p.y + dy;
+    if (this.level.tileAt(nx, ny) !== "door") { this.log.add("There's no open door there to close.", "dim"); return false; }
+    if (this.monsterAt(nx, ny) || this.playerAt(nx, ny) || this.level.boulderAt(nx, ny) || this.level.itemAt(nx, ny)) {
+      this.log.add("Something's in the doorway — it won't close.", "dim"); return false;
+    }
+    this.level.tiles[ny][nx] = "doorClosed"; this.recomputeFOV();
+    this.log.add(`${this.sub(p)} ${this.verbS(p, "pull")} the door shut.`, "dim"); this.draw(); return true;
+  }
+
+  /** `K` in a direction — kick a foe (damage + maybe stun/knockback), a boulder, a door, or a wall. */
+  kick(p: Player, dx: number, dy: number): boolean {
+    const nx = p.x + dx, ny = p.y + dy;
+    const foe = this.monsterAt(nx, ny);
+    if (foe) {
+      if (foe.def.keeper && foe.peaceful) { foe.peaceful = false; foe.fg = "#ff5030"; this.log.add("You kick the Marketmaker — \"Assault!\" It turns lethal.", "bad"); }
+      const dmg = Math.max(1, ROT.RNG.getUniformInt(1, 3) + abilityMod(p.str));
+      foe.hp -= dmg;
+      this.log.add(`${this.sub(p)} ${this.verbS(p, "kick")} ${foe.name} for ${dmg}.`, "good");
+      if (foe.hp <= 0) { this.gainXp(p, foe.maxHp); this.kill(foe); return true; }
+      // a solid boot can stun and shove the foe back a tile
+      if (ROT.RNG.getUniform() < 0.35) {
+        const bx = nx + dx, by = ny + dy;
+        if (this.level.isPassable(bx, by) && !this.monsterAt(bx, by) && !this.playerAt(bx, by) && !this.level.boulderAt(bx, by)) { foe.x = bx; foe.y = by; }
+        foe.sleepTurns = Math.max(foe.sleepTurns, 1);
+        this.log.add(`${cap(foe.name)} reels from the blow.`, "dim");
+      }
+      return true;
+    }
+    if (this.level.boulderAt(nx, ny)) {
+      const b = this.level.boulderAt(nx, ny)!, bx = nx + dx, by = ny + dy;
+      if (this.level.isPassable(bx, by) && !this.level.boulderAt(bx, by) && !this.monsterAt(bx, by) && !this.playerAt(bx, by)) { b.x = bx; b.y = by; this.log.add("You kick the boulder forward.", "dim"); }
+      else { this.log.add("You kick the boulder — it doesn't move. Ow.", "dim"); if (ROT.RNG.getUniform() < 0.3) { p.hp -= 1; if (p.hp <= 0) this.killPlayer(p); } }
+      this.draw(); return true;
+    }
+    const tile = this.level.tileAt(nx, ny);
+    if (tile === "doorLocked") return this.kickDoor(p, nx, ny);
+    if (tile === "doorClosed") { this.level.tiles[ny][nx] = "door"; this.recomputeFOV(); this.log.add("You kick the door open.", "good"); this.draw(); return true; }
+    if (tile === "wall" || tile === "doorHidden") { this.log.add("You kick the wall. Ow — that was foolish.", "dim"); if (ROT.RNG.getUniform() < 0.4) { p.hp -= 1; if (p.hp <= 0) this.killPlayer(p); } return true; }
+    this.log.add("You kick at the air.", "dim"); return false;
+  }
+
+  /** `#dip` (D) — dip your wielded weapon into a faucet underfoot. The lawful relic awaits the worthy. */
+  dipWeapon(p: Player): boolean {
+    if (this.level.tileAt(p.x, p.y) !== "faucet") { this.log.add("You see no faucet here to dip into.", "dim"); return false; }
+    if (!p.weapon) { this.log.add("You have nothing wielded to dip.", "dim"); return false; }
+    const w = p.weapon, name = this.ident.name(w.type), r = ROT.RNG.getUniform();
+    const worthy = (this.luckOf(p) >= 3 || p.level >= 6) && w.buc !== "cursed";
+    if (r < 0.10 && worthy && !w.relic) {
+      w.relic = true; w.buc = "blessed"; w.bucKnown = true; w.enchant = Math.max(3, (w.enchant ?? 0) + 1);
+      p.applyWeapon();
+      this.log.add(`✦ The faucet erupts in light — a lawful current floods your ${name}! It is now Polkadot's Edge, +${w.enchant} blessed.`, "good");
+    } else if (r < 0.32) { w.buc = "blessed"; w.bucKnown = true; this.log.add(`A clear glow washes your ${name} — it feels blessed.`, "good"); }
+    else if (r < 0.46) { w.erosion = w.proofed ? 0 : Math.min(3, (w.erosion ?? 0) + 1); this.log.add(`The water is corrosive — your ${name} ${w.proofed ? "shrugs it off" : "corrodes"}.`, w.proofed ? "dim" : "bad"); }
+    else if (r < 0.60) { const spot = this.adjacentFree(p.x, p.y); if (spot) { const m = new Monster(this, MONSTERS[0], spot.x, spot.y); this.monsters.push(m); this.scheduler.add(m, true); } this.log.add("A faucet bot sloshes out at the disturbance!", "bad"); }
+    else this.log.add(`You dip your ${name}. The water ripples. Nothing happens.`, "dim");
+    return true;
+  }
+
+  /** `^` — identify the trap underfoot and any revealed traps beside you. A free survey. */
+  identifyTrap(p: Player): void {
+    const here = this.level.trapAt(p.x, p.y);
+    const around: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]];
+    let found = false;
+    if (here && here.revealed) { this.log.add(`You stand on a ${this.trapName(here.kind)}.`, "sys"); found = true; }
+    for (const [dx, dy] of around) {
+      const t = this.level.trapAt(p.x + dx, p.y + dy);
+      if (t && t.revealed) { this.log.add(`There is a ${this.trapName(t.kind)} beside you.`, "sys"); found = true; }
+    }
+    if (!found) this.log.add("You sense no traps nearby. (s to search for hidden ones)", "dim");
+  }
+
+  /** `#twoweapon` (X) — set or clear the off-hand weapon. */
+  setOffhand(p: Player, item: Item | null): boolean {
+    if (item === null) {
+      if (!p.offhand) return false;
+      this.log.add(`${this.sub(p)} ${this.verbS(p, "sheathe")} the off-hand ${this.ident.name(p.offhand.type)}.`, "dim");
+      p.offhand = null; return false; // a free action
+    }
+    p.offhand = item;
+    this.log.add(`${this.sub(p)} ${this.verbS(p, "ready")} ${this.ident.name(item.type)} in the off-hand — now two-weaponing.`, "good");
+    return true; // committing to the stance costs the turn
+  }
+
+  /** `#ride` (M) — mount or dismount the nominator steed (adjacent or underfoot). */
+  toggleRide(p: Player): boolean {
+    const steed = this.pet;
+    if (p.riding) { p.riding = false; this.log.add(`${this.sub(p)} ${this.verbS(p, "dismount")} the nominator.`, "dim"); return true; }
+    if (!steed || !steed.alive) { this.log.add("You have no steed to ride. (a tamed nominator)", "dim"); return false; }
+    if (Math.max(Math.abs(steed.x - p.x), Math.abs(steed.y - p.y)) > 1) { this.log.add("Your steed is too far — step beside it first.", "dim"); return false; }
+    p.riding = true; steed.x = p.x; steed.y = p.y;
+    this.log.add(`${this.sub(p)} ${this.verbS(p, "mount")} the nominator — you ride as one, swift and sure.`, "good");
+    return true;
+  }
+
   /** Open a chest underfoot — force the lock if need be, then spill its loot. */
   openChest(p: Player): boolean {
     const fi = this.level.items.find((i) => i.chest && i.x === p.x && i.y === p.y);
     if (!fi || !fi.chest) { this.log.add("There's no chest here to open.", "dim"); return false; }
     if (fi.chest.locked) {
-      if (ROT.RNG.getUniform() < 0.25) { this.log.add("You strain at the lock — it holds. Try again.", "dim"); return true; }
-      this.log.add("You force the lock open.", "good"); fi.chest.locked = false;
+      const how = p.weapon ? `force the lock with ${this.ident.name(p.weapon.type)}` : "strain at the lock";
+      if (!this.tryForce(p)) { this.log.add(`You ${how} — it holds. (try again)`, "dim"); return true; }
+      this.log.add(`You ${how} open.`, "good"); fi.chest.locked = false;
     }
     this.level.items = this.level.items.filter((i) => i !== fi);
     const n = ROT.RNG.getUniformInt(1, 3);
@@ -893,6 +1023,16 @@ export class Game {
       if (a instanceof Player && d instanceof Monster) this.gainXp(a, d.maxHp); // XP = the foe's vitality
       this.kill(d);
     }
+    // #twoweapon: a lighter off-hand follow-up if the foe still stands.
+    if (a instanceof Player && d instanceof Monster && d.alive && a.offhand) {
+      if (ROT.RNG.getUniform() < 0.5 + this.skillAccBonus(a) * 0.05) {
+        const [olo, ohi] = a.offhand.type.dmg ?? [1, 2];
+        const od = Math.max(1, Math.floor(ROT.RNG.getUniformInt(olo, ohi) / 2) + (a.offhand.enchant ?? 0));
+        d.hp -= od;
+        this.log.add(`${this.sub(a)} ${this.verbS(a, "follow")} up with the off-hand ${this.ident.name(a.offhand.type)} for ${od}.`, "good");
+        if (d.hp <= 0) { this.gainXp(a, d.maxHp); this.kill(d); }
+      } else this.log.add("Your off-hand swing goes wide.", "dim");
+    }
   }
 
   /** d20 to-hit: nat 20 always lands, nat 1 always misses; else roll + accuracy ≥ 10 + dodge.
@@ -1098,6 +1238,8 @@ export class Game {
     if (p.inventory.items.length === 0) return null;
     const it = ROT.RNG.getItem(p.inventory.items)!;
     if (p.weapon === it) { p.weapon = null; p.applyWeapon(); }
+    if (p.offhand === it) p.offhand = null;
+    if (p.quiver === it) p.quiver = null;
     if (p.wornArmor.includes(it)) { p.wornArmor = p.wornArmor.filter((a) => a !== it); p.recomputeAC(); }
     if (p.ring === it) { p.applyRing(it, false); p.ring = null; }
     p.inventory.remove(it);
@@ -1559,13 +1701,14 @@ export class Game {
     this.log.add(`— ${who.name === "you" ? "Inventory" : who.name + "'s pack"} —`, "sys");
     inv.items.forEach((it, i) => {
       const welded = who.isWelded(it);
-      const eq = welded ? " (welded)" : it === who.weapon ? " (wielded)" : who.wornArmor.includes(it) ? " (worn)" : it === who.ring ? " (on hand)" : it === who.quiver ? " (at the ready)" : "";
+      const eq = welded ? " (welded)" : it === who.weapon ? " (wielded)" : it === who.offhand ? " (off-hand)" : who.wornArmor.includes(it) ? " (worn)" : it === who.ring ? " (on hand)" : it === who.quiver ? " (at the ready)" : "";
+      const lbl = it.label ? ` named "${it.label}"` : "";
       const ch = it.charges != null ? ` [${it.charges}]` : it.type.id === "vault" ? ` {${it.contents?.length ?? 0} held}` : "";
       const relic = it.relic ? ` +${it.enchant ?? 0} ✦` : "";
       const buc = it.bucKnown && it.buc ? `${it.buc} ` : "";
       const ero = it.erosion ? (["", "rusty ", "corroded ", "very corroded "][it.erosion] ?? "") : (it.proofed ? "audited " : "");
       const tone = it.bucKnown && it.buc === "cursed" ? "bad" : it.bucKnown && it.buc === "blessed" ? "good" : it.relic ? "sys" : "dim";
-      this.log.add(`  ${inv.letter(i)}) ${buc}${ero}${this.ident.name(it.type)}${relic}${ch}${eq}`, tone);
+      this.log.add(`  ${inv.letter(i)}) ${buc}${ero}${this.ident.name(it.type)}${relic}${ch}${lbl}${eq}`, tone);
     });
   }
 
