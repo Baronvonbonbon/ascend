@@ -219,6 +219,7 @@ export class Player extends Entity {
       this.game.killPlayer(this);
     }
     this.game.turn++;
+    this.game.censorHuntTick();
     if (this.polyForm && --this.polyTurns <= 0) this.game.revertPoly(this);
     if (this.senseTurns > 0) this.senseTurns--;
     if (this.hasteTurns > 0 && --this.hasteTurns === 0) this.game.log.add(`${this.name === "you" ? "You slow" : this.name + " slows"} back to normal.`, "dim");
@@ -756,6 +757,7 @@ export class Monster extends Entity {
   stolen: Item | null = null; // a thief (rug puller) carries what it snatched; drops it on death
   // A shopkeeper stands peaceful until you steal; then it hunts you down.
   peaceful = false;
+  isHunter = false; // THE CENSOR resurrected to chase the JAM-bearer (Phase 12d)
   // A mimic (honeypot) wears an item's glyph until it's touched.
   revealed = false;
   disguiseCh = "*";
@@ -832,6 +834,11 @@ export class Monster extends Entity {
     }
 
     const dist = Math.max(Math.abs(this.x - p.x), Math.abs(this.y - p.y));
+    // The resurrected Censor lunges for the JAM itself — a snatch-and-blink.
+    if (this.isHunter && !this.cancelled && dist === 1 && p.hasJam && ROT.RNG.getUniform() < 0.18) {
+      this.game.censorSteal(this, p);
+      return;
+    }
     // The rug pull: a thief adjacent to you snatches a pack item and blinks away.
     if (!this.cancelled && this.def.steals && dist === 1) {
       const loot = this.game.stealItem(p);

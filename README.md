@@ -30,6 +30,11 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > matching **your** ethos to **truly ASCEND** and win (the wrong altar blasts you and
 > spits out a demon). Gehennom and the Planes crawl with **demons of centralization**
 > — custodian fiends, KYC wraiths, permission daemons, censorship demons.
+>
+> **The Censor's hunt (Phase 12d).** The instant you take the JAM, **THE CENSOR
+> resurrects** and won't stop — every ~45–75 turns (and on every new level) it
+> rises near you, a relentless 48-HP pursuer. Let it reach you and it may **snatch
+> the JAM and blink away**; the only way back is to **hunt it down and kill it**.
 > **Phase 4 — persistence & social** is in: when a run ends (death or ASCENSION)
 > it's recorded on-chain **gaslessly** (you sign, the relay submits) into the
 > **AscendLedger** Hall of Fame (`H` to view), and fallen heroes leave **bones**

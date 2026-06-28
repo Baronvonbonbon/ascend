@@ -53,6 +53,8 @@ export class Game {
   private gehennomOpen = false;                  // the Invocation has been performed — the Dark Forest lies below
   private plane = 0;                              // 0 = the dungeon; 1..PLANES.length = the ascent above the surface
   private genesisAltars: { x: number; y: number; ethos: Ethos }[] = []; // the three Astral altars — only your aligned one ascends
+  private jamStolen = false;                     // THE CENSOR has snatched the JAM — slay the hunter to reclaim it
+  private censorTimer = 0;                        // turns until the next resurrection rises
   private loadedRelics = new Set<number>();      // NFT relic tokenIds already pulled into this run's pack
   wallet: Wallet | null = null;
   onWallet?: (address: string, pas: number) => void;
@@ -90,6 +92,8 @@ export class Game {
     this.defeatedBosses.clear();
     this.gehennomOpen = false;
     this.plane = 0;
+    this.jamStolen = false;
+    this.censorTimer = 0;
     this.loadedRelics.clear();
     this.downed.clear();
     this.turn = 0;
@@ -453,6 +457,50 @@ export class Game {
     if (this.plane !== PLANES.length) return;
     const a = this.genesisAltars.find((g) => g.x === p.x && g.y === p.y);
     if (a) this.log.add(`This altar resonates with ${a.ethos}.${a.ethos === p.ethos ? " It is yours — offer the JAM (O)." : " Not your alignment."}`, a.ethos === p.ethos ? "good" : "dim");
+  }
+
+  // ── the Censor's hunt (Phase 12d) ──
+  /** Once the JAM is taken, THE CENSOR keeps resurrecting to chase it. Called each player turn. */
+  censorHuntTick(): void {
+    if (this.over) return;
+    const hunting = this.allPlayers().some((q) => q.alive && q.hasJam) || this.jamStolen;
+    if (!hunting) return;
+    if (this.monsters.some((m) => m.alive && m.isHunter)) return; // a hunter already stalks this level
+    if (this.censorTimer > 0) { this.censorTimer--; return; }
+    this.summonCensor();
+    this.censorTimer = 45 + ROT.RNG.getUniformInt(0, 30); // a lull before the next rising
+  }
+
+  /** Raise a resurrected Censor a few tiles from a player. */
+  private summonCensor(): void {
+    const target = this.livingPlayers().find((q) => q.hasJam) ?? this.livingPlayers()[0];
+    if (!target) return;
+    let spot: { x: number; y: number } | null = null;
+    for (let i = 0; i < 60; i++) {
+      const c = this.level.randomFloor();
+      const d = Math.max(Math.abs(c.x - target.x), Math.abs(c.y - target.y));
+      if (d >= 3 && d <= 8 && this.level.tileAt(c.x, c.y) === "floor" && !this.monsterAt(c.x, c.y) && !this.playerAt(c.x, c.y)) { spot = c; break; }
+    }
+    spot = spot ?? this.adjacentFree(target.x, target.y);
+    if (!spot) return;
+    const m = new Monster(this, CENSOR, spot.x, spot.y);
+    m.isHunter = true;
+    this.monsters.push(m);
+    this.scheduler.add(m, true);
+    this.log.add("The air curdles and tears — THE CENSOR rises again. It will not let the JAM leave.", "bad");
+    this.draw();
+  }
+
+  /** The hunting Censor snatches the JAM and level-blinks away — reclaim it by slaying it. */
+  censorSteal(censor: Monster, holder: Player): void {
+    holder.hasJam = false;
+    this.jamStolen = true;
+    this.log.add("THE CENSOR's hand closes on the JAM — it BLINKS away with your prize! Hunt it down.", "bad");
+    for (let i = 0; i < 60; i++) {
+      const c = this.level.randomFloor();
+      if (this.level.tileAt(c.x, c.y) === "floor" && !this.monsterAt(c.x, c.y) && !this.playerAt(c.x, c.y) && Math.max(Math.abs(c.x - holder.x), Math.abs(c.y - holder.y)) >= 6) { censor.x = c.x; censor.y = c.y; break; }
+    }
+    this.draw();
   }
 
   /** Plane guardians — Moloch's last servants, drawn from the deepest bestiary. */
@@ -2045,6 +2093,13 @@ export class Game {
     const m = d as Monster;
     this.monsters = this.monsters.filter((x) => x !== m);
     this.scheduler.remove(m);
+    // Slay the resurrected Censor while it holds the JAM and you wrest it back.
+    if (m.isHunter && this.jamStolen) {
+      this.jamStolen = false;
+      const recip = this.nearestPlayer(m.x, m.y);
+      recip.hasJam = true;
+      this.log.add("You tear the JAM from the Censor's ribs — it is yours again. Climb on.", "good");
+    }
     // A slain thief disgorges whatever it stole — reclaim it where it fell.
     if (m.stolen && !this.level.itemAt(m.x, m.y)) {
       this.level.items.push({ x: m.x, y: m.y, type: m.stolen.type, enchant: m.stolen.enchant, relic: m.stolen.relic, buc: m.stolen.buc, bucKnown: m.stolen.bucKnown });
@@ -2270,7 +2325,7 @@ export class Game {
       (p.illness > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Ill${p.illness}` : "") +
       (p.blind > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Blind` : "") +
       (p.intrinsics.has("fast") ? `%c{${COLORS.dim}}  %c{${COLORS.good}}Fast` : "") +
-      (p.hasJam ? `%c{${COLORS.dim}}  %c{${COLORS.gold}}✦JAM — ASCEND (<)` : `%c{${COLORS.dim}}  ${this.gehennomOpen ? `JAM: depth ${GEHENNOM_BOTTOM}` : `Invoke @ depth ${MAX_DEPTH}`}`)
+      (p.hasJam ? `%c{${COLORS.dim}}  %c{${COLORS.gold}}✦JAM — ASCEND (<)` : this.jamStolen ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}JAM STOLEN — slay the Censor!` : `%c{${COLORS.dim}}  ${this.gehennomOpen ? `JAM: depth ${GEHENNOM_BOTTOM}` : `Invoke @ depth ${MAX_DEPTH}`}`)
     );
   }
 
