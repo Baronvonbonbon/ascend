@@ -169,6 +169,12 @@ push it open and reveal the room), or **locked** (orange `+` — walk into it to
 **Stake-weight** (STR) decides how easily it bursts, and you might stub your foot). Closed doors keep
 monsters out of a room until you open them — useful for picking your fights.
 
+**The Mempool & searching (Phase 9d/9f):** depth 5 is now a **special level — THE MEMPOOL**, one vast
+open chamber teeming with a swarm and strewn with loot (NetHack's Big Room). And **search** with `s`:
+your **Insight** (WIS) reveals **hidden traps** and **hidden doors** (which look just like walls), and you
+**disarm** (DEX) any revealed trap next to you. So a **reorg trap** blocking a corridor is no longer a dead
+end — step up beside it, press `s` to disarm it, and walk on.
+
 **Controls:** move **arrows/hjkl/yubn** · pick up `,` · inventory `i` · sheet `@` · wield `w` ·
 wear `W` · take off `T` · quaff `q` · read/study `r` · eat `e` · drop `d` · zap `z` · cast `Z` ·
 throw `t` · apply tool `a` · engrave `E` · pray `P` · offer `O` · descend `>` · ascend/up `<` · wait `.` · restart `R`.

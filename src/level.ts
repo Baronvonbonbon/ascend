@@ -24,14 +24,16 @@ export class Level {
   roomCenters: { x: number; y: number }[] = [];
   start = { x: 1, y: 1 };
   stairs = { x: 1, y: 1 };
+  readonly kind: "normal" | "bigroom";
 
   private visible = new Set<string>();
   private fov: InstanceType<typeof ROT.FOV.PreciseShadowcasting>;
   private floors: { x: number; y: number }[] = [];
 
-  constructor(width: number, height: number) {
+  constructor(width: number, height: number, kind: "normal" | "bigroom" = "normal") {
     this.width = width;
     this.height = height;
+    this.kind = kind;
     for (let y = 0; y < height; y++) {
       this.tiles[y] = [];
       this.explored[y] = [];
@@ -40,8 +42,25 @@ export class Level {
         this.explored[y][x] = false;
       }
     }
-    this.generate();
+    if (kind === "bigroom") this.generateBigRoom(); else this.generate();
     this.fov = new ROT.FOV.PreciseShadowcasting((x, y) => this.lightPasses(x, y));
+  }
+
+  /** The Mempool: one vast open chamber (NetHack's Big Room) — a swarm arena. */
+  private generateBigRoom(): void {
+    for (let y = 1; y < this.height - 1; y++) {
+      for (let x = 1; x < this.width - 1; x++) {
+        this.tiles[y][x] = "floor";
+        this.floors.push({ x, y });
+      }
+    }
+    // A scattering of "room centres" so features/monsters distribute across the floor.
+    for (let i = 0; i < 14; i++) {
+      this.roomCenters.push({ x: 3 + ROT.RNG.getUniformInt(0, this.width - 7), y: 2 + ROT.RNG.getUniformInt(0, this.height - 5) });
+    }
+    this.start = { x: 2, y: 2 };
+    this.stairs = { x: this.width - 3, y: this.height - 3 };
+    this.tiles[this.stairs.y][this.stairs.x] = "stairsDown";
   }
 
   private generate() {
@@ -57,8 +76,8 @@ export class Level {
     for (const room of rooms) {
       room.getDoors((x, y) => {
         if (this.tiles[y]?.[x] === "floor") {
-          const r = ROT.RNG.getUniform(); // some doors start closed (blocking sight) or locked
-          this.tiles[y][x] = r < 0.12 ? "doorLocked" : r < 0.42 ? "doorClosed" : "door";
+          const r = ROT.RNG.getUniform(); // some doors start hidden / locked / closed
+          this.tiles[y][x] = r < 0.08 ? "doorHidden" : r < 0.18 ? "doorLocked" : r < 0.45 ? "doorClosed" : "door";
         }
       });
     }

@@ -260,7 +260,7 @@ export class Player extends Entity {
       case "w": return this.startSelect("wield");
       case "W": return this.startSelect("wear");
       case "q": return this.game.level.tileAt(this.x, this.y) === "faucet" ? (this.game.quaffFaucet(this) ? this.endTurn() : false) : this.startSelect("quaff");
-      case "s": return this.game.level.tileAt(this.x, this.y) === "throne" ? (this.game.sitThrone(this) ? this.endTurn() : false) : false;
+      case "s": return this.game.level.tileAt(this.x, this.y) === "throne" ? (this.game.sitThrone(this) ? this.endTurn() : false) : (this.game.search(this) ? this.endTurn() : false);
       case "o": return this.game.openChest(this) ? this.endTurn() : false;
       case "r": return this.startSelect("read");
       case "e": return this.game.eatFloorCorpse(this) ? this.endTurn() : this.startSelect("eat");

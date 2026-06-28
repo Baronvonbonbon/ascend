@@ -24,6 +24,7 @@ const PRICE: Record<string, number> = { weapon: 6, armor: 5, potion: 4, scroll: 
 const W = 80;
 const MAP_H = 30;
 const H = MAP_H + 2; // + a blank row + the status line
+const MEMPOOL_DEPTH = 5; // the Big Room special level — "the Mempool"
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -99,7 +100,7 @@ export class Game {
     for (const line of GRAY_PAPER) this.log.add(line, "dim");
     if (this.coop) this.log.add(`Co-op (${this.coopMode}) — Host and Guest share this dungeon. Find the JAM together.`, "sys");
     else this.log.add("Your nominator (d) pads at your heels — it backs you, and bites for you.", "dim");
-    this.log.add("Keys: move · , pick up · o open chest · @ sheet · p buy · F forge · P pray · O offer · q faucet · s sit · z zap · Z cast · t throw · a apply · E engrave · < > stairs · i/w/W/q/r/e/d items.", "dim");
+    this.log.add("Keys: move · , pick up · o open chest · @ sheet · p buy · F forge · P pray · O offer · q faucet · s search/sit · z zap · Z cast · t throw · a apply · E engrave · < > stairs · i/w/W/q/r/e/d items.", "dim");
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
@@ -300,12 +301,14 @@ export class Game {
   descend(): void {
     this.player.depth++;
     this.player.maxDepthReached = Math.max(this.player.maxDepthReached, this.player.depth);
-    this.level = new Level(W, MAP_H);
+    const big = !this.currentChain && this.player.depth === MEMPOOL_DEPTH;
+    this.level = new Level(W, MAP_H, big ? "bigroom" : "normal");
     this.player.x = this.level.start.x;
     this.player.y = this.level.start.y;
     this.placeUpStair();
     this.enterLevel();
-    this.log.add(`You descend to depth ${this.player.depth} — ${realmName(this.player.depth)}.`, this.player.depth >= 7 ? "bad" : "sys");
+    if (big) this.log.add("You descend into THE MEMPOOL — a vast open churn of pending chaos. Loot, and a swarm.", "bad");
+    else this.log.add(`You descend to depth ${this.player.depth} — ${realmName(this.player.depth)}.`, this.player.depth >= 7 ? "bad" : "sys");
     if (this.player.depth >= 7 && this.player.depth < MAX_DEPTH) this.log.add("Chaos thickens. Expect Kusama.", "bad");
     if (this.player.depth >= MAX_DEPTH) this.log.add("The air reeks of centralisation. The JAM is here — and so is its keeper.", "bad");
     this.draw();
@@ -467,6 +470,32 @@ export class Game {
       }
     }
     this.log.add(dropped ? `The chest holds ${dropped} item${dropped > 1 ? "s" : ""} — they spill out. (, to pick up)` : "The chest is empty.", dropped ? "good" : "dim");
+    return true;
+  }
+
+  private trapName(k: TrapKind): string {
+    return ({ gas: "gas-fee trap", slash: "slashing trap", reorg: "reorg trap", fork: "fork trap" } as Record<TrapKind, string>)[k];
+  }
+
+  /** Search the surrounding tiles: Insight (WIS) reveals hidden traps & doors; then carefully
+   *  disarm (DEX) any revealed trap beside you — your way past a path-blocking reorg trap. */
+  search(p: Player): boolean {
+    const find = Math.max(0.25, Math.min(0.92, 0.5 + abilityMod(p.wis) * 0.06 + this.luckOf(p) * 0.02));
+    const disarm = Math.max(0.2, 0.4 + abilityMod(p.dex) * 0.07);
+    let found = 0, disarmed = 0;
+    const around: [number, number][] = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]];
+    for (const [dx, dy] of around) {
+      const x = p.x + dx, y = p.y + dy;
+      const trap = this.level.trapAt(x, y);
+      if (trap && !trap.revealed && ROT.RNG.getUniform() < find) { trap.revealed = true; found++; this.log.add(`You spot a hidden ${this.trapName(trap.kind)}!`, "sys"); }
+      if (this.level.tileAt(x, y) === "doorHidden" && ROT.RNG.getUniform() < find) { this.level.tiles[y][x] = "doorClosed"; found++; this.log.add("You uncover a hidden door!", "sys"); this.recomputeFOV(); }
+      if (trap && trap.revealed && (dx !== 0 || dy !== 0) && ROT.RNG.getUniform() < disarm) {
+        this.level.traps = this.level.traps.filter((t) => t !== trap); disarmed++;
+        this.log.add(`${this.sub(p)} ${this.verbS(p, "disarm")} the ${this.trapName(trap.kind)}.`, "good");
+      }
+    }
+    if (!found && !disarmed) this.log.add("You search around. Nothing hidden here.", "dim");
+    this.draw();
     return true;
   }
 
@@ -1460,7 +1489,7 @@ export class Game {
     const diff = this.currentChain?.difficulty ?? 1;
     // A chain's difficulty shifts the monster pool deeper/shallower and scales the count.
     const poolDepth = Math.max(1, this.player.depth + Math.round((diff - 1) * 4));
-    const count = Math.round((4 + this.player.depth * 1.5) * diff) + (this.player.depth >= 7 ? 4 : 0);
+    const count = Math.round((4 + this.player.depth * 1.5) * diff) + (this.player.depth >= 7 ? 4 : 0) + (this.level.kind === "bigroom" ? 12 : 0);
     for (let i = 0; i < count; i++) {
       const def = this.pickMonster(poolDepth);
       let pos = this.level.randomFloor();
