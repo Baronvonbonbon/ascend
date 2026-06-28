@@ -5,7 +5,7 @@ import { Item } from "./inventory";
 import { Log } from "./log";
 import {
   COLORS, TILE_GLYPH, TileType, MONSTERS, MonsterDef, DEATHS, GREETINGS,
-  MAX_DEPTH, CENSOR, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, realmName, GRAY_PAPER, ChainDef, CHAINS,
+  MAX_DEPTH, CENSOR, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, realmName, GRAY_PAPER, ChainDef, CHAINS, questFor,
   abilityMod, archetypeById, ATTRS, ATTR_LABEL, spellById, Ethos,
 } from "./data";
 import { Idents, ITEMS, JAM, CORPSE, CHEST, WRITABLE_SCROLLS, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
@@ -64,6 +64,8 @@ export class Game {
   private genesisAltars: { x: number; y: number; ethos: Ethos }[] = []; // the three Astral altars — only your aligned one ascends
   private jamStolen = false;                     // THE CENSOR has snatched the JAM — slay the hunter to reclaim it
   private censorTimer = 0;                        // turns until the next resurrection rises
+  private inQuest = false;                        // currently in your archetype's Quest homeland
+  private questDone = false;                      // your nemesis is slain and the artifact claimed
   private loadedRelics = new Set<number>();      // NFT relic tokenIds already pulled into this run's pack
   wallet: Wallet | null = null;
   onWallet?: (address: string, pas: number) => void;
@@ -103,6 +105,8 @@ export class Game {
     this.plane = 0;
     this.jamStolen = false;
     this.censorTimer = 0;
+    this.inQuest = false;
+    this.questDone = false;
     this.loadedRelics.clear();
     this.downed.clear();
     this.turn = 0;
@@ -341,6 +345,7 @@ export class Game {
       this.maybePlaceBones();
       this.spawnTraps();
       this.placePortals();
+      this.placeQuestPortal();
       this.placeMiniboss();
       this.placeMimics();
       if (!this.currentChain) {
@@ -461,7 +466,53 @@ export class Game {
     this.draw();
   }
 
+  // ── the archetype Quest (Phase 13c) ──
+  /** Open the homeland portal once, on the quest depth, until the Quest is done. */
+  private placeQuestPortal(): void {
+    if (this.questDone || this.inQuest) return;
+    const q = questFor(this.player.archetype);
+    if (this.player.depth !== q.portalDepth) return;
+    const centers = this.level.roomCenters.filter((c) => this.level.tileAt(c.x, c.y) === "floor" && !this.level.portalAt(c.x, c.y) && !(c.x === this.player.x && c.y === this.player.y));
+    const c = centers.length ? ROT.RNG.getItem(centers)! : this.level.randomFloor();
+    this.level.tiles[c.y][c.x] = "portal";
+    this.level.portals.push({ x: c.x, y: c.y, chain: CHAINS[0], quest: true });
+    this.log.add(`A portal pulses with your homeland's sigil — your Quest awaits in ${q.homeland} (Ω, > to enter). Slay your nemesis, claim your artifact.`, "good");
+  }
+
+  /** Enter the Quest homeland: your nemesis guards your signature artifact. */
+  enterQuest(): void {
+    const q = questFor(this.player.archetype);
+    this.inQuest = true;
+    this.currentChain = null;
+    this.level = new Level(W, MAP_H);
+    this.player.x = this.level.start.x;
+    this.player.y = this.level.start.y;
+    this.placeUpStair(); // the way home
+    this.enterLevel();
+    // the nemesis guards the artifact near the far end
+    const s = this.level.stairs;
+    this.level.tiles[s.y][s.x] = "floor";
+    this.level.items.push({ x: s.x, y: s.y, type: itemById(q.artifactId)!, relic: true, enchant: 2, buc: "blessed", bucKnown: true });
+    const spot = this.adjacentFree(s.x, s.y) ?? { x: s.x, y: s.y };
+    this.monsters.push(new Monster(this, q.nemesis, spot.x, spot.y));
+    this.scheduler.add(this.monsters[this.monsters.length - 1], true);
+    this.log.add(`You step into ${q.homeland}. ${cap(q.nemesis.name)} bars the way to ${itemById(q.artifactId)!.name}. (< to flee home)`, "bad");
+    this.draw();
+  }
+
+  private exitQuest(): void {
+    this.inQuest = false;
+    this.level = new Level(W, MAP_H);
+    this.player.x = this.level.stairs.x;
+    this.player.y = this.level.stairs.y;
+    if (this.player.depth > 1) this.placeUpStair();
+    this.enterLevel();
+    this.log.add(`You return from your Quest to the relay at depth ${this.player.depth}.`, "sys");
+    this.draw();
+  }
+
   ascend(): void {
+    if (this.inQuest) { this.exitQuest(); return; }
     if (this.currentChain) { this.exitChain(); return; }
     if (this.plane > 0) { this.enterPlane(this.plane + 1); return; } // climb higher through the Planes
     const holder = this.allPlayers().find((p) => p.hasJam);
@@ -1632,9 +1683,10 @@ export class Game {
       }
       if (!hit) {
         this.log.add(`The ${item.type.name} fizzles into the dark.`, "dim");
-      } else if (item.type.id === "wand_bolt") {
-        const d = ROT.RNG.getUniformInt(8, 14); hit.hp -= d;
-        this.log.add(`A bolt of finality strikes ${hit.name} for ${d}.`, "good");
+      } else if (item.type.id === "wand_bolt" || item.type.id === "art_compiler") {
+        const strong = item.type.id === "art_compiler";
+        const d = strong ? ROT.RNG.getUniformInt(12, 20) : ROT.RNG.getUniformInt(8, 14); hit.hp -= d;
+        this.log.add(`${strong ? "The Genesis Compiler discharges raw genesis into" : "A bolt of finality strikes"} ${hit.name} for ${d}.`, "good");
         if (hit.hp <= 0) { this.gainXp(this.acting, hit.maxHp); this.kill(hit); }
       } else if (item.type.id === "wand_banish") {
         let pos = this.level.randomFloor(), t = 0;
@@ -1909,6 +1961,11 @@ export class Game {
     this.level.items = this.level.items.filter((i) => i !== fi);
     const tag = fi.relic ? ` +${fi.enchant ?? 0} ✦` : "";
     this.log.add(`You pick up ${this.ident.name(fi.type)}${tag}.`);
+    // Claiming your Quest artifact completes the Quest — the homeland portal won't reopen.
+    if (fi.type.id.startsWith("art_")) {
+      this.questDone = true;
+      this.log.add(`✦ ${fi.type.name} is yours — your Quest is fulfilled. Wield it well.`, "good");
+    }
     return true;
   }
 
@@ -2409,7 +2466,7 @@ export class Game {
       (this.plane > 0
         ? `%c{#ff60ff}${PLANES[this.plane - 1].name}`
         : `Depth %c{${COLORS.gold}}${p.depth}` +
-          (this.currentChain ? `%c{${COLORS.dim}} @%c{${this.currentChain.color}}${this.currentChain.name}` : `%c{${COLORS.dim}} @%c{${COLORS.dim}}Relay`)) +
+          (this.inQuest ? `%c{${COLORS.dim}} @%c{#e0c040}Quest` : this.currentChain ? `%c{${COLORS.dim}} @%c{${this.currentChain.color}}${this.currentChain.name}` : `%c{${COLORS.dim}} @%c{${COLORS.dim}}Relay`)) +
       `%c{${COLORS.dim}}  AC %c{${COLORS.good}}${p.ac}` +
       (p.maxEnergy > 5 || p.spells.size ? `%c{${COLORS.dim}}  En %c{#7aa0e0}${p.energy}%c{${COLORS.dim}}/${p.maxEnergy}` : "") +
       (this.luckOf(p) !== 0 ? `%c{${COLORS.dim}}  Luck %c{${this.luckOf(p) > 0 ? COLORS.good : COLORS.bad}}${this.luckOf(p) > 0 ? "+" : ""}${this.luckOf(p)}` : "") +

@@ -69,6 +69,28 @@ export const ARCHETYPES: Archetype[] = [
 ];
 export function archetypeById(id: string): Archetype { return ARCHETYPES.find((a) => a.id === id) ?? ARCHETYPES[0]; }
 
+/** Per-archetype Quest (Phase 13c): a homeland portal, a nemesis, and your signature artifact. */
+export interface Quest { homeland: string; portalDepth: number; artifactId: string; nemesis: MonsterDef; }
+export const QUESTS: Record<string, Quest> = {
+  validator: {
+    homeland: "the Validator's Vault", portalDepth: 4, artifactId: "art_sceptre",
+    nemesis: { name: "the Equivocator", ch: "E", fg: "#ff6060", hp: 42, dmg: [5, 10], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, splits: true },
+  },
+  nominator: {
+    homeland: "the Bonding Hall", portalDepth: 4, artifactId: "art_aegis",
+    nemesis: { name: "the Oversubscriber", ch: "N", fg: "#e0a040", hp: 48, dmg: [5, 9], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, summons: true },
+  },
+  cypherpunk: {
+    homeland: "the Panopticon", portalDepth: 4, artifactId: "art_cipher",
+    nemesis: { name: "the Surveillor", ch: "U", fg: "#c060e0", hp: 40, dmg: [4, 8], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, ranged: true },
+  },
+  builder: {
+    homeland: "the Rent Foundry", portalDepth: 4, artifactId: "art_compiler",
+    nemesis: { name: "the Rent Extractor", ch: "R", fg: "#e07030", hp: 44, dmg: [5, 9], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, steals: true },
+  },
+};
+export function questFor(archetypeId: string): Quest { return QUESTS[archetypeId] ?? QUESTS.validator; }
+
 // ── Phase 8: spellcasting ("extrinsics" cast from energy) ────────────────────
 export interface Spell { id: string; name: string; cost: number; dir: boolean; school: string; }
 export const SPELLS: Spell[] = [

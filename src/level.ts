@@ -2,7 +2,7 @@ import * as ROT from "rot-js";
 import type { TileType, ChainDef } from "./data";
 import type { ItemType } from "./items";
 
-export interface Portal { x: number; y: number; chain: ChainDef; }
+export interface Portal { x: number; y: number; chain: ChainDef; quest?: boolean; }
 
 export interface FloorItem { x: number; y: number; type: ItemType; price?: number; enchant?: number; relic?: boolean; mintOnBuy?: boolean; buc?: import("./items").Buc; bucKnown?: boolean; corpse?: { def: import("./data").MonsterDef; born: number }; chest?: { locked: boolean }; } // price = shop ware; relic/enchant/mintOnBuy = NFT gear; buc = sanctity; corpse = edible remains; chest = container
 export type TrapKind = "gas" | "reorg" | "slash" | "fork";

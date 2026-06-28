@@ -52,6 +52,12 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > **Self-custodian** (pray/sit/sacrifice never), **Vegetarian** (eat no corpse), and
 > **Bankless** (buy/forge nothing). The character sheet (`@`) shows which you still
 > hold; the death/ascension screen reports every vow kept. A challenge layer for the bold.
+>
+> **Your Quest (Phase 13c).** On **depth 4** a **homeland portal** (`Ω`) keyed to your
+> archetype opens — enter it (`>`) to face your **nemesis** guarding your signature
+> **artifact**: the Validator's **Block Sceptre**, the Nominator's **Bonded Aegis**, the
+> Cypherpunk's **Null Cipher** (perfect privacy), or the Builder's **Genesis Compiler**
+> (a wand of raw genesis). Claim it to fulfil the Quest; flee home anytime with `<`.
 > **Phase 4 — persistence & social** is in: when a run ends (death or ASCENSION)
 > it's recorded on-chain **gaslessly** (you sign, the relay submits) into the
 > **AscendLedger** Hall of Fame (`H` to view), and fallen heroes leave **bones**

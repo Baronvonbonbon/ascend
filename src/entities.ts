@@ -120,6 +120,7 @@ export class Player extends Entity {
       }
       case "ring_regen": this.regenFast = on && !cursed; break; // cursed: no regen
       case "ring_priv": this.stealth = on && !cursed; break;    // cursed: cloak fails
+      case "art_cipher": this.stealth = on && !cursed; break;   // the Null Cipher — perfect privacy
     }
   }
   private pending: Verb | null = null;
@@ -722,7 +723,7 @@ export class Player extends Entity {
     const t = this.game.level.tileAt(this.x, this.y);
     if (t === "portal") {
       const pr = this.game.level.portalAt(this.x, this.y);
-      if (pr) { this.game.enterChain(pr.chain); return this.endTurn(); }
+      if (pr) { if (pr.quest) this.game.enterQuest(); else this.game.enterChain(pr.chain); return this.endTurn(); }
     }
     if (t !== "stairsDown") {
       this.game.log.add("There are no stairs down here.", "dim");

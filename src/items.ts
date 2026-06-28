@@ -101,6 +101,11 @@ export const ITEMS: ItemType[] = [
   { id: "scope",   kind: "tool", name: "a state reader",      ch: "(", fg: "#a0c0a0", weight: 2 }, // probe an adjacent foe
   { id: "vault",   kind: "tool", name: "a multisig vault",    ch: "(", fg: "#d0c060", weight: 2 }, // bag of holding — #loot to stash beyond the pack
   { id: "hodlstone", kind: "tool", name: "a HODL stone",      ch: "*", fg: "#e0d040", weight: 2 }, // luckstone (blessed) / loadstone (cursed)
+  // ── quest artifacts ── (Phase 13c — one per archetype, won from your nemesis; never random-spawn)
+  { id: "art_sceptre",  kind: "weapon", name: "the Block Sceptre",    ch: ")", fg: "#ffd040", dmg: [6, 12], skill: "blunt", weight: 0 },
+  { id: "art_aegis",    kind: "armor",  name: "the Bonded Aegis",     ch: "[", fg: "#80c0e0", ac: 4, slot: "shield", weight: 0 },
+  { id: "art_cipher",   kind: "ring",   name: "the Null Cipher",      ch: "=", fg: "#a0e0ff", weight: 0 },
+  { id: "art_compiler", kind: "wand",   name: "the Genesis Compiler", ch: "/", fg: "#a0ffd0", weight: 0 },
   // ── invocation relics ── (Phase 12 — the three keys to the ritual; never random-spawn)
   { id: "bell",        kind: "tool",     name: "the Bell of Finality",     ch: "(", fg: "#ffe070", weight: 0 },
   { id: "candelabrum", kind: "tool",     name: "the Genesis Candelabrum",  ch: "(", fg: "#ffd0a0", weight: 0 },
