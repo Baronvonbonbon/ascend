@@ -836,6 +836,40 @@ export class Game {
     if (p.hp <= 0) this.kill(p);
   }
 
+  /** A dragon breathes a damaging ray down the line toward the nearest party member. */
+  breathAttack(m: Monster): void {
+    const p = this.nearestPlayer(m.x, m.y);
+    const dx = Math.sign(p.x - m.x), dy = Math.sign(p.y - m.y);
+    if (dx === 0 && dy === 0) return;
+    this.log.add(`${cap(m.name)} breathes a searing gout of finality!`, "bad");
+    const max = m.def.breath ?? 10;
+    this.castRay(m.x, m.y, dx, dy, 6, (e) => {
+      if (e === m) return;
+      const d = ROT.RNG.getUniformInt(Math.floor(max / 2), max);
+      e.hp -= d;
+      if (e instanceof Player) { this.log.add(`The breath sears ${e.name} for ${d}!`, "bad"); if (e.hp <= 0) this.killPlayer(e); }
+      else if (e instanceof Monster && e.hp <= 0) this.kill(e);
+    });
+  }
+
+  /** A conjurer summons a depth-appropriate ally into an adjacent free cell. */
+  summonNear(m: Monster): boolean {
+    if (this.monsters.length >= 30) return false;
+    const offs = ROT.RNG.shuffle([[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]] as [number, number][]);
+    for (const [dx, dy] of offs) {
+      const nx = m.x + dx, ny = m.y + dy;
+      if (this.level.isPassable(nx, ny) && !this.monsterAt(nx, ny) && !this.playerAt(nx, ny) && !this.level.boulderAt(nx, ny)) {
+        const pool = MONSTERS.filter((d) => d.weight > 0 && d.minDepth <= this.player.depth && !d.breath && !d.summons);
+        const def = ROT.RNG.getItem(pool) ?? MONSTERS[0];
+        const s = new Monster(this, def, nx, ny);
+        this.monsters.push(s); this.scheduler.add(s, true);
+        this.log.add(`${cap(m.name)} conjures ${def.name}!`, "bad");
+        return true;
+      }
+    }
+    return false;
+  }
+
   /** Bresenham line-of-sight: clear if no wall lies between the two cells. */
   hasLineOfSight(x0: number, y0: number, x1: number, y1: number): boolean {
     const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);

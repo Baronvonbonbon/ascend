@@ -639,6 +639,8 @@ export class Monster extends Entity {
 
     // The Sybil attack: a sybil with budget left occasionally replicates (bounded). Nullified ones can't.
     if (!this.cancelled && this.def.splits && this.splitsLeft > 0 && ROT.RNG.getUniform() < 0.05 && this.game.spawnSybilNear(this)) return;
+    // A conjurer summons reinforcements.
+    if (!this.cancelled && this.def.summons && this.game.level.isVisible(this.x, this.y) && ROT.RNG.getUniform() < 0.1 && this.game.summonNear(this)) return;
 
     const dist = Math.max(Math.abs(this.x - p.x), Math.abs(this.y - p.y));
     // The rug pull: a thief adjacent to you snatches a pack item and blinks away.
@@ -662,6 +664,12 @@ export class Monster extends Entity {
     // Ranged foes (oracles) zap the player from a distance with line-of-sight.
     if (!this.cancelled && this.def.ranged && !p.stealth && dist >= 2 && dist <= 6 && this.game.level.isVisible(this.x, this.y) && this.game.hasLineOfSight(this.x, this.y, p.x, p.y)) {
       this.game.rangedAttack(this);
+      return;
+    }
+
+    // A dragon breathes a ray when you're roughly in line.
+    if (!this.cancelled && this.def.breath && !p.stealth && dist >= 2 && dist <= 5 && this.game.level.isVisible(this.x, this.y) && this.game.hasLineOfSight(this.x, this.y, p.x, p.y)) {
+      this.game.breathAttack(this);
       return;
     }
 
