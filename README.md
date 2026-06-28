@@ -182,7 +182,9 @@ rooms, so they can never seal your only path — the groundwork for a future Con
 
 **Deeper foes (Phase 10a):** the bestiary grows — a **finality dragon** (`D`) **breathes a ray** that
 bounces down a line and sears everything it touches, a **sudo conjurer** (`&`) **summons** reinforcements,
-a fast **MEV bot** (`b`) blurs in, and a **slashing daemon** (`S`) hits like a truck.
+a fast **MEV bot** (`b`) blurs in, and a **slashing daemon** (`S`) hits like a truck. Their AI deepens too:
+a **panic seller** (`p`) **flees** once you've hurt it, and a **relay medic** (`h`) **heals its wounded
+allies** instead of fighting — so take the medic out first.
 
 **Controls:** move **arrows/hjkl/yubn** · pick up `,` · inventory `i` · sheet `@` · wield `w` ·
 wear `W` · take off `T` · quaff `q` · read/study `r` · eat `e` · drop `d` · zap `z` · cast `Z` ·

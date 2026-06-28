@@ -630,6 +630,20 @@ export class Monster extends Entity {
     // A laden thief wants only to escape — it never turns to fight.
     if (this.stolen) { this.fleeStep(p); return; }
 
+    // A coward turns tail once badly hurt.
+    if (this.def.cowardly && this.hp < this.maxHp * 0.3) { this.fleeStep(p); return; }
+
+    // A medic mends a wounded ally within reach instead of fighting.
+    if (!this.cancelled && this.def.heals) {
+      const ally = this.game.monsters.find((o) => o !== this && o.alive && o.hp < o.maxHp && Math.max(Math.abs(o.x - this.x), Math.abs(o.y - this.y)) <= 2 && this.game.hasLineOfSight(this.x, this.y, o.x, o.y));
+      if (ally) {
+        ally.hp = Math.min(ally.maxHp, ally.hp + ROT.RNG.getUniformInt(3, 7));
+        const me = this.name.charAt(0).toUpperCase() + this.name.slice(1);
+        this.game.log.add(`${me} mends ${ally.name}.`, "dim");
+        return;
+      }
+    }
+
     // A Gray-Paper ward beneath the player holds ordinary foes at bay — they won't
     // attack or close in. Bosses and the Censor fear no scripture.
     if (!this.def.boss && !this.def.fearless && this.game.level.engravingAt(p.x, p.y)) {

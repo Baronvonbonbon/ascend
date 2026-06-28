@@ -121,6 +121,8 @@ export interface MonsterDef {
   ranged?: boolean;      // fires at the player from a distance with line-of-sight
   breath?: number;       // a dragon-style breath ray (max damage) down a line
   summons?: boolean;     // conjures more monsters
+  cowardly?: boolean;    // flees once badly hurt
+  heals?: boolean;       // a medic — mends wounded allies instead of fighting
   corpseEffect?: "poisonous" | "petrify" | "speed" | "telepathy"; // what eating its corpse does
   corrodes?: boolean;    // its touch rusts/corrodes a worn armor piece
   steals?: boolean;      // a thief — snatches a pack item and flees (the rug pull)
@@ -147,6 +149,8 @@ export const MONSTERS: MonsterDef[] = [
   { name: "a slashing daemon", ch: "S", fg: "#e06060", hp: 14, dmg: [4, 8], ai: "chase",  minDepth: 5, weight: 2 },
   { name: "a sudo conjurer",   ch: "&", fg: "#c080e0", hp: 16, dmg: [2, 4], ai: "chase",  minDepth: 6, weight: 2, summons: true },
   { name: "a finality dragon", ch: "D", fg: "#ff5040", hp: 34, dmg: [5, 9], ai: "chase",  minDepth: 6, weight: 1, breath: 16, fearless: true },
+  { name: "a panic seller",    ch: "p", fg: "#d0d060", hp: 5,  dmg: [1, 3], ai: "chase",  minDepth: 2, weight: 3, cowardly: true },
+  { name: "a relay medic",     ch: "h", fg: "#80e0c0", hp: 10, dmg: [1, 2], ai: "chase",  minDepth: 5, weight: 2, heals: true },
 ];
 
 /** The Marketmaker — a bazaar shopkeeper. Peaceful while you pay; lethal if you shoplift. */
