@@ -25,8 +25,11 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 > **The Planes (Phase 12b).** Taking the JAM no longer wins by itself. Climb back
 > to the surface and a stair opens *beyond the world*: the **Plane of Consensus**,
 > the **Plane of Finality**, the **Plane of Light Clients** — each a guardian
-> gauntlet — and at last **the Genesis Plane**, where you **`O` offer the JAM** on
-> the altar of pure intent to **truly ASCEND** and win.
+> gauntlet — and at last **the Genesis Plane**, which bears **three altars, one per
+> ethos**. Step onto one to sense its alignment; **`O` offer the JAM** on the altar
+> matching **your** ethos to **truly ASCEND** and win (the wrong altar blasts you and
+> spits out a demon). Gehennom and the Planes crawl with **demons of centralization**
+> — custodian fiends, KYC wraiths, permission daemons, censorship demons.
 > **Phase 4 — persistence & social** is in: when a run ends (death or ASCENSION)
 > it's recorded on-chain **gaslessly** (you sign, the relay submits) into the
 > **AscendLedger** Hall of Fame (`H` to view), and fallen heroes leave **bones**

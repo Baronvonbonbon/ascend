@@ -6,7 +6,7 @@ import { Log } from "./log";
 import {
   COLORS, TILE_GLYPH, TileType, MONSTERS, MonsterDef, DEATHS, GREETINGS,
   MAX_DEPTH, CENSOR, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, realmName, GRAY_PAPER, ChainDef, CHAINS,
-  abilityMod, archetypeById, ATTRS, ATTR_LABEL, spellById,
+  abilityMod, archetypeById, ATTRS, ATTR_LABEL, spellById, Ethos,
 } from "./data";
 import { Idents, ITEMS, JAM, CORPSE, CHEST, WRITABLE_SCROLLS, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
 import { connectWallet, Wallet } from "./chain/wallet";
@@ -52,6 +52,7 @@ export class Game {
   private defeatedBosses = new Set<number>();    // relay depths whose mini-boss is slain
   private gehennomOpen = false;                  // the Invocation has been performed — the Dark Forest lies below
   private plane = 0;                              // 0 = the dungeon; 1..PLANES.length = the ascent above the surface
+  private genesisAltars: { x: number; y: number; ethos: Ethos }[] = []; // the three Astral altars — only your aligned one ascends
   private loadedRelics = new Set<number>();      // NFT relic tokenIds already pulled into this run's pack
   wallet: Wallet | null = null;
   onWallet?: (address: string, pas: number) => void;
@@ -428,9 +429,30 @@ export class Game {
   /** Lay out a Plane: tough guardians + the stair to the next plane (or the Genesis altar). */
   private setupPlane(): void {
     const isGenesis = this.plane === PLANES.length;
-    const s = this.level.stairs;
-    this.level.tiles[s.y][s.x] = isGenesis ? "altar" : "stairsUp"; // climb higher, or offer here
+    this.genesisAltars = [];
+    if (isGenesis) {
+      // three altars, one per ethos — only the one matching your alignment ascends
+      const ethoses: Ethos[] = ROT.RNG.shuffle(["Order", "Balance", "Chaos"]);
+      const spots = [this.level.stairs, ...this.level.roomCenters.filter((c) => this.level.tileAt(c.x, c.y) === "floor")];
+      const used: { x: number; y: number }[] = [];
+      for (const e of ethoses) {
+        const spot = spots.find((s) => this.level.tileAt(s.x, s.y) === "floor" && !used.some((u) => u.x === s.x && u.y === s.y) && Math.max(Math.abs(s.x - this.player.x), Math.abs(s.y - this.player.y)) > 2) ?? this.level.randomFloor();
+        this.level.tiles[spot.y][spot.x] = "altar";
+        this.genesisAltars.push({ x: spot.x, y: spot.y, ethos: e });
+        used.push({ x: spot.x, y: spot.y });
+      }
+    } else {
+      const s = this.level.stairs;
+      this.level.tiles[s.y][s.x] = "stairsUp"; // climb higher
+    }
     this.spawnPlaneGuardians();
+  }
+
+  /** Sense an Astral altar's alignment when you step onto it (called as you enter a tile). */
+  noteTile(p: Player): void {
+    if (this.plane !== PLANES.length) return;
+    const a = this.genesisAltars.find((g) => g.x === p.x && g.y === p.y);
+    if (a) this.log.add(`This altar resonates with ${a.ethos}.${a.ethos === p.ethos ? " It is yours — offer the JAM (O)." : " Not your alignment."}`, a.ethos === p.ethos ? "good" : "dim");
   }
 
   /** Plane guardians — Moloch's last servants, drawn from the deepest bestiary. */
@@ -974,10 +996,22 @@ export class Game {
   /** Offer a corpse (on or beside a Gavin altar) — burn it for the Architect's favor: Fortune, and rarely a gift. */
   offerCorpse(p: Player): boolean {
     if (this.level.tileAt(p.x, p.y) !== "altar") { this.log.add("You can only make an offering at a Gavin altar (_).", "dim"); return false; }
-    // The Genesis Plane: offer the JAM itself on the altar of pure intent — the true ascension.
+    // The Genesis Plane: offer the JAM on your aligned altar of pure intent — the true ascension.
     if (this.plane === PLANES.length && p.hasJam) {
-      this.log.add("You lay the JAM upon the altar of pure intent. It dissolves into first light.", "good");
-      this.win(p);
+      const altar = this.genesisAltars.find((g) => g.x === p.x && g.y === p.y);
+      if (altar && altar.ethos === p.ethos) {
+        this.log.add(`You lay the JAM upon the ${altar.ethos} altar of pure intent. It dissolves into first light.`, "good");
+        this.win(p);
+        return true;
+      }
+      // wrong-aligned altar: rejected, blasted, and a guardian erupts — find your own altar
+      this.log.add(`The ${altar?.ethos ?? "alien"} altar flares and REJECTS your offering — this is not your alignment (${p.ethos}). Seek your own.`, "bad");
+      const dmg = ROT.RNG.getUniformInt(5, 12); p.hp -= dmg;
+      this.log.add(`Reproachful fire scours you for ${dmg}.`, "bad");
+      const spot = this.adjacentFree(p.x, p.y);
+      if (spot) { const deep = MONSTERS.filter((m) => (m.minDepth ?? 1) >= 9); const m = new Monster(this, ROT.RNG.getItem(deep.length ? deep : MONSTERS)!, spot.x, spot.y); this.monsters.push(m); this.scheduler.add(m, true); }
+      if (p.hp <= 0) this.killPlayer(p);
+      this.draw();
       return true;
     }
     let fi = this.level.items.find((i) => i.corpse && i.x === p.x && i.y === p.y);

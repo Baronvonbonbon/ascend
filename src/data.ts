@@ -157,6 +157,12 @@ export const MONSTERS: MonsterDef[] = [
   { name: "a panic seller",    ch: "p", fg: "#d0d060", hp: 5,  dmg: [1, 3], ai: "chase",  minDepth: 2, weight: 3, cowardly: true },
   { name: "a relay medic",     ch: "h", fg: "#80e0c0", hp: 10, dmg: [1, 2], ai: "chase",  minDepth: 5, weight: 2, heals: true },
   { name: "a dust gremlin",    ch: "g", fg: "#90a070", hp: 4,  dmg: [1, 2], ai: "chase",  minDepth: 2, weight: 3, breeds: true },
+  // ── Gehennom demons (Phase 12c) — the Dark Forest's servants of centralization ──
+  { name: "a custodian fiend",   ch: "&", fg: "#c04040", hp: 22, dmg: [4, 8], ai: "chase", minDepth: 9,  weight: 2, steals: true, speed: 110 },
+  { name: "a KYC wraith",        ch: "W", fg: "#a060a0", hp: 18, dmg: [3, 6], ai: "chase", minDepth: 9,  weight: 2, inflict: "confuse", ranged: true },
+  { name: "a permission daemon", ch: "P", fg: "#d05050", hp: 24, dmg: [4, 7], ai: "chase", minDepth: 9,  weight: 2, summons: true },
+  { name: "a rent-seeker imp",   ch: "j", fg: "#d0a040", hp: 12, dmg: [3, 5], ai: "chase", minDepth: 9,  weight: 3, steals: true, speed: 120 },
+  { name: "a censorship demon",  ch: "X", fg: "#e03030", hp: 30, dmg: [5, 9], ai: "chase", minDepth: 10, weight: 2, breath: 14, fearless: true },
 ];
 
 /** The Marketmaker — a bazaar shopkeeper. Peaceful while you pay; lethal if you shoplift. */

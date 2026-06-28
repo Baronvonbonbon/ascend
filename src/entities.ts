@@ -703,6 +703,7 @@ export class Player extends Entity {
     }
     const grave = this.game.level.graveAt(this.x, this.y);
     if (grave) this.game.log.add(`☗ ${grave.label}.`, "dim");
+    this.game.noteTile(this); // Astral altars announce their alignment as you step on
     const trap = this.game.level.trapAt(this.x, this.y);
     if (trap) this.game.triggerTrap(trap);
     if (this.game.level.tileAt(this.x, this.y) === "portal") {
