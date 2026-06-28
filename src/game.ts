@@ -266,6 +266,43 @@ export class Game {
     else this.log.add("  Vows kept: none — you walk no narrow path.", "dim");
   }
 
+  /** `#audit` (A) — a full enlightenment dump: everything the character sheet has, and more. A free read. */
+  showAudit(): void {
+    const p = this.acting;
+    this.log.add(`— Audit report: ${p.name === "you" ? "you" : p.name}, ${p.title ? p.title + " " : ""}${cap(p.archetype)} —`, "sys");
+    this.log.add(`  ${p.ethos} · epoch ${p.level} · XP ${p.xp}/${this.xpForLevel(p.level + 1)}${p.crowned ? ` · Technical Fellowship ${p.title}` : ""}.`, "dim");
+    this.log.add(`  ${ATTRS.map((a) => `${ATTR_LABEL[a]} ${p[a]}`).join("  ")}`, "dim");
+    this.log.add(`  HP ${p.hp}/${p.maxHp}  AC ${p.ac}  En ${p.energy}/${p.maxEnergy}  Speed ${p.getSpeed()}  Fortune ${this.luckOf(p) >= 0 ? "+" : ""}${this.luckOf(p)}.`, "dim");
+    // weapon skills
+    const skills = Object.keys(p.skillXp);
+    if (skills.length) this.log.add(`  Skills: ${skills.map((c) => `${SKILL_LABEL[c] ?? c} ${SKILL_RANKS[p.skillRank[c] ?? 0]}`).join(", ")}.`, "dim");
+    // intrinsics + spells
+    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", fast: "fast", telepathy: "telepathy" } as Record<string, string>)[i] ?? i);
+    if (intr.length) this.log.add(`  Intrinsics: ${intr.join(", ")}.`, "good");
+    if (p.spells.size) this.log.add(`  Extrinsics: ${[...p.spells].map((id) => spellById(id)?.name ?? id).join(", ")}.`, "dim");
+    // active afflictions / timeouts
+    const fx: string[] = [];
+    if (p.poison > 0) fx.push(`poisoned ${p.poison}`);
+    if (p.confused > 0) fx.push(`confused ${p.confused}`);
+    if (p.blind > 0) fx.push(`blind ${p.blind}`);
+    if (p.stoning > 0) fx.push(`STONING ${p.stoning}`);
+    if (p.illness > 0) fx.push(`ill ${p.illness}`);
+    if (p.hasteTurns > 0) fx.push(`hasted ${p.hasteTurns}`);
+    if (p.senseTurns > 0) fx.push(`mind-sense ${p.senseTurns}`);
+    if (p.polyForm) fx.push(`forked → ${p.polyForm.name.replace(/^an? /, "")} ${p.polyTurns}`);
+    this.log.add(`  Status: ${fx.length ? fx.join(", ") : "clear"}.`, fx.some((s) => /STONING|ill|poison/.test(s)) ? "bad" : "dim");
+    // progress + the endgame
+    const relics = ["bell", "candelabrum", "graybook"].filter((id) => p.inventory.items.some((it) => it.type.id === id)).map((id) => itemById(id)!.name);
+    this.log.add(`  Depth ${p.depth} (deepest ${p.maxDepthReached})${this.gehennomOpen ? " · Gehennom open" : ""}${p.hasJam ? " · BEARS THE JAM" : this.jamStolen ? " · JAM stolen" : ""}.`, "dim");
+    this.log.add(`  Invocation relics held: ${relics.length ? relics.join(", ") : "none"}.`, relics.length === 3 ? "good" : "dim");
+    // conducts
+    const kept = CONDUCTS.filter((c) => p.conducts.has(c.id));
+    this.log.add(`  Vows kept: ${kept.length ? kept.map((c) => c.label).join(", ") : "none"}.`, kept.length ? "good" : "dim");
+    // on-chain
+    if (this.wallet) this.log.add(`  Wallet ${this.wallet.address.slice(0, 6)}…${this.wallet.address.slice(-4)} · ${p.pas.toFixed(1)} PAS · ${this.loadedRelics.size} relic(s) loaded.`, "sys");
+    else this.log.add("  Off-chain (no wallet connected).", "dim");
+  }
+
   /** A line summarising the vows a player still holds (for the death/ascension screen). */
   private conductReport(p: Player): void {
     const kept = CONDUCTS.filter((c) => p.conducts.has(c.id));
