@@ -101,6 +101,10 @@ export const ITEMS: ItemType[] = [
   { id: "scope",   kind: "tool", name: "a state reader",      ch: "(", fg: "#a0c0a0", weight: 2 }, // probe an adjacent foe
   { id: "vault",   kind: "tool", name: "a multisig vault",    ch: "(", fg: "#d0c060", weight: 2 }, // bag of holding — #loot to stash beyond the pack
   { id: "hodlstone", kind: "tool", name: "a HODL stone",      ch: "*", fg: "#e0d040", weight: 2 }, // luckstone (blessed) / loadstone (cursed)
+  // ── invocation relics ── (Phase 12 — the three keys to the ritual; never random-spawn)
+  { id: "bell",        kind: "tool",     name: "the Bell of Finality",     ch: "(", fg: "#ffe070", weight: 0 },
+  { id: "candelabrum", kind: "tool",     name: "the Genesis Candelabrum",  ch: "(", fg: "#ffd0a0", weight: 0 },
+  { id: "graybook",    kind: "spellbook", name: "the Gray Paper",          ch: "+", fg: "#d8d8e8", weight: 0 },
   // ── spellbooks ── + (study with r; cast with Z)
   { id: "book_bolt",  kind: "spellbook", name: "a runtime of finality bolt", ch: "+", fg: "#c0d0f0", teaches: "bolt",  weight: 2 },
   { id: "book_heal",  kind: "spellbook", name: "a runtime of self-mend",     ch: "+", fg: "#a0e0a0", teaches: "heal",  weight: 2 },

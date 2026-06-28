@@ -15,7 +15,7 @@ export const COLORS = {
   dim:       "#6c6a60",
 };
 
-export type TileType = "wall" | "floor" | "door" | "doorClosed" | "doorLocked" | "doorHidden" | "stairsDown" | "stairsUp" | "altar" | "portal" | "faucet" | "throne";
+export type TileType = "wall" | "floor" | "door" | "doorClosed" | "doorLocked" | "doorHidden" | "stairsDown" | "stairsUp" | "altar" | "portal" | "faucet" | "throne" | "vibrating";
 
 export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: string }> = {
   wall:       { ch: "#", fg: COLORS.wall,   fgDim: COLORS.wallDim },
@@ -30,6 +30,7 @@ export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: strin
   portal:     { ch: "Ω", fg: "#e060d0",     fgDim: "#6a3060" },
   faucet:     { ch: "{", fg: "#4fb0e0",     fgDim: "#2a5570" }, // a testnet faucet — quaff (q)
   throne:     { ch: "\\", fg: "#e0c040",    fgDim: "#6a5a20" }, // the Sudo Throne — sit (s)
+  vibrating:  { ch: "≈", fg: "#ff60ff",     fgDim: "#7a307a" }, // the vibrating square — invoke (I) the ritual here
 };
 
 export const MAX_DEPTH = 8; // the JAM lies on the deepest floor
@@ -95,6 +96,9 @@ export const CHAINS: ChainDef[] = [
 
 /** Realms deepen and grow chaotic — a nod to Polkadot → Kusama. */
 export function realmName(depth: number): string {
+  if (depth >= 12) return "Moloch's Sanctum";
+  if (depth >= 9) return "Gehennom, the Dark Forest";
+  if (depth >= 8) return "the Foot of the Relay";
   if (depth >= 7) return "the Kusama Deeps";
   if (depth >= 4) return "the Parachain Reaches";
   return "the Legacy Stack";
@@ -165,9 +169,14 @@ export const HONEYPOT: MonsterDef = {
   name: "a honeypot", ch: "m", fg: "#e0b020", hp: 16, dmg: [3, 7], ai: "chase", minDepth: 3, weight: 0, mimic: true, speed: 90,
 };
 
-/** The Censor — a unique boss guarding the JAM on the deepest floor. */
+/** The Censor — high keeper of the vibrating square at the foot of the relay (depth 8). */
 export const CENSOR: MonsterDef = {
   name: "THE CENSOR", ch: "C", fg: "#ff3b3b", hp: 48, dmg: [6, 11], ai: "chase", minDepth: 99, weight: 0, fearless: true,
+};
+
+/** MOLOCH, the Central Planner — the final tyrant who hoards the JAM at the bottom of Gehennom. */
+export const MOLOCH: MonsterDef = {
+  name: "MOLOCH, the Central Planner", ch: "&", fg: "#ff2020", hp: 80, dmg: [8, 14], ai: "chase", minDepth: 99, weight: 0, fearless: true, boss: true, summons: true, breath: 20,
 };
 
 /** Realm mini-bosses — one guards a specific depth and drops a prize when slain. */

@@ -299,6 +299,7 @@ export class Player extends Entity {
         if (this.offhand) { this.game.setOffhand(this, null); return false; }
         return this.startSelect("offhand");
       case "M": return this.game.toggleRide(this) ? this.endTurn() : false;
+      case "I": return this.game.invoke(this) ? this.endTurn() : false; // #invoke the ritual
       case "r": return this.startSelect("read");
       case "e": return this.game.eatFloorCorpse(this) ? this.endTurn() : this.startSelect("eat");
       case "d": return this.startSelect("drop");

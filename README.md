@@ -10,9 +10,18 @@ bought with **PAS** and your deeds are recorded on-chain (reusing the
 
 > **Status: Phase 3 — mythology & a winnable endgame.** Everything from Phases 1–2
 > **plus a goal**: descend through realms (the Legacy Stack → Parachain Reaches →
-> the Kusama Deeps) to **depth 8**, slay **THE CENSOR**, seize **the JAM**, then
-> climb back to the surface (`<`) to **ASCEND** and win. Plus **Gavin's altars**
+> the Kusama Deeps) toward **the JAM** (this world's Amulet of Yendor), then climb
+> back to the surface (`<`) to **ASCEND** and win. Plus **Gavin's altars**
 > (`P` to pray → be made whole), the **Gray Paper** intro, and a theming pass.
+>
+> **The Invocation (Phase 12a).** The road to the JAM is now gated by a ritual.
+> Three relics await on the descent — the **Bell of Finality** (d5), the **Genesis
+> Candelabrum** (d6), and the **Gray Paper** (d7). At **depth 8**, the Foot of the
+> Relay, the stairs give way to the **vibrating square** (`≈`) under **THE CENSOR's**
+> guard. Stand on it with all three relics and **`I` invoke**: the square shatters
+> and **Gehennom, the Dark Forest** (d9–11) opens below. At the bottom — **Moloch's
+> Sanctum** (d12) — the JAM rests in the grip of **MOLOCH, the Central Planner**.
+> Take it and climb all the way out to ascend.
 > **Phase 4 — persistence & social** is in: when a run ends (death or ASCENSION)
 > it's recorded on-chain **gaslessly** (you sign, the relay submits) into the
 > **AscendLedger** Hall of Fame (`H` to view), and fallen heroes leave **bones**
@@ -193,7 +202,7 @@ pair of them sit together and they'll multiply into a swarm, so don't ignore a c
 
 **Controls:** move **arrows/hjkl/yubn** · pick up `,` · inventory `i` · sheet `@` · wield `w` ·
 wear `W` · take off `T` · quaff `q` · read/study `r` · eat `e` · drop `d` · zap `z` · cast `Z` ·
-throw `t` · quiver `Q` · fire `f` · chat `c` · look `;` · what-is `/` · enhance skills `x` · discoveries `\` · open/force `o` · close `C` · kick `K` · dip `D` · name `N` · trap-ID `^` · two-weapon `X` · ride `M` · apply tool `a` · engrave `E` · pray `P` · offer `O` · descend `>` · ascend/up `<` · wait `.` · restart `R`.
+throw `t` · quiver `Q` · fire `f` · chat `c` · look `;` · what-is `/` · enhance skills `x` · discoveries `\` · open/force `o` · close `C` · kick `K` · dip `D` · name `N` · trap-ID `^` · two-weapon `X` · ride `M` · invoke `I` · apply tool `a` · engrave `E` · pray `P` · offer `O` · descend `>` · ascend/up `<` · wait `.` · restart `R`.
 
 `npm run build` → typecheck + production bundle in `dist/`.
 

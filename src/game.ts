@@ -5,7 +5,7 @@ import { Item } from "./inventory";
 import { Log } from "./log";
 import {
   COLORS, TILE_GLYPH, TileType, MONSTERS, MonsterDef, DEATHS, GREETINGS,
-  MAX_DEPTH, CENSOR, MINIBOSSES, HONEYPOT, SHOPKEEPER, realmName, GRAY_PAPER, ChainDef, CHAINS,
+  MAX_DEPTH, CENSOR, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, realmName, GRAY_PAPER, ChainDef, CHAINS,
   abilityMod, archetypeById, ATTRS, ATTR_LABEL, spellById,
 } from "./data";
 import { Idents, ITEMS, JAM, CORPSE, CHEST, WRITABLE_SCROLLS, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
@@ -25,6 +25,8 @@ const W = 80;
 const MAP_H = 30;
 const H = MAP_H + 2; // + a blank row + the status line
 const MEMPOOL_DEPTH = 5; // the Big Room special level — "the Mempool"
+const GEHENNOM_BOTTOM = 12; // after the Invocation the dungeon opens to here — Moloch + the JAM
+const RELIC_DEPTH: Record<number, string> = { 5: "bell", 6: "candelabrum", 7: "graybook" }; // where each invocation relic awaits
 const VAULT_CAP = 12; // a multisig vault holds up to this many stashed items
 const SKILL_RANKS = ["Unskilled", "Basic", "Skilled", "Expert"]; // weapon-skill ranks (#enhance)
 const SKILL_NEED = [0, 20, 60, 140]; // landed hits to reach each rank
@@ -42,6 +44,7 @@ export class Game {
   pet: Pet | null = null;
   private currentChain: ChainDef | null = null; // null = the main relay-chain dungeon
   private defeatedBosses = new Set<number>();    // relay depths whose mini-boss is slain
+  private gehennomOpen = false;                  // the Invocation has been performed — the Dark Forest lies below
   private loadedRelics = new Set<number>();      // NFT relic tokenIds already pulled into this run's pack
   wallet: Wallet | null = null;
   onWallet?: (address: string, pas: number) => void;
@@ -77,6 +80,7 @@ export class Game {
   newGame(): void {
     this.over = false;
     this.defeatedBosses.clear();
+    this.gehennomOpen = false;
     this.loadedRelics.clear();
     this.downed.clear();
     this.turn = 0;
@@ -256,7 +260,11 @@ export class Game {
     this.placePortals();
     this.placeMiniboss();
     this.placeMimics();
-    if (!this.currentChain && this.player.depth >= MAX_DEPTH) this.placeJamAndBoss();
+    if (!this.currentChain) {
+      this.placeRelics();
+      if (this.player.depth === MAX_DEPTH && !this.gehennomOpen) this.placeVibratingSquare();
+      else if (this.player.depth >= GEHENNOM_BOTTOM) this.placeJamAndBoss();
+    }
     for (const m of this.monsters) this.scheduler.add(m, true);
     if (this.pet && this.pet.alive) {
       const spot = this.adjacentFree(this.player.x, this.player.y);
@@ -315,7 +323,10 @@ export class Game {
     if (big) this.log.add("You descend into THE MEMPOOL — a vast open churn of pending chaos. Loot, and a swarm.", "bad");
     else this.log.add(`You descend to depth ${this.player.depth} — ${realmName(this.player.depth)}.`, this.player.depth >= 7 ? "bad" : "sys");
     if (this.player.depth >= 7 && this.player.depth < MAX_DEPTH) this.log.add("Chaos thickens. Expect Kusama.", "bad");
-    if (this.player.depth >= MAX_DEPTH) this.log.add("The air reeks of centralisation. The JAM is here — and so is its keeper.", "bad");
+    if (this.player.depth === MAX_DEPTH && !this.gehennomOpen) this.log.add("The foot of the relay. The vibrating square (≈) hums — perform the Invocation (I) with all three relics.", "bad");
+    else if (this.player.depth === MAX_DEPTH) this.log.add("The foot of the relay — the gate to the Dark Forest stands open below. (>)", "bad");
+    else if (this.player.depth > MAX_DEPTH && this.player.depth < GEHENNOM_BOTTOM) this.log.add("You sink into the Dark Forest — Gehennom. Censorship weeps from the walls.", "bad");
+    else if (this.player.depth >= GEHENNOM_BOTTOM) this.log.add("The bottom of all things. MOLOCH, the Central Planner, hoards the JAM here.", "bad");
     this.draw();
   }
 
@@ -395,10 +406,54 @@ export class Game {
     for (const [dx, dy] of offs) {
       const x = s.x + dx, y = s.y + dy;
       if (this.level.isPassable(x, y) && !this.monsterAt(x, y) && !(x === this.player.x && y === this.player.y)) {
+        this.monsters.push(new Monster(this, MOLOCH, x, y));
+        break;
+      }
+    }
+  }
+
+  /** Depth 8 before the Invocation: the down-stairs are replaced by the vibrating square, the Censor on guard. */
+  private placeVibratingSquare(): void {
+    const s = this.level.stairs;
+    this.level.tiles[s.y][s.x] = "vibrating";
+    const offs = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]];
+    for (const [dx, dy] of offs) {
+      const x = s.x + dx, y = s.y + dy;
+      if (this.level.isPassable(x, y) && !this.monsterAt(x, y) && !(x === this.player.x && y === this.player.y)) {
         this.monsters.push(new Monster(this, CENSOR, x, y));
         break;
       }
     }
+  }
+
+  /** Place this depth's invocation relic if no one in the party carries it yet (so it can't be permanently missed). */
+  private placeRelics(): void {
+    const id = RELIC_DEPTH[this.player.depth];
+    if (!id) return;
+    if (this.allPlayers().some((p) => p.inventory.items.some((it) => it.type.id === id || (it.contents ?? []).some((c) => c.type.id === id)))) return;
+    const t = itemById(id); if (!t) return;
+    const centers = this.level.roomCenters.filter((c) => this.level.tileAt(c.x, c.y) === "floor" && !this.level.itemAt(c.x, c.y) && !(c.x === this.player.x && c.y === this.player.y));
+    const spot = centers.length ? ROT.RNG.getItem(centers)! : this.level.randomFloor();
+    this.level.items.push({ x: spot.x, y: spot.y, type: t, buc: "blessed", bucKnown: true });
+    this.log.add(`Something of power rests on this floor — one of the three Invocation relics. (${t.name})`, "good");
+  }
+
+  /** `#invoke` (I) — perform the Invocation at the vibrating square to open Gehennom. */
+  invoke(p: Player): boolean {
+    if (this.level.tileAt(p.x, p.y) !== "vibrating") { this.log.add("The ground here is silent. Seek the vibrating square (≈) at the foot of the relay.", "dim"); return false; }
+    if (this.gehennomOpen) { this.log.add("The gate already yawns open below.", "dim"); return false; }
+    const need = ["bell", "candelabrum", "graybook"];
+    const have = (id: string) => p.inventory.items.some((it) => it.type.id === id);
+    const missing = need.filter((id) => !have(id)).map((id) => itemById(id)!.name);
+    if (missing.length) { this.log.add(`The square thrums, but the rite is incomplete. You still need: ${missing.join(", ")}.`, "bad"); return false; }
+    this.gehennomOpen = true;
+    this.level.tiles[p.y][p.x] = "stairsDown";
+    this.log.add("You ring the Bell of Finality — one note, and it never decays.", "sys");
+    this.log.add("You light the Genesis Candelabrum — seven flames of the first block flare.", "sys");
+    this.log.add("You read aloud from the Gray Paper. The grammar of consensus unwrites itself.", "sys");
+    this.log.add("✦ The vibrating square shatters into a stair spiralling down. GEHENNOM — the Dark Forest — is open. (> to descend)", "good");
+    this.recomputeFOV(); this.draw();
+    return true;
   }
 
   private placeMiniboss(): void {
@@ -699,12 +754,13 @@ export class Game {
       ">": "a staircase down, deeper toward the JAM", "<": "a staircase up",
       "_": "an altar — offer a corpse (O) here for favor", "Ω": "an XCM portal to a parachain realm",
       "{": "a testnet faucet — q to quaff it", "\\": "the Sudo Throne — s to sit on it",
+      "≈": "the vibrating square — perform the Invocation (I) here with the three relics",
       "0": "a boulder — walk into it to shove it", "§": "a warding engraving",
       ")": "a weapon", "[": "a piece of armor", "(": "a tool, or a chest",
       "!": "a potion", "?": "a scroll", "=": "a ring", "/": "a wand",
       "%": "food — or a corpse you can eat (e)", "*": "an amulet or gem",
     };
-    const mons = [...MONSTERS, SHOPKEEPER, HONEYPOT, CENSOR, ...Object.values(MINIBOSSES)].find((m) => m.ch === key);
+    const mons = [...MONSTERS, SHOPKEEPER, HONEYPOT, CENSOR, MOLOCH, ...Object.values(MINIBOSSES)].find((m) => m.ch === key);
     const parts: string[] = [];
     if (mons) parts.push(mons.name);
     if (feat[key]) parts.push(feat[key]);
@@ -749,7 +805,7 @@ export class Game {
       wall: "a wall", floor: "bare floor", door: "an open doorway", doorClosed: "a closed door",
       doorLocked: "a locked door", doorHidden: "a wall", stairsDown: "a staircase down",
       stairsUp: "a staircase up", altar: "an altar", portal: "an XCM portal", faucet: "a faucet",
-      throne: "the Sudo Throne",
+      throne: "the Sudo Throne", vibrating: "the vibrating square — invoke (I) the ritual here",
     };
     this.log.add(`You see ${names[t!] ?? "nothing notable"}.`, "dim");
   }
@@ -2120,7 +2176,7 @@ export class Game {
       (p.illness > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Ill${p.illness}` : "") +
       (p.blind > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Blind` : "") +
       (p.intrinsics.has("fast") ? `%c{${COLORS.dim}}  %c{${COLORS.good}}Fast` : "") +
-      (p.hasJam ? `%c{${COLORS.dim}}  %c{${COLORS.gold}}✦JAM — ASCEND (<)` : `%c{${COLORS.dim}}  JAM: depth ${MAX_DEPTH}`)
+      (p.hasJam ? `%c{${COLORS.dim}}  %c{${COLORS.gold}}✦JAM — ASCEND (<)` : `%c{${COLORS.dim}}  ${this.gehennomOpen ? `JAM: depth ${GEHENNOM_BOTTOM}` : `Invoke @ depth ${MAX_DEPTH}`}`)
     );
   }
 
