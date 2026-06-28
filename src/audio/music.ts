@@ -10,6 +10,7 @@ type Wave = OscillatorType;
 interface TrackDef {
   id: string;
   name: string;
+  area: string;        // which dungeon area this track belongs to (auto-by-area pool)
   root: number;        // root frequency (Hz)
   scale: number[];     // semitone degrees for melodic motes
   chord: number[];     // semitone offsets (from root) for the sustained pad
@@ -24,9 +25,10 @@ interface TrackDef {
   level: number;       // track mix level
 }
 
-// ── the ten area tracks ──────────────────────────────────────────────────────
+// ── the ten base area themes ─────────────────────────────────────────────────
 const A = 55; // a low A reference
-export const TRACKS: TrackDef[] = [
+type Base = Omit<TrackDef, "area">;
+const BASES: Base[] = [
   { id: "legacy",    name: "Legacy Stack",        root: A,        scale: [0, 3, 5, 7, 10],     chord: [0, 7, 15],        pad: "sine",     drone: "sine",     cutoff: 700,  reverb: 0.4, motes: true,  moteRate: 6.0, pulseBpm: 0,  detune: 5,  level: 0.5 },
   { id: "parachain", name: "Parachain Reaches",   root: A * 1.5,  scale: [0, 2, 3, 5, 7, 9],    chord: [0, 7, 14, 16],    pad: "triangle", drone: "sine",     cutoff: 1100, reverb: 0.45,motes: true,  moteRate: 4.0, pulseBpm: 0,  detune: 6,  level: 0.5 },
   { id: "kusama",    name: "Kusama Deeps",        root: A * 0.75, scale: [0, 1, 3, 6, 8],       chord: [0, 6, 13],        pad: "sawtooth", drone: "sine",     cutoff: 600,  reverb: 0.5, motes: true,  moteRate: 5.0, pulseBpm: 0,  detune: 14, level: 0.45 },
@@ -39,12 +41,18 @@ export const TRACKS: TrackDef[] = [
   { id: "elsewhere", name: "Elsewhere",           root: A * 1.25, scale: [0, 2, 4, 6, 8, 10],   chord: [0, 4, 8],         pad: "sine",     drone: "triangle", cutoff: 1000, reverb: 0.55,motes: true,  moteRate: 3.6, pulseBpm: 0,  detune: 10, level: 0.45 },
 ];
 
-// area id → track id (one bespoke track each for now)
-const AREA_TRACK: Record<string, string> = {
-  legacy: "legacy", parachain: "parachain", kusama: "kusama", mempool: "mempool",
-  relay: "relay", gehennom: "gehennom", sanctum: "sanctum", planes: "planes",
-  genesis: "genesis", elsewhere: "elsewhere",
-};
+const ROMAN = ["", " II", " III"];
+const revoice = (c: number[]) => c.map((n, i) => (i === c.length - 1 ? n + 12 : n));
+/** Derive a same-area variant of a base theme — a different voicing/texture/density. */
+function variant(b: Base, n: 1 | 2): TrackDef {
+  const ov: Partial<Base> = n === 1
+    ? { chord: revoice(b.chord), cutoff: Math.round(b.cutoff * 1.25), moteRate: +(b.moteRate * 0.78).toFixed(1), detune: b.detune + 4 }
+    : { pad: b.drone, drone: b.pad, cutoff: Math.round(b.cutoff * 0.82), moteRate: +(b.moteRate * 1.35).toFixed(1), reverb: Math.min(0.8, b.reverb + 0.1), pulseBpm: b.pulseBpm ? Math.round(b.pulseBpm * 0.86) : 0 };
+  return { ...b, ...ov, area: b.id, id: `${b.id}-${n + 1}`, name: `${b.name}${ROMAN[n]}` };
+}
+// every area gets three textures (base + two variants) for "random by area"
+const TRACKS: TrackDef[] = BASES.flatMap((b) => [{ ...b, area: b.id }, variant(b, 1), variant(b, 2)]);
+const tracksForArea = (area: string) => TRACKS.filter((t) => t.area === area);
 
 const semi = (root: number, n: number) => root * Math.pow(2, n / 12);
 
@@ -77,7 +85,7 @@ export class MusicEngine {
 
   get enabled(): boolean { return this._enabled; }
   get mode(): string { return this._mode; }
-  get trackList(): { id: string; name: string }[] { return TRACKS.map((t) => ({ id: t.id, name: t.name })); }
+  get trackList(): { id: string; name: string }[] { return BASES.map((t) => ({ id: t.id, name: t.name })); } // the picker lists themes; variants play under auto/shuffle
 
   /** Resume the context after a user gesture (autoplay policy). */
   resume(): void { if (this.ctx && this.ctx.state === "suspended") void this.ctx.resume(); }
@@ -98,14 +106,50 @@ export class MusicEngine {
     if (this._enabled) this.applyMode();
   }
 
-  /** The game tells us which area the player is in; in auto mode we crossfade to it. */
+  /** The game tells us which area the player is in; in auto mode we crossfade to a
+   *  random variant of that area's theme — but only when the area actually changes. */
   setArea(areaId: string): void {
+    const sameArea = this.active && this.active.def.area === areaId;
     this.area = areaId;
-    if (this._enabled && this._mode === "auto") this.crossfadeTo(AREA_TRACK[areaId] ?? "legacy");
+    if (this._enabled && this._mode === "auto" && !sameArea) this.crossfadeRandom(areaId);
+  }
+
+  private crossfadeRandom(areaId: string): void {
+    const pool = tracksForArea(areaId);
+    if (!pool.length) return;
+    let pick = pool[Math.floor(Math.random() * pool.length)];
+    if (pool.length > 1 && this.active && pick.id === this.active.def.id) pick = pool[(pool.indexOf(pick) + 1) % pool.length];
+    this.crossfadeTo(pick.id);
   }
 
   /** The game sets a 0..1 danger level each turn; the tension layer follows it. */
   setDanger(level: number): void { this.danger = Math.max(0, Math.min(1, level)); }
+
+  /** A one-shot musical cue on death (falling, gloomy) or ascension (rising, luminous). */
+  playStinger(kind: "death" | "ascend"): void {
+    if (!this._enabled) return;
+    this.ensureContext();
+    this.resume();
+    const ctx = this.ctx!;
+    const now = ctx.currentTime;
+    // duck the area bed + kill tension so the stinger reads clearly
+    if (this.active) { this.active.bus.gain.cancelScheduledValues(now); this.active.bus.gain.setTargetAtTime(this.active.def.level * 0.2, now, 0.2); }
+    this.tensionBus.gain.cancelScheduledValues(now); this.tensionBus.gain.setTargetAtTime(0, now, 0.15);
+    const bus = this.makeBus(0.6);
+    bus.gain.value = 0.9;
+    if (kind === "ascend") {
+      const seq = [0, 4, 7, 12, 16, 19, 24]; // a rising major arpeggio
+      seq.forEach((s, i) => this.note(semi(220, s) * 2, now + i * 0.26, 1.6, bus, "triangle", 0.12, 3200));
+      for (const c of [0, 7, 16, 23]) this.note(semi(220, c) * 2, now + seq.length * 0.26, 3.2, bus, "triangle", 0.07, 3000); // a luminous final chord
+    } else {
+      const seq = [0, -2, -3, -7, -10]; // a falling, sinking minor descent
+      seq.forEach((s, i) => this.note(semi(110, s), now + i * 0.34, 1.5, bus, "sawtooth", 0.11, 900));
+      for (const c of [0, 3, 6]) this.note(semi(55, c), now + seq.length * 0.34, 3.4, bus, "sine", 0.1, 500); // a low diminished knell
+    }
+    const end = now + (kind === "ascend" ? 7 : 6);
+    if (this.active) this.active.bus.gain.setTargetAtTime(this.active.def.level, end - 1, 1.2); // let the bed swell back
+    window.setTimeout(() => { try { bus.disconnect(); } catch { /* gone */ } }, (end - now + 1) * 1000);
+  }
 
   // ── internals ──────────────────────────────────────────────────────────────
   private ensureContext(): void {
@@ -152,7 +196,7 @@ export class MusicEngine {
   }
 
   private applyMode(): void {
-    if (this._mode === "auto") this.crossfadeTo(AREA_TRACK[this.area] ?? "legacy");
+    if (this._mode === "auto") this.crossfadeRandom(this.area);
     else if (this._mode === "shuffle") { this.shuffleUntil = 0; this.pickShuffle(); }
     else this.crossfadeTo(this._mode);
   }

@@ -1289,6 +1289,7 @@ export class Game {
     }
     this.conductReport(w);
     this.log.add("Press R to begin a new descent.", "dim");
+    this.music.playStinger("ascend");
     this.draw();
     void this.recordResult(true);
     void this.mintDeed(w);
@@ -1316,6 +1317,7 @@ export class Game {
     this.log.add(ROT.RNG.getItem(DEATHS)!, "bad");
     this.log.add(`You fell at depth ${this.player.depth} (deepest ${this.player.maxDepthReached}). Press R to try again.`, "sys");
     this.conductReport(this.player);
+    this.music.playStinger("death");
     this.draw();
     void this.recordResult(false);
     void this.showHallOfFame();
