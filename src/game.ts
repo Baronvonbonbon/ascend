@@ -26,6 +26,12 @@ const MAP_H = 30;
 const H = MAP_H + 2; // + a blank row + the status line
 const MEMPOOL_DEPTH = 5; // the Big Room special level — "the Mempool"
 const GEHENNOM_BOTTOM = 12; // after the Invocation the dungeon opens to here — Moloch + the JAM
+const PLANES = [ // the ascent above the surface — climb them with the JAM to the Genesis altar
+  { name: "the Plane of Consensus", flavor: "The ground itself votes; agreement hums beneath your feet." },
+  { name: "the Plane of Finality", flavor: "Nothing here can be undone — every step is irreversible." },
+  { name: "the Plane of Light Clients", flavor: "Proofs drift like motes of dust; the whole sky is one header." },
+  { name: "the Genesis Plane", flavor: "The first block hangs frozen above an altar of pure intent. Offer the JAM (O)." },
+];
 const RELIC_DEPTH: Record<number, string> = { 5: "bell", 6: "candelabrum", 7: "graybook" }; // where each invocation relic awaits
 const VAULT_CAP = 12; // a multisig vault holds up to this many stashed items
 const SKILL_RANKS = ["Unskilled", "Basic", "Skilled", "Expert"]; // weapon-skill ranks (#enhance)
@@ -45,6 +51,7 @@ export class Game {
   private currentChain: ChainDef | null = null; // null = the main relay-chain dungeon
   private defeatedBosses = new Set<number>();    // relay depths whose mini-boss is slain
   private gehennomOpen = false;                  // the Invocation has been performed — the Dark Forest lies below
+  private plane = 0;                              // 0 = the dungeon; 1..PLANES.length = the ascent above the surface
   private loadedRelics = new Set<number>();      // NFT relic tokenIds already pulled into this run's pack
   wallet: Wallet | null = null;
   onWallet?: (address: string, pas: number) => void;
@@ -81,6 +88,7 @@ export class Game {
     this.over = false;
     this.defeatedBosses.clear();
     this.gehennomOpen = false;
+    this.plane = 0;
     this.loadedRelics.clear();
     this.downed.clear();
     this.turn = 0;
@@ -247,23 +255,27 @@ export class Game {
       this.coPlayer.depth = this.player.depth; // shared depth for the HUD
       this.scheduler.add(this.coPlayer, true);
     }
-    this.spawnMonsters();
-    this.spawnItems();
-    this.spawnShop();
-    this.placeAltar();
-    this.placeFeature("faucet", 0.3);
-    this.placeFeature("throne", 0.16);
-    this.placeChest(0.35);
-    this.placeBoulders();
-    this.maybePlaceBones();
-    this.spawnTraps();
-    this.placePortals();
-    this.placeMiniboss();
-    this.placeMimics();
-    if (!this.currentChain) {
-      this.placeRelics();
-      if (this.player.depth === MAX_DEPTH && !this.gehennomOpen) this.placeVibratingSquare();
-      else if (this.player.depth >= GEHENNOM_BOTTOM) this.placeJamAndBoss();
+    if (this.plane > 0) {
+      this.setupPlane();
+    } else {
+      this.spawnMonsters();
+      this.spawnItems();
+      this.spawnShop();
+      this.placeAltar();
+      this.placeFeature("faucet", 0.3);
+      this.placeFeature("throne", 0.16);
+      this.placeChest(0.35);
+      this.placeBoulders();
+      this.maybePlaceBones();
+      this.spawnTraps();
+      this.placePortals();
+      this.placeMiniboss();
+      this.placeMimics();
+      if (!this.currentChain) {
+        this.placeRelics();
+        if (this.player.depth === MAX_DEPTH && !this.gehennomOpen) this.placeVibratingSquare();
+        else if (this.player.depth >= GEHENNOM_BOTTOM) this.placeJamAndBoss();
+      }
     }
     for (const m of this.monsters) this.scheduler.add(m, true);
     if (this.pet && this.pet.alive) {
@@ -379,18 +391,57 @@ export class Game {
 
   ascend(): void {
     if (this.currentChain) { this.exitChain(); return; }
-    const newDepth = this.player.depth - 1;
-    if (newDepth < 1) return;
-    this.player.depth = newDepth;
+    if (this.plane > 0) { this.enterPlane(this.plane + 1); return; } // climb higher through the Planes
     const holder = this.allPlayers().find((p) => p.hasJam);
-    if (newDepth === 1 && holder) { this.win(holder); return; }
+    const newDepth = this.player.depth - 1;
+    if (newDepth < 1) {
+      // at the surface: the JAM drags you UPWARD into the Planes; without it, the world ends here
+      if (holder) this.enterPlane(1);
+      return;
+    }
+    this.player.depth = newDepth;
     this.level = new Level(W, MAP_H);
     this.player.x = this.level.stairs.x; // you climb up INTO the down-stairs of the level above
     this.player.y = this.level.stairs.y;
     if (newDepth > 1) this.placeUpStair();
+    else if (holder) { this.level.tiles[this.player.y][this.player.x] = "stairsUp"; } // a stair beyond the world opens
     this.enterLevel();
     this.log.add(`You climb to depth ${newDepth} — ${realmName(newDepth)}.`, "sys");
+    if (newDepth === 1 && holder) this.log.add("The surface is near — but the JAM hauls you UPWARD, past the world itself. Climb (<) into the Planes.", "good");
     this.draw();
+  }
+
+  /** Enter the n-th Plane of the ascent (1..PLANES.length). The last is the Genesis Plane. */
+  private enterPlane(n: number): void {
+    if (n > PLANES.length) return; // already atop the Genesis Plane — offer the JAM, don't climb
+    this.plane = n;
+    this.currentChain = null;
+    this.level = new Level(W, MAP_H);
+    this.player.x = this.level.start.x;
+    this.player.y = this.level.start.y;
+    this.enterLevel(); // routes through setupPlane() since plane > 0
+    const def = PLANES[n - 1];
+    this.log.add(`You rise onto ${def.name}. ${def.flavor}`, n === PLANES.length ? "good" : "sys");
+    this.draw();
+  }
+
+  /** Lay out a Plane: tough guardians + the stair to the next plane (or the Genesis altar). */
+  private setupPlane(): void {
+    const isGenesis = this.plane === PLANES.length;
+    const s = this.level.stairs;
+    this.level.tiles[s.y][s.x] = isGenesis ? "altar" : "stairsUp"; // climb higher, or offer here
+    this.spawnPlaneGuardians();
+  }
+
+  /** Plane guardians — Moloch's last servants, drawn from the deepest bestiary. */
+  private spawnPlaneGuardians(): void {
+    const deep = MONSTERS.filter((m) => (m.minDepth ?? 1) >= 5);
+    const n = 3 + this.plane; // higher planes are better defended
+    for (let i = 0; i < n; i++) {
+      const pos = this.level.randomFloor();
+      if (this.level.tileAt(pos.x, pos.y) !== "floor" || this.monsterAt(pos.x, pos.y) || (pos.x === this.player.x && pos.y === this.player.y)) continue;
+      this.monsters.push(new Monster(this, ROT.RNG.getItem(deep)!, pos.x, pos.y));
+    }
   }
 
   private placeUpStair(): void {
@@ -923,6 +974,12 @@ export class Game {
   /** Offer a corpse (on or beside a Gavin altar) — burn it for the Architect's favor: Fortune, and rarely a gift. */
   offerCorpse(p: Player): boolean {
     if (this.level.tileAt(p.x, p.y) !== "altar") { this.log.add("You can only make an offering at a Gavin altar (_).", "dim"); return false; }
+    // The Genesis Plane: offer the JAM itself on the altar of pure intent — the true ascension.
+    if (this.plane === PLANES.length && p.hasJam) {
+      this.log.add("You lay the JAM upon the altar of pure intent. It dissolves into first light.", "good");
+      this.win(p);
+      return true;
+    }
     let fi = this.level.items.find((i) => i.corpse && i.x === p.x && i.y === p.y);
     if (!fi) {
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]] as [number, number][]) {
@@ -2162,8 +2219,11 @@ export class Game {
     const hpCol = p.hp <= p.maxHp * 0.3 ? COLORS.bad : COLORS.good;
     const hunger = p.hungerWord();
     return (
-      `%c{${COLORS.dim}}HP %c{${hpCol}}${p.hp}%c{${COLORS.dim}}/${p.maxHp}  Lv %c{${COLORS.good}}${p.level}%c{${COLORS.dim}}  Depth %c{${COLORS.gold}}${p.depth}` +
-      (this.currentChain ? `%c{${COLORS.dim}} @%c{${this.currentChain.color}}${this.currentChain.name}` : `%c{${COLORS.dim}} @%c{${COLORS.dim}}Relay`) +
+      `%c{${COLORS.dim}}HP %c{${hpCol}}${p.hp}%c{${COLORS.dim}}/${p.maxHp}  Lv %c{${COLORS.good}}${p.level}%c{${COLORS.dim}}  ` +
+      (this.plane > 0
+        ? `%c{#ff60ff}${PLANES[this.plane - 1].name}`
+        : `Depth %c{${COLORS.gold}}${p.depth}` +
+          (this.currentChain ? `%c{${COLORS.dim}} @%c{${this.currentChain.color}}${this.currentChain.name}` : `%c{${COLORS.dim}} @%c{${COLORS.dim}}Relay`)) +
       `%c{${COLORS.dim}}  AC %c{${COLORS.good}}${p.ac}` +
       (p.maxEnergy > 5 || p.spells.size ? `%c{${COLORS.dim}}  En %c{#7aa0e0}${p.energy}%c{${COLORS.dim}}/${p.maxEnergy}` : "") +
       (this.luckOf(p) !== 0 ? `%c{${COLORS.dim}}  Luck %c{${this.luckOf(p) > 0 ? COLORS.good : COLORS.bad}}${this.luckOf(p) > 0 ? "+" : ""}${this.luckOf(p)}` : "") +
