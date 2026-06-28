@@ -243,8 +243,9 @@ throw `t` · quiver `Q` · fire `f` · chat `c` · look `;` · what-is `/` · en
 **Audio:** a **♪ Music** toggle and a **soundtrack picker** sit in the header. The music is
 **fully procedural** (Web Audio — no asset files): ten area themes (Legacy Stack → Parachain
 Reaches → Kusama Deeps → the Mempool → the Foot of the Relay → Gehennom → Moloch's Sanctum →
-the Planes → the Genesis Plane → Elsewhere), **each with three textural variants** picked at
-random when you enter the area, so repeat visits and runs sound fresh. **Auto (by area)** follows
+the Planes → the Genesis Plane → Elsewhere), **each with five textural variants that share one
+signature melody** (a per-area leitmotif), picked at random when you enter the area — so the place
+stays recognisable while repeat visits and runs sound fresh. **Auto (by area)** follows
 where you are; **Shuffle all** rotates every couple of minutes; or pin one theme. A **tension
 layer** swells in over the ambience when foes close, a boss looms, or the Censor hunts — and
 **death** and **ascension** each get a short musical **stinger** (a sinking knell / a rising
