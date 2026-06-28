@@ -98,6 +98,7 @@ export const ITEMS: ItemType[] = [
   { id: "horn",    kind: "tool", name: "an auditor's horn",   ch: "(", fg: "#e0e0c0", weight: 2 }, // cures afflictions
   { id: "marker",  kind: "tool", name: "a contract deployer", ch: "(", fg: "#a0d0e0", weight: 2 }, // writes scrolls (charged)
   { id: "scope",   kind: "tool", name: "a state reader",      ch: "(", fg: "#a0c0a0", weight: 2 }, // probe an adjacent foe
+  { id: "vault",   kind: "tool", name: "a multisig vault",    ch: "(", fg: "#d0c060", weight: 2 }, // bag of holding — #loot to stash beyond the pack
   { id: "hodlstone", kind: "tool", name: "a HODL stone",      ch: "*", fg: "#e0d040", weight: 2 }, // luckstone (blessed) / loadstone (cursed)
   // ── spellbooks ── + (study with r; cast with Z)
   { id: "book_bolt",  kind: "spellbook", name: "a runtime of finality bolt", ch: "+", fg: "#c0d0f0", teaches: "bolt",  weight: 2 },

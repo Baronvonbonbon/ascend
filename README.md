@@ -125,7 +125,9 @@ of formal verification** to repair *and* rust-proof ("audit") your gear.
 **Tools (Phase 7c):** **apply** (`a`) a **tool** (`(`) — an **excavator** (reusable pick-axe; dig walls
 in a direction), an **auditor's horn** (cure poison / confusion / **stoning** / **illness** + a small
 mend — your lifeline against eating the wrong corpse), a **contract deployer** (write a chosen scroll,
-spending its gas), or a **state reader** (probe an adjacent foe's HP + traits).
+spending its gas), or a **state reader** (probe an adjacent foe's HP + traits). A **multisig vault**
+(Phase 11d — a bag of holding) opens a **loot** menu on apply: stash items **in** (`i`) or pull them
+**out** (`o`), holding up to 12 *beyond* your 20-slot pack — set it down and the stash spills out intact.
 
 **Blindness & telepathy (Phase 7e):** a **potion of obfuscation** blinds you — your sight shrinks to
 arm's reach (`Blind`) and you swing less accurately; **throw** it to blind a monster so it can't find

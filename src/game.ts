@@ -25,6 +25,7 @@ const W = 80;
 const MAP_H = 30;
 const H = MAP_H + 2; // + a blank row + the status line
 const MEMPOOL_DEPTH = 5; // the Big Room special level — "the Mempool"
+const VAULT_CAP = 12; // a multisig vault holds up to this many stashed items
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -1340,6 +1341,61 @@ export class Game {
     this.log.add(`Deploy which scroll? ${menu}  (Esc to cancel)`, "sys");
   }
 
+  // ── #loot: the multisig vault (bag of holding) ──
+  /** An item can't be stashed while it's equipped (worn/wielded/on-hand/welded). */
+  private lootLocked(p: Player, it: Item): boolean {
+    return p.isWelded(it) || it === p.weapon || it === p.ring || p.wornArmor.includes(it);
+  }
+
+  lootMenu(vault: Item): void {
+    if (!vault.contents) vault.contents = [];
+    this.log.add(`— Multisig vault (${vault.contents.length}/${VAULT_CAP} held) —  press (i) to stash in · (o) to take out · (Esc) to close`, "sys");
+  }
+
+  lootStashPrompt(vault: Item): void {
+    const p = this.acting;
+    const eligible = p.inventory.items.filter((it) => it !== vault && !this.lootLocked(p, it));
+    if (eligible.length === 0) { this.log.add("You have nothing loose to stash. (take gear off first)", "dim"); return; }
+    if ((vault.contents?.length ?? 0) >= VAULT_CAP) { this.log.add("The vault is full.", "bad"); return; }
+    this.showInventory();
+    this.log.add("Stash which item into the vault? (a pack letter, Esc to cancel)", "sys");
+  }
+
+  lootTakePrompt(vault: Item): void {
+    const held = vault.contents ?? [];
+    if (held.length === 0) { this.log.add("The vault is empty.", "dim"); return; }
+    this.log.add("— Vault contents —", "sys");
+    held.forEach((it, i) => {
+      const buc = it.bucKnown && it.buc ? `${it.buc} ` : "";
+      this.log.add(`  ${i + 1}) ${buc}${this.ident.name(it.type)}`, "dim");
+    });
+    this.log.add("Take out which? (a number, Esc to cancel)", "sys");
+  }
+
+  lootStash(vault: Item, item: Item): boolean {
+    const p = this.acting;
+    if (item === vault) { this.log.add("A vault can't hold itself.", "dim"); return false; }
+    if (this.lootLocked(p, item)) { this.log.add(`You'd have to take off ${this.ident.name(item.type)} first.`, "dim"); return false; }
+    if (!vault.contents) vault.contents = [];
+    if (vault.contents.length >= VAULT_CAP) { this.log.add("The vault is full.", "bad"); return false; }
+    p.inventory.remove(item);
+    if (item === p.quiver) p.quiver = null;
+    vault.contents.push(item);
+    this.log.add(`${this.sub(p)} ${this.verbS(p, "stash")} ${this.ident.name(item.type)} in the vault. (${vault.contents.length}/${VAULT_CAP})`, "good");
+    return true;
+  }
+
+  lootTake(vault: Item, idx: number): boolean {
+    const p = this.acting;
+    const held = vault.contents ?? [];
+    if (idx < 0 || idx >= held.length) { this.log.add("No such item in the vault.", "dim"); return false; }
+    if (p.inventory.full) { this.log.add("Your pack is full — no room to withdraw.", "bad"); return false; }
+    const item = held.splice(idx, 1)[0];
+    p.inventory.items.push(item);
+    this.log.add(`${this.sub(p)} ${this.verbS(p, "withdraw")} ${this.ident.name(item.type)} from the vault.`, "good");
+    return true;
+  }
+
   /** Write (deploy) a scroll with a contract deployer, spending a charge. */
   writeScroll(marker: Item, idx: number): boolean {
     if (idx < 0 || idx >= WRITABLE_SCROLLS.length) { this.log.add("No such scroll on the menu.", "dim"); return false; }
@@ -1421,6 +1477,12 @@ export class Game {
 
   dropItem(item: Item): void {
     const x = this.acting.x, y = this.acting.y;
+    // A vault spills its stash onto the floor when set down, so nothing is lost.
+    if (item.contents?.length) {
+      for (const c of item.contents) this.level.items.push({ x, y, type: c.type, enchant: c.enchant, relic: c.relic, buc: c.buc, bucKnown: c.bucKnown });
+      this.log.add(`The vault's ${item.contents.length} stashed item(s) spill out onto the floor.`, "sys");
+      item.contents = [];
+    }
     const fi = { x, y, type: item.type, enchant: item.enchant, relic: item.relic, buc: item.buc, bucKnown: item.bucKnown };
     // Gavin's altar reveals an item's sanctity when you set it down upon it.
     if (this.level.tileAt(x, y) === "altar") {
@@ -1440,7 +1502,7 @@ export class Game {
     inv.items.forEach((it, i) => {
       const welded = who.isWelded(it);
       const eq = welded ? " (welded)" : it === who.weapon ? " (wielded)" : who.wornArmor.includes(it) ? " (worn)" : it === who.ring ? " (on hand)" : it === who.quiver ? " (at the ready)" : "";
-      const ch = it.charges != null ? ` [${it.charges}]` : "";
+      const ch = it.charges != null ? ` [${it.charges}]` : it.type.id === "vault" ? ` {${it.contents?.length ?? 0} held}` : "";
       const relic = it.relic ? ` +${it.enchant ?? 0} ✦` : "";
       const buc = it.bucKnown && it.buc ? `${it.buc} ` : "";
       const ero = it.erosion ? (["", "rusty ", "corroded ", "very corroded "][it.erosion] ?? "") : (it.proofed ? "audited " : "");

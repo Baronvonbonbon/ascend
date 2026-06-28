@@ -122,6 +122,7 @@ export class Player extends Entity {
   quiver: Item | null = null;               // readied missile for the `f`ire command
   private pendingApply: Item | null = null; // a tool awaiting a direction (excavator / state reader)
   private pendingWrite: Item | null = null; // a contract deployer awaiting a scroll choice
+  private pendingLoot: { vault: Item; mode: "menu" | "in" | "out" } | null = null; // a multisig vault being looted
   private pendingSpell = false;             // choosing a spell to cast
   private pendingCastDir: string | null = null; // a directional spell awaiting a direction
   private pendingChat = false;              // choosing a direction to chat
@@ -247,6 +248,7 @@ export class Player extends Entity {
     if (this.pendingThrow) return this.resolveThrowDir(e);
     if (this.pendingApply) return this.resolveApplyDir(e);
     if (this.pendingWrite) return this.resolveWrite(e);
+    if (this.pendingLoot) return this.resolveLoot(e);
     if (this.pendingCastDir) return this.resolveCastDir(e);
     if (this.pendingChat) return this.resolveChatDir(e);
     if (this.pendingLook) return this.resolveLookDir(e);
@@ -339,6 +341,11 @@ export class Player extends Entity {
         this.game.promptWrite();
         return false;
       }
+      if (id === "vault") {
+        this.pendingLoot = { vault: item, mode: "menu" };
+        this.game.lootMenu(item);
+        return false;
+      }
       this.game.log.add("Nothing happens.", "dim"); return false;
     }
     return this.doVerb(verb, item);
@@ -360,6 +367,25 @@ export class Player extends Entity {
     const n = parseInt(e.key, 10);
     if (isNaN(n)) { this.game.log.add("Choose a number from the menu.", "dim"); return false; }
     return this.game.writeScroll(item, n - 1) ? this.endTurn() : false;
+  }
+
+  private resolveLoot(e: KeyboardEvent): boolean {
+    const st = this.pendingLoot!;
+    if (e.key === "Escape") { this.pendingLoot = null; this.game.log.add("You close the vault.", "dim"); return false; }
+    if (st.mode === "menu") {
+      if (e.key === "i") { st.mode = "in"; this.game.lootStashPrompt(st.vault); return false; }
+      if (e.key === "o") { st.mode = "out"; this.game.lootTakePrompt(st.vault); return false; }
+      this.game.log.add("Press i to stash, o to withdraw, or Esc.", "dim"); return false;
+    }
+    this.pendingLoot = null;
+    if (st.mode === "in") {
+      const item = /^[a-z]$/.test(e.key) ? this.inventory.byLetter(e.key) : undefined;
+      if (!item) { this.game.log.add("No such item.", "dim"); return false; }
+      return this.game.lootStash(st.vault, item) ? this.endTurn() : false;
+    }
+    const n = parseInt(e.key, 10);
+    if (isNaN(n)) { this.game.log.add("Choose a number from the menu.", "dim"); return false; }
+    return this.game.lootTake(st.vault, n - 1) ? this.endTurn() : false;
   }
 
   private startCast(): boolean {
