@@ -35,6 +35,8 @@ const PLANES = [ // the ascent above the surface — climb them with the JAM to 
   { name: "the Genesis Plane", flavor: "The first block hangs frozen above an altar of pure intent. Offer the JAM (O)." },
 ];
 const RELIC_DEPTH: Record<number, string> = { 7: "bell", 9: "candelabrum", 11: "graybook" }; // the three Invocation relics, spread across the back half of the relay descent (all before MAX_DEPTH)
+// Per-Plane layouts for the ascent (Phase 17): each Plane reads as its own place, the Genesis a ringed sanctum.
+const PLANE_KINDS: LevelKind[] = ["bigroom", "cave", "labyrinth", "concentric"];
 // Conducts (Phase 13a) — self-imposed vows, kept until an action breaks them.
 const CONDUCTS: { id: string; label: string; note: string }[] = [
   { id: "pacifist",   label: "Pacifist",       note: "shed no blood by your own hand" },
@@ -124,6 +126,7 @@ export class Game {
     this.log = new Log(logEl);
     window.addEventListener("keydown", (e) => this.onKey(e));
     this.newGame();
+    if (DEBUG) this.installMobileDebug(); // ── DEBUG (remove for release) ──
   }
 
   // ── lifecycle ──────────────────────────────────────────────────────────────
@@ -801,7 +804,7 @@ export class Game {
     this.saveActive(); // persist the dungeon level being left (planes themselves aren't stored — no path back down)
     this.plane = n;
     this.currentChain = null;
-    this.level = new Level(W, MAP_H);
+    this.level = new Level(W, MAP_H, PLANE_KINDS[n - 1] ?? "normal"); // each Plane its own layout
     this.player.x = this.level.start.x;
     this.player.y = this.level.start.y;
     this.enterLevel(); // routes through setupPlane() since plane > 0
@@ -953,7 +956,8 @@ export class Game {
   /** Which level layout a depth uses — the descent rotates through layout zones for variety. */
   private levelKindFor(depth: number): LevelKind {
     if (depth === MEMPOOL_DEPTH) return "bigroom";                  // the Mempool (d8)
-    if (depth > MAX_DEPTH && depth < GEHENNOM_BOTTOM) return "maze"; // Gehennom (d13–19): claustrophobic mazes
+    if (depth === GEHENNOM_BOTTOM) return "concentric";             // Moloch's ringed arena (d20)
+    if (depth > MAX_DEPTH && depth < GEHENNOM_BOTTOM) return depth === 16 ? "fortress" : "maze"; // the Council Fort mid-Gehennom (d16), else mazes
     switch (depth) {                                                // the relay descent (d1–12)
       case 3: return "grid";        // a rollup metropolis
       case 4: return "cave";        // organic caverns (the Mines branch off here)
@@ -2823,7 +2827,7 @@ export class Game {
     if (this.debugPending) { this.debugPending = false; this.debugCommand(key); return true; }
     if (key === "`") {
       this.debugPending = true;
-      this.log.add(`[DEBUG] cmd? d/u down/up · 1-9 warp · 0 →d${MAX_DEPTH} square · m Mines · v Vault · x XCM-portal · Q quest-portal · g Gehennom@${MAX_DEPTH + 1} · J JAM@${GEHENNOM_BOTTOM} · r reveal · h heal · G godmode · k mob · K kit · T/t →stair`, "sys");
+      this.log.add(`[DEBUG] cmd? d/u down/up · 1-9 warp · 0 →d${MAX_DEPTH} square · m Mines · v Vault · x XCM · Q quest · g Gehennom · F Fort@16 · J JAM@${GEHENNOM_BOTTOM} · P Planes · r reveal · h heal · G god · k mob · K kit · T/t →stair`, "sys");
       this.draw();
       return true;
     }
@@ -2842,7 +2846,9 @@ export class Game {
       case "x": { const c = ROT.RNG.getItem(CHAINS)!; if (!this.level.portalAt(p.x, p.y)) this.level.portals.push({ x: p.x, y: p.y, chain: c }); this.level.tiles[p.y][p.x] = "portal"; this.recomputeFOV(); this.draw(); this.log.add(`[DEBUG] XCM portal to ${c.name} under you — press > to enter.`, "sys"); break; }
       case "Q": { if (!this.level.portalAt(p.x, p.y)) this.level.portals.push({ x: p.x, y: p.y, chain: CHAINS[0], quest: true }); this.level.tiles[p.y][p.x] = "portal"; this.recomputeFOV(); this.draw(); this.log.add("[DEBUG] quest portal under you — press > to enter.", "sys"); break; }
       case "g": this.gehennomOpen = true; this.debugWarp(MAX_DEPTH + 1); this.log.add(`[DEBUG] Gehennom opened, warped to depth ${MAX_DEPTH + 1}.`, "sys"); break;
+      case "F": this.gehennomOpen = true; this.debugWarp(16); this.log.add("[DEBUG] warped to the Council Fort (d16).", "sys"); break;
       case "J": this.gehennomOpen = true; this.debugWarp(GEHENNOM_BOTTOM); this.log.add("[DEBUG] warped to the JAM floor (Moloch).", "sys"); break;
+      case "P": this.player.hasJam = true; this.enterPlane(1); this.log.add("[DEBUG] → the Planes (JAM granted; < to climb).", "sys"); break;
       case "r": this.level.revealAll(); this.recomputeFOV(); this.draw(); this.log.add("[DEBUG] level revealed.", "sys"); break;
       case "h": this.debugHeal(p); if (this.coPlayer) this.debugHeal(this.coPlayer); this.draw(); this.log.add("[DEBUG] fully healed.", "sys"); break;
       case "G": this.godMode = !this.godMode; this.log.add(`[DEBUG] god mode ${this.godMode ? "ON" : "off"}.`, "sys"); break;
@@ -2887,6 +2893,40 @@ export class Game {
       if (t && !p.inventory.full) this.giveItem(t, { buc: "blessed", bucKnown: true });
     }
     this.log.add("[DEBUG] kit granted (3 relics, bag, luckstone, pickaxe, dig wand, potions, scrolls).", "sys");
+  }
+
+  /** DEBUG: a touch-friendly floating menu (mobile has no keyboard for the backtick commands). */
+  private installMobileDebug(): void {
+    if (typeof document === "undefined" || document.getElementById("debug-menu")) return;
+    const wrap = document.createElement("div");
+    wrap.id = "debug-menu";
+    wrap.style.cssText = "position:fixed;left:6px;top:6px;z-index:99999;font:12px monospace;user-select:none;";
+    const toggle = document.createElement("button");
+    toggle.textContent = "🐞";
+    toggle.style.cssText = "font-size:18px;line-height:1;padding:4px 8px;background:#15151a;color:#e0b94d;border:1px solid #c07a30;border-radius:6px;cursor:pointer;";
+    const panel = document.createElement("div");
+    panel.style.cssText = "display:none;flex-wrap:wrap;gap:4px;max-width:300px;margin-top:4px;background:#0c0c10f2;padding:6px;border:1px solid #c07a30;border-radius:6px;";
+    toggle.onclick = () => { panel.style.display = panel.style.display === "none" ? "flex" : "none"; };
+    const cmds: [string, () => void][] = [
+      ["↓ down", () => this.debugCommand("d")], ["↑ up", () => this.debugCommand("u")],
+      ["→ >stair", () => this.debugCommand("T")], ["→ <stair", () => this.debugCommand("t")],
+      ["reveal", () => this.debugCommand("r")], ["heal", () => this.debugCommand("h")],
+      ["god", () => this.debugCommand("G")], ["kit", () => this.debugCommand("K")], ["mob", () => this.debugCommand("k")],
+      ["Mines", () => this.debugCommand("m")], ["Vault", () => this.debugCommand("v")],
+      ["XCM", () => this.debugCommand("x")], ["Quest", () => this.debugCommand("Q")], ["Planes", () => this.debugCommand("P")],
+      ["d3", () => this.debugWarp(3)], ["d6", () => this.debugWarp(6)], ["d9", () => this.debugWarp(9)],
+      [`sqr d${MAX_DEPTH}`, () => this.debugWarp(MAX_DEPTH)], ["Gehnm", () => this.debugCommand("g")],
+      ["Fort16", () => this.debugCommand("F")], ["JAM", () => this.debugCommand("J")],
+    ];
+    for (const [label, fn] of cmds) {
+      const b = document.createElement("button");
+      b.textContent = label;
+      b.style.cssText = "padding:7px 8px;background:#1a1a20;color:#cfcf9a;border:1px solid #555;border-radius:4px;min-width:56px;cursor:pointer;";
+      b.onclick = (e) => { e.preventDefault(); fn(); };
+      panel.appendChild(b);
+    }
+    wrap.appendChild(toggle); wrap.appendChild(panel);
+    document.body.appendChild(wrap);
   }
   // ═══ end DEBUG block ═══════════════════════════════════════════════════════
 

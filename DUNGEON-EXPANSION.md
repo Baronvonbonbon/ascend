@@ -26,11 +26,15 @@
   - **zoo** — the room packed with depth-appropriate monsters guarding scattered loot. *an airdrop trap room.*
   - **vault** — a dense treasure room (the Treasury) heaped with wares + gear around a locked chest. *Reachable normally for now; true sealed-by-walls vaults (reached only by dig/teleport) deferred — they need a path-safety check so a vault can't wall off the down-stair.*
 
-All new generators share `finishLayout()`: pick a start, set the down-stair at the farthest **reachable** cell (BFS), filter spawns to reachable space, and fall back to `normal` if degenerate.
+**Shipped (Phase 17):**
+- `fortress` — a walled keep ringed by a water moat, crossed by a single drawbridge (the only way in). *the Council Fort* (NetHack Castle). Zoned into Gehennom at **d16**.
+- `concentric` — nested wall rings with offset gaps spiralling to a central chamber. Used for **Moloch's arena (d20)** and the **Genesis Plane**.
+- **Per-Plane layouts**: the ascent's Planes now each read as their own place (`PLANE_KINDS` = bigroom · cave · labyrinth · concentric-for-Genesis) instead of all-normal.
+
+All new generators share `finishLayout()`: pick a start, set the down-stair at the farthest **reachable** cell (BFS), filter spawns to reachable space, and fall back to `normal` if degenerate. (Fortress + concentric connectivity verified: keep reachable only via the bridge; concentric center via the gaps, 100% coverage.)
 
 **To build:**
-- `fortress` — a structured keep with a moat (use the `water` tile). *the Council Fort* (NetHack Castle)
-- `concentric` / `radial` — rings + spirals, for boss arenas and Planes.
+- `radial` — a true spiral (concentric covers the ring case).
 - More **special rooms**: morgue (undead+corpses), beehive (swarm+honey), barracks (soldiers), and **true sealed vaults** (walled-off treasure reached only by digging/teleport, gated on the path-safety check above).
 - **Swim option** for water — wade with a drowning / item-drop risk — as an alternative to pure impassability.
 
@@ -73,6 +77,10 @@ A branch graph instead of a single spine:
   - *Follow-ups:* richer multi-room/2-D Sokoban layouts (the current puzzle is a deliberately-safe 1-wide tunnel); make the Mines/Vault truly mandatory (gate the critical path) rather than strongly-incentivised.
 
 ## Dev tooling (remove before release)
-A **god/debug mode** lives behind a single `const DEBUG = true` in `game.ts` (fenced blocks marked `DEBUG`). Backtick (`` ` ``) then a key: `d/u` force descend/ascend · `1-9` warp to depth · `m` Mines · `v` Vault · `x` XCM portal · `Q` quest portal · `g` Gehennom@9 · `J` JAM@12 · `r` reveal · `h` heal · `G` godmode · `k` spawn mob · `K` debug kit · `T/t` to down/up-stair. To strip for release: set `DEBUG = false`, or delete the flag + the three `DEBUG`-fenced blocks (the onKey hook, the debug methods, the `downPlayer` guard) + the `debugPending`/`godMode` fields.
-- **17:** fortress + concentric generators; per-Plane unique layouts; expand Gehennom.
+A **god/debug mode** lives behind a single `const DEBUG = true` in `game.ts` (fenced blocks marked `DEBUG`).
+- **Keyboard:** backtick (`` ` ``) then a key: `d/u` descend/ascend · `1-9` warp · `0` →d12 vibrating square · `m` Mines · `v` Vault · `x` XCM portal · `Q` quest portal · `g` Gehennom · `F` Council Fort (d16) · `J` JAM/Moloch (d20) · `P` the Planes · `r` reveal · `h` heal · `G` godmode · `k` spawn mob · `K` debug kit · `T/t` to down/up-stair.
+- **Mobile/touch:** a floating **🐞** button (top-left, injected by `installMobileDebug`) opens a tap grid mirroring the above — no keyboard needed.
+
+To strip for release: set `DEBUG = false`, or delete the flag + the `DEBUG`-fenced blocks (the constructor `installMobileDebug` call, the onKey hook, the debug methods incl. `installMobileDebug`, the `downPlayer` guard) + the `debugPending`/`godMode` fields.
+- **17 — fortress + concentric + per-Plane layouts:** `fortress` (Council Fort, moat+drawbridge, d16) and `concentric` (Moloch's arena d20 + Genesis Plane) generators; the Planes each get a distinct layout (`PLANE_KINDS`); Gehennom gains the fort as a landmark amid the mazes. ✅
 - **18:** balance pass across the longer run (XP curve, hunger, spawn rates, the Censor cadence), more monsters/items to fill the space.

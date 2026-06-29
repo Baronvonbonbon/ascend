@@ -2,7 +2,7 @@ import * as ROT from "rot-js";
 import type { TileType, ChainDef } from "./data";
 import type { ItemType } from "./items";
 
-export type LevelKind = "normal" | "bigroom" | "maze" | "cave" | "labyrinth" | "grid" | "swamp" | "sokoban";
+export type LevelKind = "normal" | "bigroom" | "maze" | "cave" | "labyrinth" | "grid" | "swamp" | "sokoban" | "fortress" | "concentric";
 export interface Portal { x: number; y: number; chain: ChainDef; quest?: boolean; }
 
 export interface FloorItem { x: number; y: number; type: ItemType; price?: number; enchant?: number; relic?: boolean; mintOnBuy?: boolean; buc?: import("./items").Buc; bucKnown?: boolean; corpse?: { def: import("./data").MonsterDef; born: number }; chest?: { locked: boolean }; } // price = shop ware; relic/enchant/mintOnBuy = NFT gear; buc = sanctity; corpse = edible remains; chest = container
@@ -51,6 +51,8 @@ export class Level {
     else if (kind === "labyrinth") this.generateLabyrinth();
     else if (kind === "grid") this.generateGrid();
     else if (kind === "swamp") this.generateSwamp();
+    else if (kind === "fortress") this.generateFortress();
+    else if (kind === "concentric") this.generateConcentric();
     else if (kind === "sokoban") { /* hand-built — left all walls; stamped via loadSokoban() */ }
     else this.generate();
     this.fov = new ROT.FOV.PreciseShadowcasting((x, y) => this.lightPasses(x, y));
@@ -195,6 +197,49 @@ export class Level {
     }
     for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) if (this.tiles[y][x] === "floor") this.floors.push({ x, y });
     this.roomCenters = centers;
+    this.finishLayout();
+  }
+
+  /** Fortress: a walled keep ringed by a water moat, crossed by a single drawbridge (the Council Fort). */
+  private generateFortress(): void {
+    const w = this.width, h = this.height;
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) this.tiles[y][x] = "floor"; // the field
+    const kx0 = Math.floor(w * 0.32), kx1 = Math.floor(w * 0.68), ky0 = 4, ky1 = h - 5;          // the keep
+    const mx0 = kx0 - 2, my0 = ky0 - 2, mx1 = kx1 + 2, my1 = ky1 + 2;                              // the moat ring
+    for (let x = mx0; x <= mx1; x++) { this.tiles[my0][x] = "water"; this.tiles[my1][x] = "water"; }
+    for (let y = my0; y <= my1; y++) { this.tiles[y][mx0] = "water"; this.tiles[y][mx1] = "water"; }
+    for (let x = kx0; x <= kx1; x++) { this.tiles[ky0][x] = "wall"; this.tiles[ky1][x] = "wall"; } // keep wall
+    for (let y = ky0; y <= ky1; y++) { this.tiles[y][kx0] = "wall"; this.tiles[y][kx1] = "wall"; }
+    for (let y = ky0 + 1; y < ky1; y++) for (let x = kx0 + 1; x < kx1; x++) this.tiles[y][x] = "floor"; // bailey/halls
+    const midx = (kx0 + kx1) >> 1;
+    for (let y = ky0 + 1; y < ky1; y++) this.tiles[y][midx] = "wall";        // a dividing wall…
+    this.tiles[(ky0 + ky1) >> 1][midx] = "door";                              // …with one inner doorway
+    this.tiles[ky1][midx] = "door";                                           // the south gate
+    for (let y = ky1; y <= my1; y++) this.tiles[y][midx] = "floor";           // the drawbridge over the moat
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) if (this.tiles[y][x] === "floor") this.floors.push({ x, y });
+    this.roomCenters = [
+      { x: (kx0 + midx) >> 1, y: (ky0 + ky1) >> 1 }, { x: (midx + kx1) >> 1, y: (ky0 + ky1) >> 1 }, // the two halls
+      { x: w >> 2, y: h >> 1 }, { x: w - (w >> 2), y: h >> 1 },                                       // field flanks
+    ];
+    this.finishLayout();
+  }
+
+  /** Concentric: nested wall rings with offset gaps spiralling to a central chamber (boss arenas, Planes). */
+  private generateConcentric(): void {
+    const w = this.width, h = this.height, ring = 3;
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) this.tiles[y][x] = "floor";
+    for (let i = ring; ; i += ring) {
+      const x0 = i, y0 = i, x1 = w - 1 - i, y1 = h - 1 - i;
+      if (x1 - x0 < 3 || y1 - y0 < 3) break;
+      for (let x = x0; x <= x1; x++) { this.tiles[y0][x] = "wall"; this.tiles[y1][x] = "wall"; }
+      for (let y = y0; y <= y1; y++) { this.tiles[y][x0] = "wall"; this.tiles[y][x1] = "wall"; }
+      const k = (i / ring) % 4; // punch one gap per ring, rotating sides → a spiral inward
+      if (k === 0) this.tiles[y0][(x0 + x1) >> 1] = "floor";
+      else if (k === 1) this.tiles[(y0 + y1) >> 1][x1] = "floor";
+      else if (k === 2) this.tiles[y1][(x0 + x1) >> 1] = "floor";
+      else this.tiles[(y0 + y1) >> 1][x0] = "floor";
+    }
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) if (this.tiles[y][x] === "floor") this.floors.push({ x, y });
     this.finishLayout();
   }
 
