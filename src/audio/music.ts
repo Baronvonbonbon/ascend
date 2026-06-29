@@ -7,14 +7,18 @@
 
 type Wave = OscillatorType;
 
+// A leitmotif note: [scale-degree-in-semitones, duration-in-steps]. REST skips a beat.
+const REST = 99;
+type Note = [number, number];
+
 interface TrackDef {
   id: string;
   name: string;
   area: string;        // which dungeon area this track belongs to (auto-by-area pool)
   root: number;        // root frequency (Hz)
   chord: number[];     // semitone offsets (from root) for the sustained pad
-  melody: number[];    // the area's leitmotif — a fixed phrase shared by all its variants
-  melTempo: number;    // seconds per melody note
+  melody: Note[];      // the area's leitmotif — a fixed rhythmic phrase shared by all its variants
+  melStep: number;     // seconds per rhythmic step
   melOct: number;      // melody register (× the root octave)
   pad: Wave;
   drone: Wave;
@@ -26,20 +30,40 @@ interface TrackDef {
   level: number;       // track mix level
 }
 
-// ── the ten base area themes — each carries its signature melody (leitmotif) ──
+// ── the ten base area themes — each carries a distinct, rhythmic, hook-led leitmotif ──
 const A = 55; // a low A reference
 type Base = Omit<TrackDef, "area">;
 const BASES: Base[] = [
-  { id: "legacy",    name: "Legacy Stack",      root: A,        chord: [0, 7, 15],        melody: [0, 3, 5, 3, 0, -2, 0],       melTempo: 0.62, melOct: 4, pad: "sine",     drone: "sine",     melWave: "triangle", cutoff: 700,  reverb: 0.4,  pulseBpm: 0,  detune: 5,  level: 0.5 },
-  { id: "parachain", name: "Parachain Reaches", root: A * 1.5,  chord: [0, 7, 14, 16],    melody: [0, 2, 5, 7, 5, 3, 2, 0],     melTempo: 0.5,  melOct: 2, pad: "triangle", drone: "sine",     melWave: "triangle", cutoff: 1100, reverb: 0.45, pulseBpm: 0,  detune: 6,  level: 0.5 },
-  { id: "kusama",    name: "Kusama Deeps",      root: A * 0.75, chord: [0, 6, 13],        melody: [0, 3, 6, 8, 6, 3, 0],        melTempo: 0.58, melOct: 4, pad: "sawtooth", drone: "sine",     melWave: "triangle", cutoff: 600,  reverb: 0.5,  pulseBpm: 0,  detune: 14, level: 0.45 },
-  { id: "mempool",   name: "The Mempool",       root: A,        chord: [0, 5, 10],        melody: [0, 5, 7, 5, 10, 7, 5],       melTempo: 0.34, melOct: 4, pad: "sawtooth", drone: "triangle", melWave: "square",   cutoff: 800,  reverb: 0.35, pulseBpm: 96, detune: 9,  level: 0.45 },
-  { id: "relay",     name: "Foot of the Relay", root: A * 0.5,  chord: [0, 12],           melody: [0, 7, 12, 7, 0],             melTempo: 0.9,  melOct: 4, pad: "sine",     drone: "sine",     melWave: "sine",     cutoff: 400,  reverb: 0.6,  pulseBpm: 0,  detune: 3,  level: 0.5 },
-  { id: "gehennom",  name: "Gehennom",          root: A * 0.5,  chord: [0, 1, 6],         melody: [0, 1, 6, 8, 6, 1, 0],        melTempo: 0.6,  melOct: 4, pad: "sawtooth", drone: "sawtooth", melWave: "sawtooth", cutoff: 460,  reverb: 0.5,  pulseBpm: 50, detune: 18, level: 0.5 },
-  { id: "sanctum",   name: "Moloch's Sanctum",  root: A * 0.5,  chord: [0, 6, 7],         melody: [0, 6, 7, 6, 3, 0, -1],       melTempo: 0.42, melOct: 4, pad: "sawtooth", drone: "sawtooth", melWave: "square",   cutoff: 620,  reverb: 0.4,  pulseBpm: 84, detune: 16, level: 0.52 },
-  { id: "planes",    name: "The Planes",        root: A * 2,    chord: [0, 7, 16, 23],    melody: [0, 4, 7, 11, 7, 4, 2],       melTempo: 0.55, melOct: 2, pad: "triangle", drone: "sine",     melWave: "sine",     cutoff: 1600, reverb: 0.7,  pulseBpm: 0,  detune: 7,  level: 0.42 },
-  { id: "genesis",   name: "The Genesis Plane", root: A * 2,    chord: [0, 4, 7, 11, 14], melody: [0, 4, 7, 12, 11, 7, 4, 0],   melTempo: 0.6,  melOct: 2, pad: "triangle", drone: "sine",     melWave: "triangle", cutoff: 2200, reverb: 0.75, pulseBpm: 0,  detune: 4,  level: 0.42 },
-  { id: "elsewhere", name: "Elsewhere",         root: A * 1.25, chord: [0, 4, 8],         melody: [0, 2, 4, 6, 4, 2, 0],        melTempo: 0.5,  melOct: 2, pad: "sine",     drone: "triangle", melWave: "triangle", cutoff: 1000, reverb: 0.55, pulseBpm: 0,  detune: 10, level: 0.45 },
+  // wistful minor hymn: a step up, a sigh down, then a bold leap to the 5th and a long resolve
+  { id: "legacy",    name: "Legacy Stack",      root: A,        chord: [0, 7, 15],        melStep: 0.32, melOct: 4, pad: "sine",     drone: "sine",     melWave: "triangle", cutoff: 700,  reverb: 0.4,  pulseBpm: 0,  detune: 5,  level: 0.5,
+    melody: [[0,3],[2,1],[3,2],[2,1],[0,3],[REST,1],[7,2],[5,2],[3,4]] },
+  // playful lilting waltz: a bright leaping arpeggio that bounces up to a 6th and trips home
+  { id: "parachain", name: "Parachain Reaches", root: A * 1.5,  chord: [0, 7, 14, 16],    melStep: 0.24, melOct: 2, pad: "triangle", drone: "sine",     melWave: "triangle", cutoff: 1100, reverb: 0.45, pulseBpm: 0,  detune: 6,  level: 0.5,
+    melody: [[0,1],[4,1],[7,2],[4,1],[9,2],[7,1],[5,1],[2,1],[0,3]] },
+  // uneasy: a tritone that keeps circling back — jagged and syncopated
+  { id: "kusama",    name: "Kusama Deeps",      root: A * 0.75, chord: [0, 6, 13],        melStep: 0.3,  melOct: 4, pad: "sawtooth", drone: "sine",     melWave: "triangle", cutoff: 600,  reverb: 0.5,  pulseBpm: 0,  detune: 14, level: 0.45,
+    melody: [[0,2],[6,1],[3,1],[6,2],[8,1],[6,1],[3,2],[REST,1],[0,3]] },
+  // motoric anxiety: a stuttering repeated ping, then a quick scrambling run
+  { id: "mempool",   name: "The Mempool",       root: A,        chord: [0, 5, 10],        melStep: 0.16, melOct: 4, pad: "sawtooth", drone: "triangle", melWave: "square",   cutoff: 800,  reverb: 0.35, pulseBpm: 96, detune: 9,  level: 0.45,
+    melody: [[0,1],[0,1],[REST,1],[7,1],[5,1],[10,1],[7,1],[5,1],[3,1],[0,2],[REST,2]] },
+  // solemn bell-tolls: wide open fifths and an octave with long silences between
+  { id: "relay",     name: "Foot of the Relay", root: A * 0.5,  chord: [0, 12],           melStep: 0.46, melOct: 4, pad: "sine",     drone: "sine",     melWave: "sine",     cutoff: 400,  reverb: 0.6,  pulseBpm: 0,  detune: 3,  level: 0.5,
+    melody: [[0,2],[REST,2],[7,2],[REST,1],[12,3],[REST,3],[7,2],[0,4],[REST,3]] },
+  // sinister lurch: a minor-2nd grind into a tritone, collapsing back down low
+  { id: "gehennom",  name: "Gehennom",          root: A * 0.5,  chord: [0, 1, 6],         melStep: 0.3,  melOct: 4, pad: "sawtooth", drone: "sawtooth", melWave: "sawtooth", cutoff: 460,  reverb: 0.5,  pulseBpm: 50, detune: 18, level: 0.5,
+    melody: [[0,2],[1,1],[6,3],[REST,1],[8,1],[6,1],[1,2],[0,4]] },
+  // boss march: a menacing 7–6–7 wobble at the top stabbing down to the root, over the pulse
+  { id: "sanctum",   name: "Moloch's Sanctum",  root: A * 0.5,  chord: [0, 6, 7],         melStep: 0.22, melOct: 4, pad: "sawtooth", drone: "sawtooth", melWave: "square",   cutoff: 620,  reverb: 0.4,  pulseBpm: 84, detune: 16, level: 0.52,
+    melody: [[7,1],[6,1],[7,2],[3,1],[0,2],[REST,1],[7,1],[6,1],[7,1],[0,3]] },
+  // weightless ascent: a slow lydian climb to the #11, hanging in suspension
+  { id: "planes",    name: "The Planes",        root: A * 2,    chord: [0, 7, 16, 23],    melStep: 0.42, melOct: 2, pad: "triangle", drone: "sine",     melWave: "sine",     cutoff: 1600, reverb: 0.7,  pulseBpm: 0,  detune: 7,  level: 0.42,
+    melody: [[0,2],[4,2],[7,3],[11,4],[7,2],[9,2],[4,3],[REST,2]] },
+  // sacred anthem: a clear major arch up to the octave and a hymnlike resolve home
+  { id: "genesis",   name: "The Genesis Plane", root: A * 2,    chord: [0, 4, 7, 11, 14], melStep: 0.34, melOct: 2, pad: "triangle", drone: "sine",     melWave: "triangle", cutoff: 2200, reverb: 0.75, pulseBpm: 0,  detune: 4,  level: 0.42,
+    melody: [[0,2],[4,1],[7,2],[12,4],[11,2],[7,2],[9,1],[7,1],[4,2],[0,4]] },
+  // hypnotic, off-kilter: a symmetric whole-tone figure that circles and never quite lands
+  { id: "elsewhere", name: "Elsewhere",         root: A * 1.25, chord: [0, 4, 8],         melStep: 0.28, melOct: 2, pad: "sine",     drone: "triangle", melWave: "triangle", cutoff: 1000, reverb: 0.55, pulseBpm: 0,  detune: 10, level: 0.45,
+    melody: [[0,1],[2,1],[4,2],[6,1],[8,2],[6,1],[4,1],[2,2],[REST,2]] },
 ];
 
 const ROMAN = ["", " II", " III", " IV", " V"];
@@ -49,10 +73,10 @@ const clampRev = (r: number) => Math.min(0.85, r);
 // only timbre, brightness, register, density, and reverb change, so the leitmotif stays.
 const VARIANTS: ((b: Base) => Partial<Base>)[] = [
   () => ({}),                                                                                                              // I — the base texture
-  (b) => ({ chord: revoice(b.chord), cutoff: Math.round(b.cutoff * 1.3), detune: b.detune + 4, melTempo: +(b.melTempo * 0.85).toFixed(2) }), // II — brighter, quicker
+  (b) => ({ chord: revoice(b.chord), cutoff: Math.round(b.cutoff * 1.3), detune: b.detune + 4, melStep: +(b.melStep * 0.85).toFixed(3) }), // II — brighter, quicker
   (b) => ({ pad: b.drone, drone: b.pad, cutoff: Math.round(b.cutoff * 0.78), reverb: clampRev(b.reverb + 0.12), melOct: Math.max(1, b.melOct / 2), pulseBpm: b.pulseBpm ? Math.round(b.pulseBpm * 0.86) : 0 }), // III — darker, lower
-  (b) => ({ cutoff: Math.round(b.cutoff * 1.6), reverb: clampRev(b.reverb + 0.18), melOct: b.melOct * 2, melWave: "sine", melTempo: +(b.melTempo * 1.15).toFixed(2) }), // IV — high shimmer
-  (b) => ({ pad: b.drone, cutoff: Math.round(b.cutoff * 0.68), detune: b.detune + 7, melTempo: +(b.melTempo * 1.35).toFixed(2), pulseBpm: b.pulseBpm || 46 }), // V — heavy, slow, weighted
+  (b) => ({ cutoff: Math.round(b.cutoff * 1.6), reverb: clampRev(b.reverb + 0.18), melOct: b.melOct * 2, melWave: "sine", melStep: +(b.melStep * 1.15).toFixed(3) }), // IV — high shimmer
+  (b) => ({ pad: b.drone, cutoff: Math.round(b.cutoff * 0.68), detune: b.detune + 7, melStep: +(b.melStep * 1.35).toFixed(3), pulseBpm: b.pulseBpm || 46 }), // V — heavy, slow, weighted
 ];
 function variant(b: Base, n: number): TrackDef {
   return { ...b, ...VARIANTS[n](b), area: b.id, id: n === 0 ? b.id : `${b.id}-${n + 1}`, name: `${b.name}${ROMAN[n]}` };
@@ -298,17 +322,19 @@ export class MusicEngine {
 
     const t = this.active?.def;
     if (t && this.active) {
-      // the leitmotif — step through the phrase, then rest, then repeat (same melody, any variant)
+      // the leitmotif — step through the rhythmic phrase, then rest, then repeat (same melody, any variant)
       while (this.nextMel < horizon) {
         if (this.melIdx < t.melody.length) {
-          const deg = t.melody[this.melIdx];
-          const freq = semi(t.root, deg) * t.melOct;
-          const dur = t.melTempo * 1.6;
-          this.note(freq, this.nextMel, dur, this.active.bus, t.melWave, 0.075, t.cutoff * 2.5);
-          this.nextMel += t.melTempo;
+          const [deg, steps] = t.melody[this.melIdx];
+          if (deg !== REST) {
+            const freq = semi(t.root, deg) * t.melOct;
+            const dur = Math.min(steps * t.melStep * 1.25, steps * t.melStep + 0.4);
+            this.note(freq, this.nextMel, dur, this.active.bus, t.melWave, 0.085, t.cutoff * 2.5);
+          }
+          this.nextMel += steps * t.melStep;
           this.melIdx++;
         } else {
-          this.nextMel += t.melTempo * 4; // a breath between repetitions
+          this.nextMel += t.melStep * 4; // a breath between repetitions
           this.melIdx = 0;
         }
       }
