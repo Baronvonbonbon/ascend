@@ -23,6 +23,7 @@ export class Level {
   engravings: Engraving[] = []; // Gray-Paper wards scratched in the dust
   boulders: { x: number; y: number }[] = []; // pushable blocks (Sokoban-flavor)
   portals: Portal[] = []; // XCM portals to parachain branches
+  branchEntries: { x: number; y: number; branchId: string }[] = []; // branch-stairs into sub-dungeons (the Mines)
   roomCenters: { x: number; y: number }[] = [];
   start = { x: 1, y: 1 };
   stairs = { x: 1, y: 1 };
@@ -261,7 +262,7 @@ export class Level {
   private lightPasses(x: number, y: number): boolean {
     const t = this.tiles[y]?.[x];
     // sight crosses open water (you see the far shore) but you cannot walk into it
-    return t === "floor" || t === "door" || t === "stairsDown" || t === "stairsUp" || t === "altar" || t === "portal" || t === "faucet" || t === "throne" || t === "vibrating" || t === "water";
+    return t === "floor" || t === "door" || t === "stairsDown" || t === "stairsUp" || t === "altar" || t === "portal" || t === "faucet" || t === "throne" || t === "vibrating" || t === "water" || t === "branchDown";
   }
 
   isPassable(x: number, y: number): boolean {
@@ -309,6 +310,10 @@ export class Level {
 
   portalAt(x: number, y: number): Portal | undefined {
     return this.portals.find((p) => p.x === x && p.y === y);
+  }
+
+  branchEntryAt(x: number, y: number): { x: number; y: number; branchId: string } | undefined {
+    return this.branchEntries.find((b) => b.x === x && b.y === y);
   }
 
   engravingAt(x: number, y: number): Engraving | undefined {

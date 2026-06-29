@@ -15,7 +15,7 @@ export const COLORS = {
   dim:       "#6c6a60",
 };
 
-export type TileType = "wall" | "floor" | "door" | "doorClosed" | "doorLocked" | "doorHidden" | "stairsDown" | "stairsUp" | "altar" | "portal" | "faucet" | "throne" | "vibrating" | "water";
+export type TileType = "wall" | "floor" | "door" | "doorClosed" | "doorLocked" | "doorHidden" | "stairsDown" | "stairsUp" | "altar" | "portal" | "faucet" | "throne" | "vibrating" | "water" | "branchDown";
 
 export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: string }> = {
   wall:       { ch: "#", fg: COLORS.wall,   fgDim: COLORS.wallDim },
@@ -32,6 +32,7 @@ export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: strin
   throne:     { ch: "\\", fg: "#e0c040",    fgDim: "#6a5a20" }, // the Sudo Throne — sit (s)
   vibrating:  { ch: "≈", fg: "#ff60ff",     fgDim: "#7a307a" }, // the vibrating square — invoke (I) the ritual here
   water:      { ch: "}", fg: "#3f7ad0",     fgDim: "#1d3a66" }, // open water — impassable; cross by causeway or XCM jump (the Liquidity Pools)
+  branchDown: { ch: ">", fg: "#c07a30",     fgDim: "#5a3a18" }, // a craggy side-stair into a branch (the Storage Caverns) — copper, not the gold main stair
 };
 
 export const MAX_DEPTH = 8; // the JAM lies on the deepest floor
@@ -117,6 +118,24 @@ export const CHAINS: ChainDef[] = [
   { id: "hydration", name: "Hydration", difficulty: 0.8, loot: 1.1, color: "#f6297c", layout: "swamp" }, // the Liquidity Pools — open water + islands
   { id: "acala",     name: "Acala",     difficulty: 0.6, loot: 0.8, color: "#e40c5b", layout: "normal" }, // safe DeFi haven
 ];
+
+/** A mandatory-feeling sub-dungeon branch off the main descent (NetHack's Mines/Sokoban).
+ *  Unlike an XCM parachain it has a fixed run of floors entered by a branch-stair (not a portal),
+ *  a floor-by-floor climb, and a guaranteed prize on its end floor. `dir` is which way it runs. */
+export interface BranchDef extends ChainDef {
+  branch: true;
+  entryDepth: number; // the main-dungeon depth that hosts the branch-stair
+  floors: number;     // how many floors deep the branch runs
+  prizeId: string;    // the guaranteed reward on the end floor
+  end: string;        // the themed name of the end floor ("the Storage Caverns' End")
+}
+export const BRANCHES: BranchDef[] = [
+  {
+    id: "mines", name: "the Storage Caverns", branch: true, difficulty: 1.15, loot: 1.6, color: "#c9a04a",
+    layout: "cave", entryDepth: 3, floors: 3, prizeId: "hodlstone", end: "the Storage Caverns' End",
+  }, // a DA/storage parachain rendered as treasure caverns; its End yields a luckstone-grade HODL stone
+];
+export function branchById(id: string): BranchDef | undefined { return BRANCHES.find((b) => b.id === id); }
 
 /** Realms deepen and grow chaotic — a nod to Polkadot → Kusama. */
 export function realmName(depth: number): string {

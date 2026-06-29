@@ -5,7 +5,7 @@ import { Item } from "./inventory";
 import { Log } from "./log";
 import {
   COLORS, TILE_GLYPH, TileType, MONSTERS, MonsterDef, DEATHS, GREETINGS,
-  MAX_DEPTH, CENSOR, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, PRIEST, realmName, GRAY_PAPER, ChainDef, CHAINS, questFor,
+  MAX_DEPTH, CENSOR, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, PRIEST, realmName, GRAY_PAPER, ChainDef, CHAINS, BranchDef, BRANCHES, branchById, questFor,
   abilityMod, archetypeById, ATTRS, ATTR_LABEL, spellById, Ethos,
 } from "./data";
 import { Idents, ITEMS, JAM, CORPSE, CHEST, WRITABLE_SCROLLS, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
@@ -64,7 +64,9 @@ export class Game {
   // only ever climbs up, so a plane is never revisited.
   private slots = new Map<string, { level: Level; monsters: Monster[] }>();
   private activeKey = "dungeon:1"; // the key of the level currently in this.level
-  private currentChain: ChainDef | null = null; // null = the main relay-chain dungeon
+  private currentChain: ChainDef | null = null; // null = the main relay-chain dungeon; a BranchDef when in a sub-dungeon (the Mines)
+  private branchFloor = 0;        // 1-based floor within the current branch (0 = not in a branch)
+  private branchReturnDepth = 0;  // the main-dungeon depth to restore on leaving the branch
   private defeatedBosses = new Set<number>();    // relay depths whose mini-boss is slain
   private gehennomOpen = false;                  // the Invocation has been performed — the Dark Forest lies below
   private plane = 0;                              // 0 = the dungeon; 1..PLANES.length = the ascent above the surface
@@ -118,6 +120,9 @@ export class Game {
     this.loadedRelics.clear();
     this.downed.clear();
     this.turn = 0;
+    this.currentChain = null;
+    this.branchFloor = 0;
+    this.branchReturnDepth = 0;
     this.slots.clear();
     this.activeKey = "dungeon:1";
     this.ident = new Idents();
@@ -326,11 +331,17 @@ export class Game {
     for (const c of kept) this.log.add(`  ${c.label}: ${c.note}.`, "good");
   }
 
+  /** The active sub-dungeon branch (the Mines), or null in the main dungeon / a parachain. */
+  private get branch(): BranchDef | null {
+    return this.currentChain && (this.currentChain as BranchDef).branch ? (this.currentChain as BranchDef) : null;
+  }
+
   // ── Phase 15: the level store ──────────────────────────────────────────────
-  /** Branch+depth key for the level currently described by (plane/quest/chain/depth) state. */
+  /** Branch+depth key for the level currently described by (plane/quest/branch/chain/depth) state. */
   private levelKey(): string {
     if (this.plane > 0) return `plane:${this.plane}`; // never stored (no path back down a plane)
     if (this.inQuest) return "quest";
+    if (this.branch) return `${this.branch.id}:${this.branchFloor}`; // branch floors are keyed by floor, not depth
     if (this.currentChain) return `${this.currentChain.id}:${this.player.depth}`;
     return `dungeon:${this.player.depth}`;
   }
@@ -386,6 +397,7 @@ export class Game {
       this.maybePlaceBones();
       this.spawnTraps();
       this.placePortals();
+      this.placeBranchEntrance();
       this.placeQuestPortal();
       this.placeMiniboss();
       this.placeMimics();
@@ -462,6 +474,7 @@ export class Game {
   }
 
   descend(): void {
+    if (this.branch) { this.descendBranch(); return; } // floor-by-floor within a sub-dungeon
     this.player.depth++;
     this.player.maxDepthReached = Math.max(this.player.maxDepthReached, this.player.depth);
     const kind = this.currentChain ? "normal" : this.levelKindFor(this.player.depth);
@@ -543,10 +556,117 @@ export class Game {
     this.draw();
   }
 
+  // ── Phase 16: sub-dungeon branches (the Mines) ──────────────────────────────
+  /** Drop a branch-stair onto its host depth on the main descent (the Mines entrance). */
+  private placeBranchEntrance(): void {
+    if (this.currentChain) return; // branches root in the main dungeon only
+    for (const b of BRANCHES) {
+      if (this.player.depth !== b.entryDepth) continue;
+      if (this.level.branchEntries.some((e) => e.branchId === b.id)) continue;
+      const centers = this.level.roomCenters.filter(
+        (c) => this.level.tileAt(c.x, c.y) === "floor" && !(c.x === this.player.x && c.y === this.player.y) && !this.level.portalAt(c.x, c.y),
+      );
+      const c = centers.length ? ROT.RNG.getItem(centers)! : this.level.randomFloor();
+      this.level.tiles[c.y][c.x] = "branchDown";
+      this.level.branchEntries.push({ x: c.x, y: c.y, branchId: b.id });
+      this.log.add(`A craggy side-stair (a copper >) plunges off this floor toward ${b.name} — treasure caverns, with ${itemById(b.prizeId)!.name} at their End.`, "good");
+    }
+  }
+
+  /** Step from a branch-stair into a sub-dungeon; called by the > handler. Returns true if entered. */
+  enterBranchAt(x: number, y: number): boolean {
+    const e = this.level.branchEntryAt(x, y);
+    const def = e ? branchById(e.branchId) : undefined;
+    if (!def) return false;
+    this.branchReturnDepth = this.player.depth;
+    this.enterBranchFloor(def, 1, "down");
+    this.log.add(`You clamber down into ${def.name}. (< to climb back toward the relay)`, "bad");
+    this.draw();
+    return true;
+  }
+
+  /** Descend one floor deeper within the active branch (the > handler routes here in a branch). */
+  private descendBranch(): void {
+    const def = this.branch!;
+    this.enterBranchFloor(def, this.branchFloor + 1, "down");
+    const atEnd = this.branchFloor >= def.floors;
+    this.log.add(
+      atEnd ? `You reach ${def.end}. ${itemById(def.prizeId)!.name} gleams in the dark — and something guards it.`
+            : `You press deeper into ${def.name} — floor ${this.branchFloor} of ${def.floors}.`,
+      "bad",
+    );
+    this.draw();
+  }
+
+  /** Climb up within the active branch; at its top, step back out onto the host relay depth. */
+  private ascendBranch(): void {
+    const def = this.branch!;
+    if (this.branchFloor > 1) {
+      this.enterBranchFloor(def, this.branchFloor - 1, "up");
+      this.log.add(`You climb back up ${def.name} — floor ${this.branchFloor} of ${def.floors}.`, "sys");
+      this.draw();
+      return;
+    }
+    // top floor → leave the branch, back onto the host relay level at the branch-stair
+    this.currentChain = null;
+    this.branchFloor = 0;
+    this.player.depth = this.branchReturnDepth;
+    const restored = this.beginLevel(this.levelKey(), this.levelKindFor(this.player.depth));
+    const entry = this.level.branchEntries.find((e) => e.branchId === def.id);
+    const at = entry ?? this.level.start;
+    this.player.x = at.x; this.player.y = at.y;
+    if (restored) {
+      this.restoreEnter();
+    } else {
+      if (this.player.depth > 1) this.placeUpStair();
+      this.enterLevel();
+      this.saveActive();
+    }
+    this.log.add(`You climb out of ${def.name}, back onto the relay at depth ${this.player.depth}.`, "sys");
+    this.draw();
+  }
+
+  /** Shared branch-floor entry: set state + effective depth, restore-or-generate, place the End prize. */
+  private enterBranchFloor(def: BranchDef, floor: number, dir: "up" | "down"): void {
+    this.currentChain = def;
+    this.branchFloor = floor;
+    this.player.depth = def.entryDepth + floor; // effective depth scales spawns/loot
+    this.player.maxDepthReached = Math.max(this.player.maxDepthReached, this.player.depth);
+    const restored = this.beginLevel(this.levelKey(), def.layout as LevelKind);
+    const arrive = dir === "down" ? this.level.start : this.level.stairs; // down→up-stair, up→down-stair
+    this.player.x = arrive.x; this.player.y = arrive.y;
+    if (restored) {
+      this.restoreEnter();
+    } else {
+      this.placeUpStair(); // the way back up toward the relay
+      this.enterLevel();
+      if (floor >= def.floors) this.placeBranchPrize(def); // the End — guaranteed prize, no stair deeper
+      this.saveActive();
+    }
+  }
+
+  /** A branch's end floor: its down-stair becomes the guaranteed prize, with a guardian beside it. */
+  private placeBranchPrize(def: BranchDef): void {
+    const s = this.level.stairs;
+    this.level.tiles[s.y][s.x] = "floor"; // the End — nothing deeper
+    const prize = itemById(def.prizeId);
+    if (prize && !this.level.itemAt(s.x, s.y)) this.level.items.push({ x: s.x, y: s.y, type: prize, buc: "blessed", bucKnown: true });
+    const guard = MONSTERS.find((m) => m.ch === "O") ?? MONSTERS[MONSTERS.length - 1]; // a whale wards the hoard
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]] as [number, number][]) {
+      const x = s.x + dx, y = s.y + dy;
+      if (this.level.isPassable(x, y) && !this.monsterAt(x, y) && !(x === this.player.x && y === this.player.y)) {
+        const m = new Monster(this, guard, x, y);
+        this.monsters.push(m);
+        this.scheduler.add(m, true); // enterLevel already scheduled; add the late-placed guardian
+        break;
+      }
+    }
+  }
+
   // ── the archetype Quest (Phase 13c) ──
   /** Open the homeland portal once, on the quest depth, until the Quest is done. */
   private placeQuestPortal(): void {
-    if (this.questDone || this.inQuest) return;
+    if (this.questDone || this.inQuest || this.currentChain) return; // only on the main relay descent
     const q = questFor(this.player.archetype);
     if (this.player.depth !== q.portalDepth) return;
     const centers = this.level.roomCenters.filter((c) => this.level.tileAt(c.x, c.y) === "floor" && !this.level.portalAt(c.x, c.y) && !(c.x === this.player.x && c.y === this.player.y));
@@ -610,6 +730,7 @@ export class Game {
 
   ascend(): void {
     if (this.inQuest) { this.exitQuest(); return; }
+    if (this.branch) { this.ascendBranch(); return; } // climb within / out of a sub-dungeon
     if (this.currentChain) { this.exitChain(); return; }
     if (this.plane > 0) { this.enterPlane(this.plane + 1); return; } // climb higher through the Planes
     const holder = this.allPlayers().find((p) => p.hasJam);
@@ -1224,7 +1345,7 @@ export class Game {
       "·": "ordinary floor", ".": "ordinary floor",
       "'": "an open doorway",
       "+": "a closed door — or a spellbook (a runtime to study)",
-      ">": "a staircase down, deeper toward the JAM", "<": "a staircase up",
+      ">": "a staircase down toward the JAM (a copper > is a branch-stair into the Mines)", "<": "a staircase up",
       "_": "an altar — offer a corpse (O) here for favor", "Ω": "an XCM portal to a parachain realm",
       "{": "a testnet faucet — q to quaff it", "\\": "the Sudo Throne — s to sit on it",
       "≈": "the vibrating square — perform the Invocation (I) here with the three relics",
@@ -1281,6 +1402,7 @@ export class Game {
       stairsUp: "a staircase up", altar: "an altar", portal: "an XCM portal", faucet: "a faucet",
       throne: "the Sudo Throne", vibrating: "the vibrating square — invoke (I) the ritual here",
       water: "open water — too deep to wade; find a causeway or jump (XCM)",
+      branchDown: "a branch-stair into the Storage Caverns — > to descend",
     };
     this.log.add(`You see ${names[t!] ?? "nothing notable"}.`, "dim");
   }

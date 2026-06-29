@@ -42,7 +42,7 @@ Zoned into the existing descent + parachains so variety lands immediately:
 ## Target dungeon graph (to design in Phase 16)
 A branch graph instead of a single spine:
 - **Dungeons of Doom** (main, ~d1→d12 to the vibrating square) — the standard→cave→grid→labyrinth zones.
-- **The Mines** (branch off the upper dungeon) — caves, a themed "Mines' End" with a luckstone-grade prize. *Mandatory pass-through or strongly incentivised.*
+- **The Mines** (branch off the upper dungeon) — caves, a themed "Mines' End" with a luckstone-grade prize. *Mandatory pass-through or strongly incentivised.* ✅ **shipped (16a)** as **the Storage Caverns** (`BranchDef`, entry d3, 3 cave floors, a blessed HODL stone + whale guardian at the End).
 - **The Consensus Vault** (Sokoban-equivalent) — a hand-built boulder-puzzle branch climbing *up*; clear it for a guaranteed artifact (bag of holding / amulet). *Mandatory prize-gate.*
 - **The Quest** (per-archetype) — already shipped; fold into the graph as a gated branch (Phase 13c).
 - **Parachains** (XCM side-branches) — optional, each its own layout/palette/monster set.
@@ -66,6 +66,9 @@ A branch graph instead of a single spine:
 - **14a — generators (this session):** cave, labyrinth, grid + zoning + parachain layouts. ✅
 - **14b — swamp + special rooms:** the `water` tile + `swamp` generator (zoned onto the Hydration parachain) + first special rooms (temple, zoo, vault) dropped into `normal` floors. ✅
 - **15 — persistence:** the level store + revisit-identical levels (dungeon + chains + quest; planes excluded). *Foundational; unblocks real branches.* ✅
-- **16 — branch graph:** multi-branch dungeon; build the Mines + the Consensus Vault (Sokoban) as mandatory branches; lengthen the main descent toward ~25–30.
+- **16 — branch graph:** multi-branch dungeon; build the Mines + the Consensus Vault (Sokoban) as mandatory branches; lengthen the main descent toward ~25–30. *(landing in increments)*
+  - **16a — the branch system + the Mines** (the Storage Caverns): a generalised sub-dungeon branch on top of the Phase 15 store — a copper branch-stair (`branchDown`) on its host depth, a floor-by-floor descend/ascend keyed `mines:<floor>` (effective depth scales spawns), and a guaranteed prize + guardian on the End floor. Branches reuse `currentChain` so the existing relic/portal/miniboss/vibrating suppressors apply; `levelKey`/`beginLevel` extend cleanly. ✅
+  - **16b — the Consensus Vault (Sokoban):** a hand-built boulder-puzzle branch that climbs *up* (a `branchUp` stair); clear the puzzle for a guaranteed artifact. *(next)*
+  - **16c — lengthen the main descent** toward ~25–30 and fold the Quest + parachains into the graph as gated branches. *(later)*
 - **17:** fortress + concentric generators; per-Plane unique layouts; expand Gehennom.
 - **18:** balance pass across the longer run (XP curve, hunger, spawn rates, the Censor cadence), more monsters/items to fill the space.

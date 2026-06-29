@@ -726,6 +726,9 @@ export class Player extends Entity {
       const pr = this.game.level.portalAt(this.x, this.y);
       if (pr) { if (pr.quest) this.game.enterQuest(); else this.game.enterChain(pr.chain); return this.endTurn(); }
     }
+    if (t === "branchDown") {
+      if (this.game.enterBranchAt(this.x, this.y)) return this.endTurn();
+    }
     if (t !== "stairsDown") {
       this.game.log.add("There are no stairs down here.", "dim");
       return false;
