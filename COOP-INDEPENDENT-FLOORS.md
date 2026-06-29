@@ -129,24 +129,26 @@ fog-of-war work).
 - [ ] Verify: host + guest each see their own floor/fog/HUD; spectate on downing.
       _(playtest — two browser tabs)_
 
-## Stage 5 — per-player logs (actor + involved routing) _(decided)_
+## Stage 5 — per-player logs (actor + involved routing) ✅ _(decided)_
 Goal: each adventurer sees their own log, not a shared feed. **Decision: pragmatic
 "actor + involved" routing** (not full perception-based).
-- [ ] Replace the single `Log` with a router (`this.log.add(text, kind, who?)`):
-      - default audience = `this.acting` (the player whose action produced the line)
-        → **no change needed at most call sites** (player-turn messages auto-route).
-      - `who = "both"` for shared/world lines (level entry, greetings, the JAM/Censor
-        world events, a party member falling, game over).
-      - `who = <player>` for messages about a specific player during a **monster's**
-        turn (the actor is stale then): route `attack(a, d)` combat to the player
-        involved (defender if `d` is a Player, else `a`); route steal / breath /
-        summon / status-affliction lines to the **target** player.
-- [ ] Routing impl (host-authoritative): paint to host DOM if audience includes
-      `this.player`; `peer.send({t:"log",…})` to the guest if it includes
-      `this.coPlayer`. Solo + guest-side: just paint locally (no behavior change).
-- [ ] Keep `Log.paint` for guest-received lines (`onGuestMessage` `t:"log"`).
-- [ ] Audit the handful of currently-`onAdd`-mirrored messages; the per-player
-      router replaces the blanket mirror at `log.onAdd`.
+- [x] `Log.add(text, kind, who?)` with a host-side `audience` resolver:
+      - default audience = `this.acting` (player-turn messages auto-route — most
+        call sites untouched, incl. all the input prompts + self endTurn status ticks).
+      - `who = "both"` for shared/world lines: the start-of-run intro (greetings /
+        gray-paper / keys), the Censor rising + JAM blink-steal, a party member
+        falling, and game-over.
+      - `who = <player>` for monster-turn lines (when `this.acting` is stale):
+        `attack` routes to the involved player (`"both"` on friendly fire);
+        `rangedAttack` / `breathAttack` to the zapped player; `applyStatus` to the
+        target; the thief's rug to the victim; the JAM-reclaim to the recipient.
+- [x] Routing impl (host-authoritative): `audience(who)` returns `{host, guest}` —
+      paint to host DOM if `host`; `onAdd`→`peer.send({t:"log"})` to guest if `guest`.
+      Solo (`audience` null) + guest-side: just paint locally. `Log.paint` still
+      renders guest-received lines (`onGuestMessage` `t:"log"`).
+- [x] The blanket `log.onAdd` mirror is now gated by the per-line `audience`.
+- [ ] Verify: each adventurer's log shows only its own actions; both see the
+      shared world beats. _(playtest)_
 
 ## Stage 6 — signal messaging _(decided)_
 Goal: a once-per-turn 60-char message that degrades with distance + line-of-sight.

@@ -1,19 +1,31 @@
 // Scrolling message log (DOM).
 
 import { skin } from "./flavor";
+import type { Player } from "./entities";
 
 type Kind = "" | "good" | "bad" | "sys" | "dim";
 
+/** Who a log line is for. Omitted = the acting player; "both" = a shared/world line; a Player = that one. */
+export type LogWho = "both" | Player;
+
 export class Log {
   private el: HTMLElement;
-  /** Co-op hook: the host mirrors every log line to the guest. */
+  /** Co-op hook: the host mirrors a guest-bound log line to the guest. */
   onAdd: ((text: string, kind: Kind) => void) | null = null;
+  /** Host co-op router: resolve a line's audience (who paints it / who it streams to). Null = solo/guest. */
+  audience: ((who: LogWho | undefined) => { host: boolean; guest: boolean }) | null = null;
 
   constructor(el: HTMLElement) {
     this.el = el;
   }
 
-  add(text: string, kind: Kind = "") {
+  add(text: string, kind: Kind = "", who?: LogWho) {
+    if (this.audience) {
+      const a = this.audience(who); // host-authoritative co-op: route per adventurer
+      if (a.host) this.paint(text, kind);
+      if (a.guest) this.onAdd?.(text, kind);
+      return;
+    }
     this.paint(text, kind);
     this.onAdd?.(text, kind);
   }

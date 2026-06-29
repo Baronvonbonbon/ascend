@@ -3,6 +3,7 @@ import { Level, Trap, TrapKind, LevelKind, FloorItem } from "./level";
 import { Entity, Player, Monster, Pet } from "./entities";
 import { Item } from "./inventory";
 import { Log } from "./log";
+import type { LogWho } from "./log";
 import {
   COLORS, TILE_GLYPH, TileType, MONSTERS, MonsterDef, deaths, greetings,
   MAX_DEPTH, CENSOR, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, PRIEST, realmName, grayPaper, ChainDef, CHAINS, BranchDef, BRANCHES, branchById, questFor,
@@ -178,11 +179,11 @@ export class Game {
     }
     this.enterLevel();
     this.saveActive(); // register depth 1 in the level store
-    this.log.add(ROT.RNG.getItem(greetings())!, "sys");
-    for (const line of grayPaper()) this.log.add(line, "dim");
-    if (this.coop) this.log.add(`Co-op (${this.coopMode}) — Host and Guest share this dungeon. Find the JAM together.`, "sys");
+    this.log.add(ROT.RNG.getItem(greetings())!, "sys", "both"); // the shared intro reaches both adventurers
+    for (const line of grayPaper()) this.log.add(line, "dim", "both");
+    if (this.coop) this.log.add(`Co-op (${this.coopMode}) — Host and Guest share this dungeon. Find the JAM together.`, "sys", "both");
     else this.log.add("Your nominator (d) pads at your heels — it backs you, and bites for you.", "dim");
-    this.log.add("Keys: move · , pick up · o open chest · @ sheet · p buy · F forge · P pray · O offer · q faucet · s search/sit · z zap · Z cast · t throw · a apply · E engrave · < > stairs · i/w/W/q/r/e/d items.", "dim");
+    this.log.add("Keys: move · , pick up · o open chest · @ sheet · p buy · F forge · P pray · O offer · q faucet · s search/sit · z zap · Z cast · t throw · a apply · E engrave · < > stairs · i/w/W/q/r/e/d items.", "dim", "both");
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
@@ -932,7 +933,7 @@ export class Game {
     m.isHunter = true;
     this.monsters.push(m);
     this.scheduler.add(m, true);
-    this.log.add("The air curdles and tears — THE CENSOR rises again. It will not let the JAM leave.", "bad");
+    this.log.add("The air curdles and tears — THE CENSOR rises again. It will not let the JAM leave.", "bad", "both");
     this.draw();
   }
 
@@ -940,7 +941,7 @@ export class Game {
   censorSteal(censor: Monster, holder: Player): void {
     holder.hasJam = false;
     this.jamStolen = true;
-    this.log.add("THE CENSOR's hand closes on the JAM — it BLINKS away with your prize! Hunt it down.", "bad");
+    this.log.add("THE CENSOR's hand closes on the JAM — it BLINKS away with your prize! Hunt it down.", "bad", "both");
     for (let i = 0; i < 60; i++) {
       const c = this.level.randomFloor();
       if (this.level.tileAt(c.x, c.y) === "floor" && !this.monsterAt(c.x, c.y) && !this.playerAt(c.x, c.y) && Math.max(Math.abs(c.x - holder.x), Math.abs(c.y - holder.y)) >= 6) { censor.x = c.x; censor.y = c.y; break; }
@@ -1755,8 +1756,8 @@ export class Game {
     this.over = true;
     this.engine.lock(); // stop the engine looping forever over the surviving monsters (no player promise → freeze)
     this.player.hp = 0;
-    this.log.add(ROT.RNG.getItem(deaths())!, "bad");
-    this.log.add(`You fell at depth ${this.player.depth} (deepest ${this.player.maxDepthReached}). Press R to try again.`, "sys");
+    this.log.add(ROT.RNG.getItem(deaths())!, "bad", "both");
+    this.log.add(`You fell at depth ${this.player.depth} (deepest ${this.player.maxDepthReached}). Press R to try again.`, "sys", "both");
     this.conductReport(this.player);
     this.music.playStinger("death");
     this.draw();
@@ -1797,26 +1798,29 @@ export class Game {
 
   // ── combat ─────────────────────────────────────────────────────────────────
   attack(a: Entity, d: Entity): void {
+    // Per-player log routing: an attack belongs to the player(s) involved (a monster's turn leaves
+    // this.acting stale, so address the line explicitly).
+    const who: LogWho = a instanceof Player && d instanceof Player ? "both" : d instanceof Player ? d : a instanceof Player ? a : "both";
     // Touching a disguised honeypot springs the trap — it sheds its loot form.
     if (d instanceof Monster && d.def.mimic && !d.revealed) {
       d.revealed = true;
       const lure = d.disguiseType ? this.ident.name(d.disguiseType) : "the loot";
-      this.log.add(`${cap(lure)} you reached for lurches alive — it's a honeypot! A mimic.`, "bad");
+      this.log.add(`${cap(lure)} you reached for lurches alive — it's a honeypot! A mimic.`, "bad", who);
     }
     // Striking a peaceful shopkeeper provokes it — now it fights to the death.
     if (d instanceof Monster && d.def.keeper && d.peaceful) {
       d.peaceful = false; d.fg = "#ff5030";
-      this.log.add("The Marketmaker roars \"Bad debt!\" and turns lethal.", "bad");
+      this.log.add("The Marketmaker roars \"Bad debt!\" and turns lethal.", "bad", who);
     }
     // Striking a peaceful priest desecrates the shrine — it abandons restraint.
     if (d instanceof Monster && d.def.priest && d.peaceful) {
       d.peaceful = false; d.fg = "#ff5030";
-      this.log.add("The priest's blessing curdles to wrath — \"Sacrilege!\"", "bad");
+      this.log.add("The priest's blessing curdles to wrath — \"Sacrilege!\"", "bad", who);
     }
     // A d20 to-hit layer: level + DEX + enchant vs the target's dodge. Misses happen now.
     if (!this.lands(a, d)) {
-      if (a instanceof Player && d instanceof Monster) this.log.add(`${this.sub(a)} ${this.verbS(a, "miss")} ${d.name}.`, "dim");
-      else if (a instanceof Monster && d instanceof Player) this.log.add(`${cap(a.name)} misses ${d.name}.`, "dim");
+      if (a instanceof Player && d instanceof Monster) this.log.add(`${this.sub(a)} ${this.verbS(a, "miss")} ${d.name}.`, "dim", who);
+      else if (a instanceof Monster && d instanceof Player) this.log.add(`${cap(a.name)} misses ${d.name}.`, "dim", who);
       return;
     }
     // Fighting on a warded tile scuffs the sigil away faster.
@@ -1828,14 +1832,14 @@ export class Game {
     if (a instanceof Player && d instanceof Monster) this.noteSkillHit(a); // a landed blow trains the weapon's skill
     // A rust/corrosion striker (rust bug) eats away a random worn piece on a hit.
     if (a instanceof Monster && !a.cancelled && a.def.corrodes && d instanceof Player) this.corrodeArmor(d);
-    if (a instanceof Player && d instanceof Monster) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg}.`, "good");
+    if (a instanceof Player && d instanceof Monster) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg}.`, "good", who);
     else if (a instanceof Monster && d instanceof Player) {
-      this.log.add(`${cap(a.name)} hits ${d.name} for ${dmg}.`, "bad");
+      this.log.add(`${cap(a.name)} hits ${d.name} for ${dmg}.`, "bad", who);
       if (!a.cancelled && a.def.inflict && d.hp > 0 && ROT.RNG.getUniform() < 0.3) this.applyStatus(d, a.def.inflict);
     }
-    else if (a instanceof Player && d instanceof Player) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg} — friendly fire!`, "bad");
-    else if (a === this.pet) this.log.add(`Your nominator savages ${d.name} for ${dmg}.`, "good");
-    else if (d === this.pet) this.log.add(`${cap(a.name)} mauls ${this.pet?.name ?? fp("your hound", "your nominator")} for ${dmg}.`, "bad");
+    else if (a instanceof Player && d instanceof Player) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg} — friendly fire!`, "bad", who);
+    else if (a === this.pet) this.log.add(`Your nominator savages ${d.name} for ${dmg}.`, "good", who);
+    else if (d === this.pet) this.log.add(`${cap(a.name)} mauls ${this.pet?.name ?? fp("your hound", "your nominator")} for ${dmg}.`, "bad", who);
     if (d.hp <= 0) {
       if (a instanceof Player && d instanceof Monster) this.gainXp(a, d.maxHp); // XP = the foe's vitality
       this.kill(d);
@@ -1846,9 +1850,9 @@ export class Game {
         const [olo, ohi] = a.offhand.type.dmg ?? [1, 2];
         const od = Math.max(1, Math.floor(ROT.RNG.getUniformInt(olo, ohi) / 2) + (a.offhand.enchant ?? 0));
         d.hp -= od;
-        this.log.add(`${this.sub(a)} ${this.verbS(a, "follow")} up with the off-hand ${this.ident.name(a.offhand.type)} for ${od}.`, "good");
+        this.log.add(`${this.sub(a)} ${this.verbS(a, "follow")} up with the off-hand ${this.ident.name(a.offhand.type)} for ${od}.`, "good", who);
         if (d.hp <= 0) { this.gainXp(a, d.maxHp); this.kill(d); }
-      } else this.log.add("Your off-hand swing goes wide.", "dim");
+      } else this.log.add("Your off-hand swing goes wide.", "dim", who);
     }
   }
 
@@ -1927,9 +1931,9 @@ export class Game {
   private verbS(p: Player, base: string): string { return p.name === "you" ? base : base + "s"; }
 
   applyStatus(target: Player, kind: "poison" | "confuse"): void {
-    if (kind === "poison" && target.intrinsics.has("poisonResist")) { this.log.add(`${target.name === "you" ? "You resist" : target.name + " resists"} the toxin.`, "dim"); return; }
-    if (kind === "poison") { target.poison = Math.max(target.poison, 6); this.log.add(`${target.name === "you" ? "You are" : target.name + " is"} poisoned!`, "bad"); }
-    else { target.confused = Math.max(target.confused, 5); this.log.add(`${target.name === "you" ? "Your head spins" : target.name + "'s head spins"} — confused!`, "bad"); }
+    if (kind === "poison" && target.intrinsics.has("poisonResist")) { this.log.add(`${target.name === "you" ? "You resist" : target.name + " resists"} the toxin.`, "dim", target); return; }
+    if (kind === "poison") { target.poison = Math.max(target.poison, 6); this.log.add(`${target.name === "you" ? "You are" : target.name + " is"} poisoned!`, "bad", target); }
+    else { target.confused = Math.max(target.confused, 5); this.log.add(`${target.name === "you" ? "Your head spins" : target.name + "'s head spins"} — confused!`, "bad", target); }
   }
 
   /** A ranged foe zaps the nearest party member (armor half-soaks; can still inflict status). */
@@ -1939,7 +1943,7 @@ export class Game {
     let dmg = ROT.RNG.getUniformInt(lo, hi);
     if (p.ac > 0) dmg = Math.max(1, dmg - Math.floor(p.ac / 2));
     p.hp -= dmg;
-    this.log.add(`${cap(a.name)} zaps ${p.name} from afar for ${dmg}!`, "bad");
+    this.log.add(`${cap(a.name)} zaps ${p.name} from afar for ${dmg}!`, "bad", p);
     if (a.def.inflict && p.hp > 0 && ROT.RNG.getUniform() < 0.3) this.applyStatus(p, a.def.inflict);
     if (p.hp <= 0) this.kill(p);
   }
@@ -1949,13 +1953,13 @@ export class Game {
     const p = this.nearestPlayer(m.x, m.y);
     const dx = Math.sign(p.x - m.x), dy = Math.sign(p.y - m.y);
     if (dx === 0 && dy === 0) return;
-    this.log.add(`${cap(m.name)} breathes a searing gout of finality!`, "bad");
+    this.log.add(`${cap(m.name)} breathes a searing gout of finality!`, "bad", p);
     const max = m.def.breath ?? 10;
     this.castRay(m.x, m.y, dx, dy, 6, (e) => {
       if (e === m) return;
       const d = ROT.RNG.getUniformInt(Math.floor(max / 2), max);
       e.hp -= d;
-      if (e instanceof Player) { this.log.add(`The breath sears ${e.name} for ${d}!`, "bad"); if (e.hp <= 0) this.killPlayer(e); }
+      if (e instanceof Player) { this.log.add(`The breath sears ${e.name} for ${d}!`, "bad", e); if (e.hp <= 0) this.killPlayer(e); }
       else if (e instanceof Monster && e.hp <= 0) this.kill(e);
     });
   }
@@ -2014,7 +2018,7 @@ export class Game {
     // A fork collapsing isn't death — you snap back to your true (saved) HP and may survive.
     if (p.polyForm) {
       this.revertPoly(p);
-      this.log.add(`${this.sub(p)} ${this.verbS(p, "collapse")} out of the fork.`, "bad");
+      this.log.add(`${this.sub(p)} ${this.verbS(p, "collapse")} out of the fork.`, "bad", p);
       if (p.hp > 0) return;
     }
     this.downPlayer(p);
@@ -2028,7 +2032,7 @@ export class Game {
     this.downed.add(p);
     this.scheduler.remove(p);
     if (this.livingPlayers().length === 0) { this.gameOver(); return; }
-    this.log.add(`${cap(p.name)} falls! The other adventurer presses on — recover the JAM.`, "bad");
+    this.log.add(`${cap(p.name)} falls! The other adventurer presses on — recover the JAM.`, "bad", "both");
     this.draw();
   }
 
@@ -2788,7 +2792,7 @@ export class Game {
       this.jamStolen = false;
       const recip = this.nearestPlayer(m.x, m.y);
       recip.hasJam = true;
-      this.log.add("You tear the JAM from the Censor's ribs — it is yours again. Climb on.", "good");
+      this.log.add("You tear the JAM from the Censor's ribs — it is yours again. Climb on.", "good", recip);
     }
     // A slain thief disgorges whatever it stole — reclaim it where it fell.
     if (m.stolen && !this.level.itemAt(m.x, m.y)) {
@@ -2913,7 +2917,13 @@ export class Game {
       const c = this.coPlayer;
       if (c) { c.cancelTurn(); this.scheduler.remove(c); this.coPlayer = null; this.draw(); } // unstick the shared clock
     });
-    this.log.onAdd = (text, cls) => peer.send({ t: "log", text, cls }); // mirror the shared log
+    this.log.onAdd = (text, cls) => peer.send({ t: "log", text, cls }); // stream a guest-bound line to the guest
+    // Per-adventurer log routing: default audience = the acting player; "both" = a shared/world line;
+    // a specific Player = a line about them during a monster's turn (when this.acting is stale).
+    this.log.audience = (who) => ({
+      host: who === "both" || (who ? who === this.player : this.acting === this.player),
+      guest: !!this.coPlayer && (who === "both" || (who ? who === this.coPlayer : this.acting === this.coPlayer)),
+    });
     peer.send({ t: "start", mode });
     this.log.add("Co-op hosted — you are the cream @ (Host); your partner is the teal @ (Guest).", "sys");
     this.newGame(); // a fresh shared dungeon with two adventurers

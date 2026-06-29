@@ -882,7 +882,7 @@ export class Monster extends Entity {
       if (loot) {
         this.stolen = loot;
         const who = this.name.charAt(0).toUpperCase() + this.name.slice(1);
-        this.game.log.add(`${who} rugs you — it rips ${this.game.ident.name(loot.type)} from your pack and bolts!`, "bad");
+        this.game.log.add(`${who} rugs you — it rips ${this.game.ident.name(loot.type)} from your pack and bolts!`, "bad", p);
         this.blinkAway(p);
         return;
       }
