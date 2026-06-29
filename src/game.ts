@@ -26,15 +26,15 @@ const PRICE: Record<string, number> = { weapon: 6, armor: 5, potion: 4, scroll: 
 const W = 80;
 const MAP_H = 30;
 const H = MAP_H + 2; // + a blank row + the status line
-const MEMPOOL_DEPTH = 5; // the Big Room special level — "the Mempool"
-const GEHENNOM_BOTTOM = 12; // after the Invocation the dungeon opens to here — Moloch + the JAM
+const MEMPOOL_DEPTH = 8; // the Big Room special level — "the Mempool"
+const GEHENNOM_BOTTOM = 20; // after the Invocation the dungeon opens to here — Moloch + the JAM (Gehennom spans MAX_DEPTH+1 .. here)
 const PLANES = [ // the ascent above the surface — climb them with the JAM to the Genesis altar
   { name: "the Plane of Consensus", flavor: "The ground itself votes; agreement hums beneath your feet." },
   { name: "the Plane of Finality", flavor: "Nothing here can be undone — every step is irreversible." },
   { name: "the Plane of Light Clients", flavor: "Proofs drift like motes of dust; the whole sky is one header." },
   { name: "the Genesis Plane", flavor: "The first block hangs frozen above an altar of pure intent. Offer the JAM (O)." },
 ];
-const RELIC_DEPTH: Record<number, string> = { 5: "bell", 6: "candelabrum", 7: "graybook" }; // where each invocation relic awaits
+const RELIC_DEPTH: Record<number, string> = { 7: "bell", 9: "candelabrum", 11: "graybook" }; // the three Invocation relics, spread across the back half of the relay descent (all before MAX_DEPTH)
 // Conducts (Phase 13a) — self-imposed vows, kept until an action breaks them.
 const CONDUCTS: { id: string; label: string; note: string }[] = [
   { id: "pacifist",   label: "Pacifist",       note: "shed no blood by your own hand" },
@@ -509,8 +509,8 @@ export class Game {
     }
     if (this.level.kind === "bigroom") this.log.add("You descend into THE MEMPOOL — a vast open churn of pending chaos. Loot, and a swarm.", "bad");
     else if (this.level.kind === "maze") this.log.add(`You descend into the maze of ${realmName(this.player.depth)} — narrow, lightless, and patient.`, "bad");
-    else this.log.add(`You descend to depth ${this.player.depth} — ${realmName(this.player.depth)}.`, this.player.depth >= 7 ? "bad" : "sys");
-    if (this.player.depth >= 7 && this.player.depth < MAX_DEPTH) this.log.add("Chaos thickens. Expect Kusama.", "bad");
+    else this.log.add(`You descend to depth ${this.player.depth} — ${realmName(this.player.depth)}.`, this.player.depth >= 9 ? "bad" : "sys");
+    if (this.player.depth >= 9 && this.player.depth < MAX_DEPTH) this.log.add("Chaos thickens. Expect Kusama.", "bad");
     if (this.player.depth === MAX_DEPTH && !this.gehennomOpen) this.log.add("The foot of the relay. The vibrating square (≈) hums — perform the Invocation (I) with all three relics.", "bad");
     else if (this.player.depth === MAX_DEPTH) this.log.add("The foot of the relay — the gate to the Dark Forest stands open below. (>)", "bad");
     else if (this.player.depth > MAX_DEPTH && this.player.depth < GEHENNOM_BOTTOM) this.log.add("You sink into the Dark Forest — Gehennom. Censorship weeps from the walls.", "bad");
@@ -520,7 +520,7 @@ export class Game {
 
   // ── XCM: parachain side-branches (each scales difficulty × loot) ────────────
   private placePortals(): void {
-    if (this.currentChain || this.player.depth < 2 || this.player.depth > 7) return;
+    if (this.currentChain || this.player.depth < 2 || this.player.depth >= MAX_DEPTH) return; // XCM branches off the relay descent (d2 .. foot of the relay), not Gehennom
     const n = ROT.RNG.getUniform() < 0.7 ? (ROT.RNG.getUniform() < 0.3 ? 2 : 1) : 0;
     for (let i = 0; i < n; i++) {
       const centers = this.level.roomCenters.filter(
@@ -908,8 +908,8 @@ export class Game {
     if (d >= GEHENNOM_BOTTOM) return "sanctum";
     if (d > MAX_DEPTH) return "gehennom";
     if (d === MAX_DEPTH) return "relay";
-    if (d >= 7) return "kusama";
-    if (d >= 4) return "parachain";
+    if (d >= 9) return "kusama";
+    if (d >= 5) return "parachain";
     return "legacy";
   }
 
@@ -950,14 +950,20 @@ export class Game {
     return { distress, presence, danger: this.dangerLevel(), bossNear, crowd, jamNear, faucet: onFeat("faucet"), altar: onFeat("altar") };
   }
 
-  /** Which level layout a depth uses — the descent moves through layout zones. */
+  /** Which level layout a depth uses — the descent rotates through layout zones for variety. */
   private levelKindFor(depth: number): LevelKind {
-    if (depth === MEMPOOL_DEPTH) return "bigroom";                  // the Mempool
-    if (depth > MAX_DEPTH && depth < GEHENNOM_BOTTOM) return "maze"; // Gehennom 9–11: claustrophobic mazes
-    if (depth === 3) return "grid";                                 // a rollup metropolis
-    if (depth === 4 || depth === 6) return "cave";                  // the Mines — organic caverns
-    if (depth === 7) return "labyrinth";                            // the Kusama labyrinth
-    return "normal";                                                // standard rooms-and-corridors
+    if (depth === MEMPOOL_DEPTH) return "bigroom";                  // the Mempool (d8)
+    if (depth > MAX_DEPTH && depth < GEHENNOM_BOTTOM) return "maze"; // Gehennom (d13–19): claustrophobic mazes
+    switch (depth) {                                                // the relay descent (d1–12)
+      case 3: return "grid";        // a rollup metropolis
+      case 4: return "cave";        // organic caverns (the Mines branch off here)
+      case 6: return "labyrinth";   // a winding labyrinth
+      case 7: return "cave";
+      case 9: return "swamp";       // the Liquidity Pools — open water + islands
+      case 10: return "grid";
+      case 11: return "labyrinth";  // the Kusama deeps
+      default: return "normal";     // d1, 2, 5, 12 (foot of the relay) + the Sanctum (d20)
+    }
   }
 
   private placeJamAndBoss(): void {
@@ -1688,7 +1694,7 @@ export class Game {
   // ── on-chain persistence (Phase 4) ─────────────────────────────────────────
   private async recordResult(won: boolean): Promise<void> {
     if (!this.wallet) { this.log.add("(connect a wallet to etch this run on-chain)", "dim"); return; }
-    const depth = won ? MAX_DEPTH : this.player.maxDepthReached;
+    const depth = won ? GEHENNOM_BOTTOM : this.player.maxDepthReached; // a win means wresting the JAM from the bottom
     const r = await recordRun(this.wallet.provider, this.wallet.address, depth, won);
     if (r.ok) { this.log.add("Your run is etched into the on-chain Hall of Fame (gasless).", "sys"); void this.fetchLeaderboard(); }
     else this.log.add(`Could not record run: ${r.error}`, "dim");
@@ -2577,7 +2583,7 @@ export class Game {
     }
     // From the Parachain Reaches on, the bazaar may carry a relic — an NFT ware
     // that mints to you (gasless) on purchase and persists across runs.
-    if (this.player.depth >= 4 && ROT.RNG.getUniform() < 0.5) {
+    if (this.player.depth >= 5 && ROT.RNG.getUniform() < 0.5) {
       const relicTypes = ITEMS.filter((i) => isGear(i));
       const rt = ROT.RNG.getItem(relicTypes)!;
       const enchant = ROT.RNG.getUniformInt(1, 2);
@@ -2683,7 +2689,8 @@ export class Game {
     const diff = this.currentChain?.difficulty ?? 1;
     // A chain's difficulty shifts the monster pool deeper/shallower and scales the count.
     const poolDepth = Math.max(1, this.player.depth + Math.round((diff - 1) * 4));
-    const count = Math.round((4 + this.player.depth * 1.5) * diff) + (this.player.depth >= 7 ? 4 : 0) + (this.level.kind === "bigroom" ? 12 : 0);
+    // count grows with depth; capped so the lengthened descent (Phase 16c) stays sane until the Phase 18 balance pass.
+    const count = Math.min(44, Math.round((4 + this.player.depth * 1.5) * diff) + (this.player.depth >= 9 ? 4 : 0) + (this.level.kind === "bigroom" ? 12 : 0));
     for (let i = 0; i < count; i++) {
       const def = this.pickMonster(poolDepth);
       let pos = this.level.randomFloor();
@@ -2816,7 +2823,7 @@ export class Game {
     if (this.debugPending) { this.debugPending = false; this.debugCommand(key); return true; }
     if (key === "`") {
       this.debugPending = true;
-      this.log.add("[DEBUG] cmd? d/u down/up · 1-9 warp depth · m Mines · v Vault · x XCM-portal · Q quest-portal · g Gehennom@9 · J JAM@12 · r reveal · h heal · G godmode · k mob · K kit · T/t →down/up-stair", "sys");
+      this.log.add(`[DEBUG] cmd? d/u down/up · 1-9 warp · 0 →d${MAX_DEPTH} square · m Mines · v Vault · x XCM-portal · Q quest-portal · g Gehennom@${MAX_DEPTH + 1} · J JAM@${GEHENNOM_BOTTOM} · r reveal · h heal · G godmode · k mob · K kit · T/t →stair`, "sys");
       this.draw();
       return true;
     }
@@ -2825,6 +2832,7 @@ export class Game {
 
   private debugCommand(key: string): void {
     const p = this.player;
+    if (key === "0") { this.debugWarp(MAX_DEPTH); this.log.add(`[DEBUG] warp → depth ${MAX_DEPTH} (the vibrating square).`, "sys"); return; }
     if (key >= "1" && key <= "9") { this.debugWarp(Number(key)); this.log.add(`[DEBUG] warp → depth ${key}.`, "sys"); return; }
     switch (key) {
       case "d": this.log.add("[DEBUG] force descend.", "sys"); this.descend(); break;
@@ -2833,7 +2841,7 @@ export class Game {
       case "v": { const b = branchById("vault"); if (b) this.enterBranch(b); else this.log.add("[DEBUG] no Vault branch defined.", "dim"); break; }
       case "x": { const c = ROT.RNG.getItem(CHAINS)!; if (!this.level.portalAt(p.x, p.y)) this.level.portals.push({ x: p.x, y: p.y, chain: c }); this.level.tiles[p.y][p.x] = "portal"; this.recomputeFOV(); this.draw(); this.log.add(`[DEBUG] XCM portal to ${c.name} under you — press > to enter.`, "sys"); break; }
       case "Q": { if (!this.level.portalAt(p.x, p.y)) this.level.portals.push({ x: p.x, y: p.y, chain: CHAINS[0], quest: true }); this.level.tiles[p.y][p.x] = "portal"; this.recomputeFOV(); this.draw(); this.log.add("[DEBUG] quest portal under you — press > to enter.", "sys"); break; }
-      case "g": this.gehennomOpen = true; this.debugWarp(9); this.log.add("[DEBUG] Gehennom opened, warped to depth 9.", "sys"); break;
+      case "g": this.gehennomOpen = true; this.debugWarp(MAX_DEPTH + 1); this.log.add(`[DEBUG] Gehennom opened, warped to depth ${MAX_DEPTH + 1}.`, "sys"); break;
       case "J": this.gehennomOpen = true; this.debugWarp(GEHENNOM_BOTTOM); this.log.add("[DEBUG] warped to the JAM floor (Moloch).", "sys"); break;
       case "r": this.level.revealAll(); this.recomputeFOV(); this.draw(); this.log.add("[DEBUG] level revealed.", "sys"); break;
       case "h": this.debugHeal(p); if (this.coPlayer) this.debugHeal(this.coPlayer); this.draw(); this.log.add("[DEBUG] fully healed.", "sys"); break;

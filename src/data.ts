@@ -36,7 +36,7 @@ export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: strin
   pit:        { ch: "^", fg: "#6a78b0",     fgDim: "#33415e" }, // a chasm (Consensus Vault) — impassable; shove a boulder in to fill it
 };
 
-export const MAX_DEPTH = 8; // the JAM lies on the deepest floor
+export const MAX_DEPTH = 12; // the foot of the relay — the vibrating square; the Invocation opens Gehennom below
 
 // ── Phase 6: the character sheet ─────────────────────────────────────────────
 /** The six attributes, Polkadot-flavored. Stored 3–18; modifier is D&D-style. */
@@ -76,19 +76,19 @@ export function archetypeById(id: string): Archetype { return ARCHETYPES.find((a
 export interface Quest { homeland: string; portalDepth: number; artifactId: string; nemesis: MonsterDef; }
 export const QUESTS: Record<string, Quest> = {
   validator: {
-    homeland: "the Validator's Vault", portalDepth: 4, artifactId: "art_sceptre",
+    homeland: "the Validator's Vault", portalDepth: 6, artifactId: "art_sceptre",
     nemesis: { name: "the Equivocator", ch: "E", fg: "#ff6060", hp: 42, dmg: [5, 10], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, splits: true },
   },
   nominator: {
-    homeland: "the Bonding Hall", portalDepth: 4, artifactId: "art_aegis",
+    homeland: "the Bonding Hall", portalDepth: 6, artifactId: "art_aegis",
     nemesis: { name: "the Oversubscriber", ch: "N", fg: "#e0a040", hp: 48, dmg: [5, 9], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, summons: true },
   },
   cypherpunk: {
-    homeland: "the Panopticon", portalDepth: 4, artifactId: "art_cipher",
+    homeland: "the Panopticon", portalDepth: 6, artifactId: "art_cipher",
     nemesis: { name: "the Surveillor", ch: "U", fg: "#c060e0", hp: 40, dmg: [4, 8], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, ranged: true },
   },
   builder: {
-    homeland: "the Rent Foundry", portalDepth: 4, artifactId: "art_compiler",
+    homeland: "the Rent Foundry", portalDepth: 6, artifactId: "art_compiler",
     nemesis: { name: "the Rent Extractor", ch: "R", fg: "#e07030", hp: 44, dmg: [5, 9], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, steals: true },
   },
 };
@@ -147,18 +147,19 @@ export function branchById(id: string): BranchDef | undefined { return BRANCHES.
 
 /** Realms deepen and grow chaotic — a nod to Polkadot → Kusama. */
 export function realmName(depth: number): string {
-  if (depth >= 12) return "Moloch's Sanctum";
-  if (depth >= 9) return "Gehennom, the Dark Forest";
-  if (depth >= 8) return "the Foot of the Relay";
-  if (depth >= 7) return "the Kusama Deeps";
-  if (depth >= 4) return "the Parachain Reaches";
+  if (depth >= 20) return "Moloch's Sanctum";           // GEHENNOM_BOTTOM
+  if (depth >= 13) return "Gehennom, the Dark Forest";  // below the foot of the relay
+  if (depth >= 12) return "the Foot of the Relay";      // MAX_DEPTH — the vibrating square
+  if (depth >= 9) return "the Kusama Deeps";
+  if (depth >= 5) return "the Parachain Reaches";
   return "the Legacy Stack";
 }
 
 export const GRAY_PAPER = [
   "From the Gray Paper: 'A chain ascends when it needs no master.'",
-  "Descend the Dungeon of Doom to depth 8. There lies the JAM — the artifact",
-  "of trustless finality. Take it, then climb back and ASCEND.",
+  "Descend the Dungeon of Doom to depth 12 — the foot of the relay. There, the",
+  "vibrating square: invoke the rite, descend Gehennom, wrest the JAM from Moloch,",
+  "then climb back and ASCEND.",
 ];
 
 export interface MonsterDef {
@@ -232,7 +233,7 @@ export const HONEYPOT: MonsterDef = {
   name: "a honeypot", ch: "m", fg: "#e0b020", hp: 16, dmg: [3, 7], ai: "chase", minDepth: 3, weight: 0, mimic: true, speed: 90,
 };
 
-/** The Censor — high keeper of the vibrating square at the foot of the relay (depth 8). */
+/** The Censor — high keeper of the vibrating square at the foot of the relay (MAX_DEPTH). */
 export const CENSOR: MonsterDef = {
   name: "THE CENSOR", ch: "C", fg: "#ff3b3b", hp: 48, dmg: [6, 11], ai: "chase", minDepth: 99, weight: 0, fearless: true,
 };
