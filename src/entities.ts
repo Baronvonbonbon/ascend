@@ -851,7 +851,6 @@ export class Monster extends Entity {
   act(): void {
     this.game.setActive(this.floorKey); // act in this monster's floor context (co-op: floors run independently)
     if (!this.alive) return;
-    if (this.game.playersHere().length === 0) { this.wanderStep(); return; } // no adventurer on this floor — mill about
     const p = this.game.nearestPlayer(this.x, this.y); // target the closer of the party
     if (!p.alive) return;
 
@@ -865,6 +864,10 @@ export class Monster extends Entity {
 
     // A peaceful shopkeeper minds its stall — it neither chases nor attacks.
     if (this.peaceful) return;
+
+    // No adventurer shares this floor (co-op split / partner downed) — a free monster just mills
+    // about. Checked AFTER the passive states so a sleeper/dormant mimic/shopkeeper still won't move.
+    if (this.game.playersHere().length === 0) { this.wanderStep(); return; }
 
     // A laden thief wants only to escape — it never turns to fight.
     if (this.stolen) { this.fleeStep(p); return; }
