@@ -5,7 +5,7 @@ import { Item } from "./inventory";
 import { Log } from "./log";
 import {
   COLORS, TILE_GLYPH, TileType, MONSTERS, MonsterDef, DEATHS, GREETINGS,
-  MAX_DEPTH, CENSOR, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, realmName, GRAY_PAPER, ChainDef, CHAINS, questFor,
+  MAX_DEPTH, CENSOR, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, PRIEST, realmName, GRAY_PAPER, ChainDef, CHAINS, questFor,
   abilityMod, archetypeById, ATTRS, ATTR_LABEL, spellById, Ethos,
 } from "./data";
 import { Idents, ITEMS, JAM, CORPSE, CHEST, WRITABLE_SCROLLS, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
@@ -343,6 +343,7 @@ export class Game {
         this.placeFeature("throne", 0.16);
         this.placeChest(0.35);
         this.placeBoulders();
+        this.placeSpecialRoom();
       }
       this.maybePlaceBones();
       this.spawnTraps();
@@ -812,6 +813,75 @@ export class Game {
     }
   }
 
+  /** Flood-fill the floor cells of the room containing (cx,cy); walls and doors bound it. */
+  private roomCells(cx: number, cy: number, cap = 80): { x: number; y: number }[] {
+    if (this.level.tileAt(cx, cy) !== "floor") return [];
+    const seen = new Set<string>([`${cx},${cy}`]);
+    const cells = [{ x: cx, y: cy }];
+    const q = [{ x: cx, y: cy }];
+    while (q.length && cells.length < cap) {
+      const c = q.shift()!;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]) {
+        const nx = c.x + dx, ny = c.y + dy, k = `${nx},${ny}`;
+        if (!seen.has(k) && this.level.tileAt(nx, ny) === "floor") { seen.add(k); const cell = { x: nx, y: ny }; cells.push(cell); q.push(cell); }
+      }
+    }
+    return cells;
+  }
+
+  /** Drop a NetHack-style special room into a standard floor: a temple, a zoo, or a treasure vault. */
+  private placeSpecialRoom(): void {
+    if (this.player.depth < 2 || this.level.kind !== "normal") return;
+    if (ROT.RNG.getUniform() > 0.35) return;
+    const candidates = ROT.RNG.shuffle(
+      this.level.roomCenters.slice(1).filter((c) => this.level.tileAt(c.x, c.y) === "floor" && !(c.x === this.player.x && c.y === this.player.y)),
+    );
+    for (const c of candidates) {
+      const cells = this.roomCells(c.x, c.y);
+      const open = cells.filter((p) => this.level.tileAt(p.x, p.y) === "floor" && !this.monsterAt(p.x, p.y) && !this.level.itemAt(p.x, p.y) && !this.playerAt(p.x, p.y));
+      if (cells.length < 6 || open.length < 4) continue;
+      const kind = ROT.RNG.getItem(["temple", "zoo", "vault"])!;
+      if (kind === "temple") this.makeTemple(c, open);
+      else if (kind === "zoo") this.makeZoo(open);
+      else this.makeVault(c, open);
+      return;
+    }
+  }
+
+  /** A shrine: an altar tended by a peaceful Gavin priest (a Gavin shrine). */
+  private makeTemple(center: { x: number; y: number }, open: { x: number; y: number }[]): void {
+    this.level.tiles[center.y][center.x] = "altar";
+    const guard = open.find((p) => !(p.x === center.x && p.y === center.y)) ?? open[0];
+    if (guard) { const m = new Monster(this, PRIEST, guard.x, guard.y); m.peaceful = true; this.monsters.push(m); }
+    this.log.add("A hush settles over this floor — a shrine to Gavin, its altar (_) tended by a priest. (P to pray, O to offer)", "good");
+  }
+
+  /** A zoo: a room packed with monsters guarding scattered loot (an airdrop trap room). */
+  private makeZoo(open: { x: number; y: number }[]): void {
+    let beasts = 0;
+    for (const p of open) {
+      const r = ROT.RNG.getUniform();
+      if (r < 0.55) { this.monsters.push(new Monster(this, this.pickMonster(this.player.depth), p.x, p.y)); beasts++; }
+      else if (r < 0.8) this.level.items.push({ x: p.x, y: p.y, type: pickItemType(), buc: rollBuc() });
+    }
+    if (beasts) this.log.add("A foul racket leaks through a doorway — a packed menagerie of the legacy stack, hoarding loot.", "bad");
+  }
+
+  /** A vault: a dense treasure room — the Treasury — with a locked chest at its heart. */
+  private makeVault(center: { x: number; y: number }, open: { x: number; y: number }[]): void {
+    let dropped = 0;
+    for (const p of open) {
+      if (p.x === center.x && p.y === center.y) continue;
+      if (ROT.RNG.getUniform() < 0.45) {
+        const type = ROT.RNG.getUniform() < 0.3 ? ROT.RNG.getItem(ITEMS.filter((i) => isGear(i)))! : pickItemType();
+        this.level.items.push({ x: p.x, y: p.y, type, buc: rollBuc() }); dropped++;
+      }
+    }
+    if (this.level.tileAt(center.x, center.y) === "floor" && !this.level.itemAt(center.x, center.y))
+      this.level.items.push({ x: center.x, y: center.y, type: CHEST, chest: { locked: true } });
+    if (dropped) this.log.add("Coffers glint behind a door — the Treasury, heaped with wares around a locked chest.", "good");
+  }
+
   /** Drop a chest of loot on an unused room centre. */
   private placeChest(chance: number): void {
     if (ROT.RNG.getUniform() > chance) return;
@@ -1058,12 +1128,13 @@ export class Game {
       "_": "an altar — offer a corpse (O) here for favor", "Ω": "an XCM portal to a parachain realm",
       "{": "a testnet faucet — q to quaff it", "\\": "the Sudo Throne — s to sit on it",
       "≈": "the vibrating square — perform the Invocation (I) here with the three relics",
+      "}": "open water — impassable; cross by a causeway or an XCM jump",
       "0": "a boulder — walk into it to shove it", "§": "a warding engraving",
       ")": "a weapon", "[": "a piece of armor", "(": "a tool, or a chest",
       "!": "a potion", "?": "a scroll", "=": "a ring", "/": "a wand",
       "%": "food — or a corpse you can eat (e)", "*": "an amulet or gem",
     };
-    const mons = [...MONSTERS, SHOPKEEPER, HONEYPOT, CENSOR, MOLOCH, ...Object.values(MINIBOSSES)].find((m) => m.ch === key);
+    const mons = [...MONSTERS, SHOPKEEPER, PRIEST, HONEYPOT, CENSOR, MOLOCH, ...Object.values(MINIBOSSES)].find((m) => m.ch === key);
     const parts: string[] = [];
     if (mons) parts.push(mons.name);
     if (feat[key]) parts.push(feat[key]);
@@ -1109,6 +1180,7 @@ export class Game {
       doorLocked: "a locked door", doorHidden: "a wall", stairsDown: "a staircase down",
       stairsUp: "a staircase up", altar: "an altar", portal: "an XCM portal", faucet: "a faucet",
       throne: "the Sudo Throne", vibrating: "the vibrating square — invoke (I) the ritual here",
+      water: "open water — too deep to wade; find a causeway or jump (XCM)",
     };
     this.log.add(`You see ${names[t!] ?? "nothing notable"}.`, "dim");
   }
@@ -1393,6 +1465,11 @@ export class Game {
     if (d instanceof Monster && d.def.keeper && d.peaceful) {
       d.peaceful = false; d.fg = "#ff5030";
       this.log.add("The Marketmaker roars \"Bad debt!\" and turns lethal.", "bad");
+    }
+    // Striking a peaceful priest desecrates the shrine — it abandons restraint.
+    if (d instanceof Monster && d.def.priest && d.peaceful) {
+      d.peaceful = false; d.fg = "#ff5030";
+      this.log.add("The priest's blessing curdles to wrath — \"Sacrilege!\"", "bad");
     }
     // A d20 to-hit layer: level + DEX + enchant vs the target's dodge. Misses happen now.
     if (!this.lands(a, d)) {

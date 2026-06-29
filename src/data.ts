@@ -15,7 +15,7 @@ export const COLORS = {
   dim:       "#6c6a60",
 };
 
-export type TileType = "wall" | "floor" | "door" | "doorClosed" | "doorLocked" | "doorHidden" | "stairsDown" | "stairsUp" | "altar" | "portal" | "faucet" | "throne" | "vibrating";
+export type TileType = "wall" | "floor" | "door" | "doorClosed" | "doorLocked" | "doorHidden" | "stairsDown" | "stairsUp" | "altar" | "portal" | "faucet" | "throne" | "vibrating" | "water";
 
 export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: string }> = {
   wall:       { ch: "#", fg: COLORS.wall,   fgDim: COLORS.wallDim },
@@ -31,6 +31,7 @@ export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: strin
   faucet:     { ch: "{", fg: "#4fb0e0",     fgDim: "#2a5570" }, // a testnet faucet — quaff (q)
   throne:     { ch: "\\", fg: "#e0c040",    fgDim: "#6a5a20" }, // the Sudo Throne — sit (s)
   vibrating:  { ch: "≈", fg: "#ff60ff",     fgDim: "#7a307a" }, // the vibrating square — invoke (I) the ritual here
+  water:      { ch: "}", fg: "#3f7ad0",     fgDim: "#1d3a66" }, // open water — impassable; cross by causeway or XCM jump (the Liquidity Pools)
 };
 
 export const MAX_DEPTH = 8; // the JAM lies on the deepest floor
@@ -113,7 +114,7 @@ export const CHAINS: ChainDef[] = [
   { id: "phala",     name: "Phala",     difficulty: 1.1, loot: 1.2, color: "#cdfa50", layout: "maze" }, // privacy/compute — a dark labyrinth
   { id: "interlay",  name: "Interlay",  difficulty: 1.0, loot: 1.5, color: "#f7931a", layout: "cave" }, // treasure caverns (BTC bridge)
   { id: "bifrost",   name: "Bifrost",   difficulty: 0.9, loot: 1.0, color: "#5a25f0", layout: "labyrinth" },
-  { id: "hydration", name: "Hydration", difficulty: 0.8, loot: 1.1, color: "#f6297c", layout: "bigroom" }, // open, liquid
+  { id: "hydration", name: "Hydration", difficulty: 0.8, loot: 1.1, color: "#f6297c", layout: "swamp" }, // the Liquidity Pools — open water + islands
   { id: "acala",     name: "Acala",     difficulty: 0.6, loot: 0.8, color: "#e40c5b", layout: "normal" }, // safe DeFi haven
 ];
 
@@ -157,6 +158,7 @@ export interface MonsterDef {
   mimic?: boolean;       // a honeypot — sits disguised as loot, strikes when touched
   fearless?: boolean;    // ignores warding engravings (bosses fear no Gray Paper)
   keeper?: boolean;      // a shopkeeper — peaceful until you shoplift, then merciless
+  priest?: boolean;      // a temple priest — peaceful guardian of an altar; turns lethal if struck
   boss?: boolean;        // a unique mini-boss — drops a guaranteed prize on death
 }
 
@@ -191,6 +193,11 @@ export const MONSTERS: MonsterDef[] = [
 /** The Marketmaker — a bazaar shopkeeper. Peaceful while you pay; lethal if you shoplift. */
 export const SHOPKEEPER: MonsterDef = {
   name: "the Marketmaker", ch: "$", fg: "#e8c84a", hp: 54, dmg: [6, 11], ai: "chase", minDepth: 1, weight: 0, fearless: true, keeper: true,
+};
+
+/** A temple priest — peaceful keeper of a shrine's altar; turns lethal if struck or robbed. */
+export const PRIEST: MonsterDef = {
+  name: "the Gavin priest", ch: "@", fg: "#d6d0f4", hp: 30, dmg: [4, 8], ai: "chase", minDepth: 1, weight: 0, fearless: true, priest: true,
 };
 
 /** The honeypot — a mimic. Spawned separately (placeMimics), disguised as loot. */

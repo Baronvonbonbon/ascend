@@ -680,6 +680,7 @@ export class Player extends Entity {
       return this.endTurn();
     }
     if (tile === "doorLocked") return this.game.kickDoor(this, nx, ny) ? this.endTurn() : false;
+    if (tile === "water") { this.game.log.add("Deep water — too deep to wade. Find a causeway, or jump it (XCM).", "dim"); return false; }
     if (!this.game.level.isPassable(nx, ny)) return false; // bumping a wall costs no turn
     // Push a boulder one tile if the space beyond is clear; otherwise it won't budge.
     const boulder = this.game.level.boulderAt(nx, ny);
@@ -781,7 +782,7 @@ export class Monster extends Entity {
       const look = ROT.RNG.getItem(ITEMS.filter((i) => i.kind !== "amulet"))!;
       this.disguiseCh = look.ch; this.disguiseFg = look.fg; this.disguiseType = look;
     }
-    if (def.keeper) this.peaceful = true; // minds its stall until provoked
+    if (def.keeper || def.priest) this.peaceful = true; // a keeper minds its stall, a priest its altar — until provoked
     if (def.splits) this.splitsLeft = 2; // a fresh sybil can replicate at most twice
   }
 

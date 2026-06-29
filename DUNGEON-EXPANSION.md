@@ -18,18 +18,26 @@
 - `labyrinth` — a maze with rectangular chambers carved in.
 - `grid` — rooms in blocks joined by orthogonal streets. *a rollup metropolis*
 
+**Shipped (Phase 14b):**
+- `swamp` — open water studded with island rooms, chained by L-shaped causeways. *the Liquidity Pools*
+  - New **`water` tile** (`}`): light passes (you see the far shore) but it's **impassable** to walking — `isPassable` excludes it, `lightPasses` includes it. `reachableFrom` now uses `isPassable`, so water genuinely gates reachability and `finishLayout` only places the stair / spawns on island-connected floor. Cross by causeway or XCM jump.
+- **Special rooms** dropped into `normal` levels (`placeSpecialRoom`, depth ≥ 2, 35% chance, picks a non-start room via `roomCells` flood-fill):
+  - **temple** — an altar tended by a peaceful Gavin **priest** (new `priest` flag, peaceful until struck → provoked like a keeper). *a Gavin shrine.*
+  - **zoo** — the room packed with depth-appropriate monsters guarding scattered loot. *an airdrop trap room.*
+  - **vault** — a dense treasure room (the Treasury) heaped with wares + gear around a locked chest. *Reachable normally for now; true sealed-by-walls vaults (reached only by dig/teleport) deferred — they need a path-safety check so a vault can't wall off the down-stair.*
+
 All new generators share `finishLayout()`: pick a start, set the down-stair at the farthest **reachable** cell (BFS), filter spawns to reachable space, and fall back to `normal` if degenerate.
 
 **To build:**
-- `swamp` — open water with island rooms. Needs a **water tile** (impassable, or swim w/ drowning risk) + FOV/passability rules. *the Liquidity Pools*
-- `fortress` — a structured keep with a moat. *the Council Fort* (NetHack Castle)
+- `fortress` — a structured keep with a moat (use the `water` tile). *the Council Fort* (NetHack Castle)
 - `concentric` / `radial` — rings + spirals, for boss arenas and Planes.
-- **Special rooms** dropped into `normal` levels: temple (altar+priest), zoo (packed treasure), morgue (undead+corpses), beehive (swarm+honey), barracks (soldiers), **vault** (sealed treasure, reached by digging/teleport).
+- More **special rooms**: morgue (undead+corpses), beehive (swarm+honey), barracks (soldiers), and **true sealed vaults** (walled-off treasure reached only by digging/teleport, gated on the path-safety check above).
+- **Swim option** for water — wade with a drowning / item-drop risk — as an alternative to pure impassability.
 
 ## Where layouts go now (Phase 14a, pre-persistence)
 Zoned into the existing descent + parachains so variety lands immediately:
 - Main descent: d1–2 normal · **d3 grid** · **d4 & d6 cave** · d5 bigroom (Mempool) · **d7 labyrinth** · d8 vibrating square · d9–11 maze (Gehennom) · d12 sanctum.
-- Parachains: each `ChainDef.layout` — Kusama/Phala `maze`, Moonbeam/Astar `grid`, Interlay `cave`, Bifrost `labyrinth`, Hydration `bigroom`, Acala `normal`.
+- Parachains: each `ChainDef.layout` — Kusama/Phala `maze`, Moonbeam/Astar `grid`, Interlay `cave`, Bifrost `labyrinth`, **Hydration `swamp`** (the Liquidity Pools — was `bigroom`), Acala `normal`.
 
 ## Target dungeon graph (to design in Phase 16)
 A branch graph instead of a single spine:
@@ -53,7 +61,7 @@ A branch graph instead of a single spine:
 
 ## Phased rollout
 - **14a — generators (this session):** cave, labyrinth, grid + zoning + parachain layouts. ✅
-- **14b:** swamp/water tile + the `swamp` generator; first special rooms (temple, vault, zoo).
+- **14b — swamp + special rooms:** the `water` tile + `swamp` generator (zoned onto the Hydration parachain) + first special rooms (temple, zoo, vault) dropped into `normal` floors. ✅
 - **15 — persistence:** the level store + revisit-identical levels. *Foundational; unblocks real branches.*
 - **16 — branch graph:** multi-branch dungeon; build the Mines + the Consensus Vault (Sokoban) as mandatory branches; lengthen the main descent toward ~25–30.
 - **17:** fortress + concentric generators; per-Plane unique layouts; expand Gehennom.

@@ -2,7 +2,7 @@ import * as ROT from "rot-js";
 import type { TileType, ChainDef } from "./data";
 import type { ItemType } from "./items";
 
-export type LevelKind = "normal" | "bigroom" | "maze" | "cave" | "labyrinth" | "grid";
+export type LevelKind = "normal" | "bigroom" | "maze" | "cave" | "labyrinth" | "grid" | "swamp";
 export interface Portal { x: number; y: number; chain: ChainDef; quest?: boolean; }
 
 export interface FloorItem { x: number; y: number; type: ItemType; price?: number; enchant?: number; relic?: boolean; mintOnBuy?: boolean; buc?: import("./items").Buc; bucKnown?: boolean; corpse?: { def: import("./data").MonsterDef; born: number }; chest?: { locked: boolean }; } // price = shop ware; relic/enchant/mintOnBuy = NFT gear; buc = sanctity; corpse = edible remains; chest = container
@@ -49,6 +49,7 @@ export class Level {
     else if (kind === "cave") this.generateCave();
     else if (kind === "labyrinth") this.generateLabyrinth();
     else if (kind === "grid") this.generateGrid();
+    else if (kind === "swamp") this.generateSwamp();
     else this.generate();
     this.fov = new ROT.FOV.PreciseShadowcasting((x, y) => this.lightPasses(x, y));
   }
@@ -69,7 +70,7 @@ export class Level {
       const c = q.shift()!;
       for (const [dx, dy] of offs) {
         const nx = c.x + dx, ny = c.y + dy, k = `${nx},${ny}`;
-        if (!seen.has(k) && this.tiles[ny]?.[nx] && this.tiles[ny][nx] !== "wall") { seen.add(k); q.push({ x: nx, y: ny }); }
+        if (!seen.has(k) && this.isPassable(nx, ny)) { seen.add(k); q.push({ x: nx, y: ny }); } // water blocks reachability — islands connect only via causeways
       }
     }
     return seen;
@@ -170,6 +171,31 @@ export class Level {
     this.finishLayout();
   }
 
+  /** Swamp: open water studded with island rooms, joined by narrow causeways (the Liquidity Pools). */
+  private generateSwamp(): void {
+    const w = this.width, h = this.height;
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) this.tiles[y][x] = (x === 0 || y === 0 || x === w - 1 || y === h - 1) ? "wall" : "water";
+    const carve = (x: number, y: number) => { if (x > 0 && y > 0 && x < w - 1 && y < h - 1) this.tiles[y][x] = "floor"; };
+    // scatter rectangular islands of dry floor
+    const centers: { x: number; y: number }[] = [];
+    const n = 6 + Math.floor(ROT.RNG.getUniform() * 4);
+    for (let i = 0; i < n; i++) {
+      const rw = 3 + Math.floor(ROT.RNG.getUniform() * 5), rh = 3 + Math.floor(ROT.RNG.getUniform() * 4);
+      const rx = 2 + Math.floor(ROT.RNG.getUniform() * (w - rw - 4)), ry = 2 + Math.floor(ROT.RNG.getUniform() * (h - rh - 4));
+      for (let y = ry; y < ry + rh; y++) for (let x = rx; x < rx + rw; x++) carve(x, y);
+      centers.push({ x: rx + (rw >> 1), y: ry + (rh >> 1) });
+    }
+    // chain the islands with L-shaped causeways so every island is reachable on foot
+    for (let i = 1; i < centers.length; i++) {
+      const a = centers[i - 1], b = centers[i];
+      for (let x = Math.min(a.x, b.x); x <= Math.max(a.x, b.x); x++) carve(x, a.y);
+      for (let y = Math.min(a.y, b.y); y <= Math.max(a.y, b.y); y++) carve(b.x, y);
+    }
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) if (this.tiles[y][x] === "floor") this.floors.push({ x, y });
+    this.roomCenters = centers;
+    this.finishLayout();
+  }
+
   /** Gehennom: a claustrophobic perfect maze of narrow corridors (NetHack's Hell). */
   private generateMaze(): void {
     const maze = new ROT.Map.EllerMaze(this.width, this.height);
@@ -234,11 +260,12 @@ export class Level {
 
   private lightPasses(x: number, y: number): boolean {
     const t = this.tiles[y]?.[x];
-    return t === "floor" || t === "door" || t === "stairsDown" || t === "stairsUp" || t === "altar" || t === "portal" || t === "faucet" || t === "throne" || t === "vibrating";
+    // sight crosses open water (you see the far shore) but you cannot walk into it
+    return t === "floor" || t === "door" || t === "stairsDown" || t === "stairsUp" || t === "altar" || t === "portal" || t === "faucet" || t === "throne" || t === "vibrating" || t === "water";
   }
 
   isPassable(x: number, y: number): boolean {
-    return this.lightPasses(x, y);
+    return this.lightPasses(x, y) && this.tiles[y]?.[x] !== "water";
   }
 
   tileAt(x: number, y: number): TileType | null {
