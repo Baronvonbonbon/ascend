@@ -1,7 +1,8 @@
-# Co-op: separate fog + independent floors
+# Co-op: the two-player rework
 
-> Trackable plan for letting two co-op players have their own sight and explore
-> different floors/planes/branches from one another. Check items off as they land;
+> Trackable plan for turning co-op into two genuinely independent adventurers —
+> their own sight, floors, state (items/identifications/logs), and a distance-degraded
+> signal between them. Check items off as they land;
 > each stage must keep `npx tsc --noEmit` + `npm run build` green and not regress
 > solo play. **Two-client playtest required after stages 2–4** (host in one browser
 > tab, join in another) — this cannot be verified headlessly.
@@ -13,6 +14,14 @@
       a parachain, a branch, a plane) at the same time, both **fully simulated**
       (monsters act on each floor and target the player *there*), each rendering
       their own floor.
+- **Two individuals** — separate per-adventurer state:
+  - [x] **Items** — already per-player (`Player.inventory`). _(was already true)_
+  - [x] **Identifications** — per-character knowledge over shared world appearances. _(shipped)_
+  - [ ] **Logs** — actor-routed: each adventurer's log shows their own actions; combat
+        routes to the player fighting; shared world lines go to both.
+  - [ ] **Signal messaging** — a free, once-per-turn 60-char message that degrades
+        with distance + line-of-sight (the example: `theres an enemy in there` →
+        `th.. a. .nem. .. ..er.` farther away; nothing beyond earshot / another floor).
 
 ## Why it's a core-loop rearchitecture
 Almost everything assumes a single active level: `this.level` (~274 refs),
@@ -98,6 +107,50 @@ fog-of-war work).
       `floorKey` (today `buildHud` reads the global `currentChain`/`plane`).
 - [ ] Music/area (`currentAreaId`) follows the **host's** floor (it's the host's
       soundtrack); set context to the host's floor before `draw`.
+
+## Stage 5 — per-player logs (actor + involved routing) _(decided)_
+Goal: each adventurer sees their own log, not a shared feed. **Decision: pragmatic
+"actor + involved" routing** (not full perception-based).
+- [ ] Replace the single `Log` with a router (`this.log.add(text, kind, who?)`):
+      - default audience = `this.acting` (the player whose action produced the line)
+        → **no change needed at most call sites** (player-turn messages auto-route).
+      - `who = "both"` for shared/world lines (level entry, greetings, the JAM/Censor
+        world events, a party member falling, game over).
+      - `who = <player>` for messages about a specific player during a **monster's**
+        turn (the actor is stale then): route `attack(a, d)` combat to the player
+        involved (defender if `d` is a Player, else `a`); route steal / breath /
+        summon / status-affliction lines to the **target** player.
+- [ ] Routing impl (host-authoritative): paint to host DOM if audience includes
+      `this.player`; `peer.send({t:"log",…})` to the guest if it includes
+      `this.coPlayer`. Solo + guest-side: just paint locally (no behavior change).
+- [ ] Keep `Log.paint` for guest-received lines (`onGuestMessage` `t:"log"`).
+- [ ] Audit the handful of currently-`onAdd`-mirrored messages; the per-player
+      router replaces the blanket mirror at `log.onAdd`.
+
+## Stage 6 — signal messaging _(decided)_
+Goal: a once-per-turn 60-char message that degrades with distance + line-of-sight.
+**Decisions: free action, once/turn · distance + LOS gating.**
+- [ ] **Compose**: a key (pick a free one, e.g. `T`/`"`) enters compose mode
+      (per-player `msgBuf` + `composing` flag on `Player`, reusing the `pendingName`
+      text-input pattern in `handleKey`); type up to 60 chars; Enter sends, Esc
+      cancels. Prompt echoed via the player's own (routed) log. Free action — does
+      **not** call `endTurn`; gated by a `signalledThisTurn` flag reset in `endTurn`.
+      Works for the guest too (keystrokes already forward via `handleRemoteInput →
+      coPlayer.feed`).
+- [ ] **Deliver / degrade** (`sendSignal(from)`):
+      - different floor (`from.floorKey !== to.floorKey`) → undelivered ("your call
+        goes unheard").
+      - `dist = Chebyshev(from, to)`; earshot `R ≈ 14`. `dist > R` → undelivered.
+      - `keep = clamp(1 - dist/R, 0, 1)`; if no line-of-sight between them,
+        `keep *= 0.45` (muffled by walls / out of eyeshot).
+      - mask: per char, keep spaces; `Math.random() < keep ? ch : "."` → scattered
+        survivors, more dots farther/blocked (`th.. a. .nem. .. ..er.`).
+      - sender's log (routed to sender): full text — `You signal: "…"`.
+        recipient's log (routed to recipient): the degraded text — `Partner signals: "…"`.
+      - LOS helper: reuse the ranged-attack sight check if present, else a Bresenham
+        wall check between the two tiles.
+- [ ] **Ties into independent floors**: cross-floor = undelivered falls out naturally
+      once players can split (Stages 2–4); on a shared floor it's pure distance + LOS.
 
 ## Risks / watch-list
 - **Context leakage:** any code that reads `this.level`/`this.currentChain`
