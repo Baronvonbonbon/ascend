@@ -72,13 +72,13 @@ const BASES: Base[] = [
   // sinister lurch: a minor-2nd grind into a tritone, collapsing back down low
   { id: "gehennom",  name: "Gehennom",          root: A * 0.5,  chord: [0, 1, 6],         melStep: 0.3,  melOct: 4, pad: "sawtooth", drone: "sawtooth", melWave: "sawtooth", cutoff: 460,  reverb: 0.5,  pulseBpm: 50, detune: 18, level: 0.5,
     melody: [[0,2],[1,1],[6,3],[REST,1],[8,1],[6,1],[1,2],[0,4]],
-    groove: 0.5, bpm: 88, bass: [[0,4],[1,2],[6,2],[0,4],[6,2],[1,2]],
-    chorus: [[6,2],[1,2],[0,4],[8,2],[6,2],[1,2],[0,4]] },
+    groove: 0.1, bpm: 88, bass: [[0,4],[1,2],[6,2],[0,4],[6,2],[1,2]],
+    chorus: [[6,2],[1,2],[0,4],[8,2],[6,2],[1,2],[0,4]] }, // low baseline: the slow heartbeat holds at rest, drums push in only under threat
   // boss march: a menacing 7–6–7 wobble at the top stabbing down to the root, over the pulse
   { id: "sanctum",   name: "Moloch's Sanctum",  root: A * 0.5,  chord: [0, 6, 7],         melStep: 0.22, melOct: 4, pad: "sawtooth", drone: "sawtooth", melWave: "square",   cutoff: 620,  reverb: 0.4,  pulseBpm: 84, detune: 16, level: 0.52,
     melody: [[7,1],[6,1],[7,2],[3,1],[0,2],[REST,1],[7,1],[6,1],[7,1],[0,3]],
-    groove: 0.75, bpm: 100, bass: [[0,2],[0,2],[7,2],[6,2],[0,2],[0,2],[7,2],[7,2]],
-    chorus: [[7,2],[6,2],[7,2],[0,4],[7,1],[6,1],[3,2],[0,4]] },
+    groove: 0.1, bpm: 100, bass: [[0,2],[0,2],[7,2],[6,2],[0,2],[0,2],[7,2],[7,2]],
+    chorus: [[7,2],[6,2],[7,2],[0,4],[7,1],[6,1],[3,2],[0,4]] }, // low baseline: the march pulse holds at rest; the Moloch fight (boss/JAM/peril) drives it hard
   // weightless ascent: a slow lydian climb to the #11, hanging in suspension
   { id: "planes",    name: "The Planes",        root: A * 2,    chord: [0, 7, 16, 23],    melStep: 0.42, melOct: 2, pad: "triangle", drone: "sine",     melWave: "sine",     cutoff: 1600, reverb: 0.7,  pulseBpm: 0,  detune: 7,  level: 0.42,
     melody: [[0,2],[4,2],[7,3],[11,4],[7,2],[9,2],[4,3],[REST,2]] },
