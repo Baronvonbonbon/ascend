@@ -820,8 +820,10 @@ export class Monster extends Entity {
 
   act(): void {
     this.game.setActive(this.floorKey); // act in this monster's floor context (co-op: floors run independently)
+    if (!this.alive) return;
+    if (this.game.playersHere().length === 0) { this.wanderStep(); return; } // no adventurer on this floor — mill about
     const p = this.game.nearestPlayer(this.x, this.y); // target the closer of the party
-    if (!p.alive || !this.alive) return;
+    if (!p.alive) return;
 
     // Frozen in stasis (a wand of stasis) — it loses the turn.
     if (this.sleepTurns > 0) { this.sleepTurns--; return; }

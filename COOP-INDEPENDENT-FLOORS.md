@@ -74,26 +74,38 @@ practice (party shares a floor), so behavior is unchanged — but the plumbing i
 - [ ] Verify: solo unchanged; same-floor co-op unchanged. _(playtest — provably a
       no-op while `floorKey === activeKey`; `setActive` early-returns)_
 
-## Stage 3 — transitions move only the acting player + scheduler membership
+## Stage 3 — transitions move only the acting player + scheduler membership ✅
 Goal: a stair/portal moves only `this.acting`; the partner stays put; both floors
 stay scheduled.
-- [ ] Make `descend`/`ascend`/`enterChain`/`exitChain`/`enterQuest`/`exitQuest`/
+- [x] `descend`/`ascend`/`enterChain`/`exitChain`/`enterQuest`/`exitQuest`/
       `enterBranch`/`descendBranch`/`ascendBranch`/`enterPlane` operate on
-      `this.acting` (not `this.player`) and set `this.acting.floorKey` to the new key.
-- [ ] Stop dragging the partner along: `placeParty` only repositions the *acting*
-      player (+ pet if it's that player's); the other player is untouched.
-- [ ] `rebuildSchedule()` — clear, add both players, then add the **alive monsters
-      of every floor that currently has a player on it** (dedupe when both share a
-      floor), then the pet. Call after every transition.
-- [ ] Floor-scope targeting/collision (active context = the floor being acted):
-      - [ ] `nearestPlayer(x,y)` → nearest player whose `floorKey === this.activeKey`
-            (monster wanders if none on its floor).
-      - [ ] `playerAt(x,y)` / `otherPlayerAt` → only players on the active floor.
-      - [ ] `livingPlayers()` stays global (game-over check); add `playersHere()`
-            for floor-scoped uses (adjacency, displacement, FOV recompute).
-- [ ] Edge cases: regroup (both step onto the same key → shared slot, no dup
-      monsters); a player descending into a *fresh* floor while the other is mid-turn;
-      the JAM/Censor hunt (`censorHuntTick`) keyed to the floor the JAM is on.
+      `this.acting`. The arriving player's `floorKey` is set to the new key centrally
+      in `rebuildSchedule` (`this.acting.floorKey = this.activeKey`).
+- [x] `placeParty` no longer drags the partner — it only repositions the acting
+      player's pet (the partner stays on its own floor). The acting player's own
+      position is set by each transition.
+- [x] `rebuildSchedule()` — clear, add both players, then the **alive monsters of
+      every floor a living player stands on** (dedupe via a floor-key `Set` + a
+      monster `Set`), then the pet. Replaces `scheduleParty` at all call sites.
+- [x] Floor-scoped targeting/collision:
+      - [x] `nearestPlayer` pools `playersHere()` (falls back to any survivor for the
+            on-floor attack callers); `Monster.act` wanders when `playersHere()` is empty.
+      - [x] `playerAt` / `otherPlayerAt` filter to `playersHere()`.
+      - [x] `livingPlayers()` stays global (game-over); added `playersHere()` =
+            living players whose `floorKey === activeKey`; `recomputeFOV` computes each
+            player's FOV on its **own** floor's `Level` (via `slots`).
+- [x] Edge cases: regroup → shared slot, monsters scheduled once (Set dedupe);
+      `censorHuntTick` `setActive(holder.floorKey)` so the hunt rises on the
+      JAM-bearer's floor; `enterPlane` now sets `activeKey = plane:n` and registers
+      the plane in `slots` so per-actor `setActive` doesn't yank a player off a plane.
+- Removed the `branchReturnDepth` field — `ascendBranch` now restores `def.entryDepth`
+      directly (a branch always roots there), eliminating a co-op shared-field collision.
+- **Known v1 limitation:** procedural spawn density/scaling in `enterLevel`
+      (`spawnMonsters`/`placeJamAndBoss`/Monster ctor) still reads `this.player.depth`,
+      so a *guest*-generated floor scales to the host's depth. Cosmetic/balance only
+      (no crash); revisit if guests routinely generate floors far from the host.
+- [ ] Verify: split via stairs, regroup, branch/parachain/plane split. _(playtest —
+      two browser tabs; cannot be checked headlessly)_
 
 ## Stage 4 — render each player's own floor
 Goal: host sees its floor, guest sees its floor (each with separate fog from the

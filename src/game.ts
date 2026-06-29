@@ -94,7 +94,6 @@ export class Game {
   get activeFloorKey(): string { return this.activeKey; }
   private currentChain: ChainDef | null = null; // null = the main relay-chain dungeon; a BranchDef when in a sub-dungeon (the Mines)
   private branchFloor = 0;        // 1-based floor within the current branch (0 = not in a branch)
-  private branchReturnDepth = 0;  // the main-dungeon depth to restore on leaving the branch
   private defeatedBosses = new Set<number>();    // relay depths whose mini-boss is slain
   private gehennomOpen = false;                  // the Invocation has been performed — the Dark Forest lies below
   private plane = 0;                              // 0 = the dungeon; 1..PLANES.length = the ascent above the surface
@@ -154,7 +153,6 @@ export class Game {
     this.turn = 0;
     this.currentChain = null;
     this.branchFloor = 0;
-    this.branchReturnDepth = 0;
     this.slots.clear();
     this.activeKey = "dungeon:1";
     this.appearances = new Appearances();
@@ -378,8 +376,8 @@ export class Game {
     if (this.plane > 0) return `plane:${this.plane}`; // never stored (no path back down a plane)
     if (this.inQuest) return "quest";
     if (this.branch) return `${this.branch.id}:${this.branchFloor}`; // branch floors are keyed by floor, not depth
-    if (this.currentChain) return `${this.currentChain.id}:${this.player.depth}`;
-    return `dungeon:${this.player.depth}`;
+    if (this.currentChain) return `${this.currentChain.id}:${this.acting.depth}`;
+    return `dungeon:${this.acting.depth}`;
   }
 
   /** Persist the active level + its monsters under the active key (idempotent — same refs). */
@@ -434,13 +432,14 @@ export class Game {
   /** Re-enter an already-generated level: re-place the party beside the arriving player and
    *  rebuild the schedule from the stored (frozen) actors. No respawn, no new loot. */
   private restoreEnter(): void {
+    const lead = this.acting; // the arriving adventurer (co-op: only this one travels)
     // a monster may have frozen on the very stair we arrive at — step the player to a free neighbour
-    if (this.monsterAt(this.player.x, this.player.y)) {
-      const spot = this.adjacentFree(this.player.x, this.player.y);
-      if (spot) { this.player.x = spot.x; this.player.y = spot.y; }
+    if (this.monsterAt(lead.x, lead.y)) {
+      const spot = this.adjacentFree(lead.x, lead.y);
+      if (spot) { lead.x = spot.x; lead.y = spot.y; }
     }
     this.placeParty();
-    this.scheduleParty();
+    this.rebuildSchedule();
   }
 
   /** Populate a freshly generated level, then place the party and build the schedule. */
@@ -476,33 +475,33 @@ export class Game {
       }
     }
     this.placeParty();
-    this.scheduleParty();
+    this.rebuildSchedule();
   }
 
-  /** Place the co-op partner and the pet beside the arriving player (the party travels together). */
+  /** Place the pet beside the arriving (acting) player. Co-op: the partner does NOT travel — it stays put. */
   private placeParty(): void {
-    if (this.coPlayer && this.coPlayer.alive) {
-      const spot = this.adjacentFree(this.player.x, this.player.y);
-      if (spot) { this.coPlayer.x = spot.x; this.coPlayer.y = spot.y; }
-      else { this.coPlayer.x = this.player.x; this.coPlayer.y = this.player.y; }
-      this.coPlayer.depth = this.player.depth; // shared depth for the HUD
-    }
+    const lead = this.acting;
     if (this.pet && this.pet.alive) {
-      const spot = this.adjacentFree(this.player.x, this.player.y);
+      const spot = this.adjacentFree(lead.x, lead.y);
       if (spot) { this.pet.x = spot.x; this.pet.y = spot.y; }
+      this.pet.floorKey = lead.floorKey; // the hound follows its owner to the new floor
     }
   }
 
-  /** Rebuild the turn scheduler around the active level's actors (only the active level runs). */
-  private scheduleParty(): void {
+  /** Rebuild the scheduler: both players, plus the alive monsters of every floor a player stands on. */
+  private rebuildSchedule(): void {
     this.scheduler.clear();
-    this.player.floorKey = this.activeKey; // the party shares this floor (until co-op split, staged)
-    if (this.coPlayer) this.coPlayer.floorKey = this.activeKey;
-    if (this.pet) this.pet.floorKey = this.activeKey;
-    for (const m of this.monsters) m.floorKey = this.activeKey;
+    this.acting.floorKey = this.activeKey; // the arriving player now stands on this floor
+    if (this.pet && this.pet.alive) this.pet.floorKey = this.acting.floorKey;
     this.scheduler.add(this.player, true);
     if (this.coPlayer && this.coPlayer.alive) this.scheduler.add(this.coPlayer, true);
-    for (const m of this.monsters) if (m.alive) this.scheduler.add(m, true);
+    // every floor that currently has a living player is simulated (dedupe when both share one)
+    const added = new Set<Monster>();
+    for (const key of new Set(this.livingPlayers().map((p) => p.floorKey))) {
+      const mons = key === this.activeKey ? this.monsters : this.slots.get(key)?.monsters;
+      if (!mons) continue;
+      for (const m of mons) if (m.alive && !added.has(m)) { added.add(m); this.scheduler.add(m, true); }
+    }
     if (this.pet && this.pet.alive) this.scheduler.add(this.pet, true);
     this.recomputeFOV();
     this.music.setArea(this.currentAreaId()); // crossfade to this area's soundtrack
@@ -523,37 +522,42 @@ export class Game {
 
   // ── co-op party helpers ──────────────────────────────────────────────────────
   allPlayers(): Player[] { return this.coPlayer ? [this.player, this.coPlayer] : [this.player]; }
-  livingPlayers(): Player[] { return this.allPlayers().filter((p) => p.alive); }
-  playerAt(x: number, y: number): Player | undefined { return this.allPlayers().find((p) => p.alive && p.x === x && p.y === y); }
+  livingPlayers(): Player[] { return this.allPlayers().filter((p) => p.alive); } // global — for game-over
+  /** Living players standing on the floor currently being acted (co-op: floors run independently). */
+  playersHere(): Player[] { return this.livingPlayers().filter((p) => p.floorKey === this.activeKey); }
+  playerAt(x: number, y: number): Player | undefined { return this.playersHere().find((p) => p.x === x && p.y === y); }
   otherPlayerAt(self: Player, x: number, y: number): Player | undefined {
-    return this.allPlayers().find((p) => p !== self && p.alive && p.x === x && p.y === y);
+    return this.playersHere().find((p) => p !== self && p.x === x && p.y === y);
   }
-  /** The living party member closest (Chebyshev) to a point — whom a monster targets. */
+  /** The living party member on this floor closest (Chebyshev) to a point — whom a monster targets. */
   nearestPlayer(x: number, y: number): Player {
-    const live = this.livingPlayers();
+    const pool = this.playersHere();
+    const live = pool.length ? pool : this.livingPlayers(); // fall back to any survivor (callers run on-floor)
     if (live.length === 0) return this.player;
     const d = (p: Player) => Math.max(Math.abs(p.x - x), Math.abs(p.y - y));
     return live.reduce((a, b) => (d(b) < d(a) ? b : a));
   }
-  /** Union field-of-view over the whole living party (shared vision). */
+  /** Separate fog per player: each sees only its own FOV, computed on its OWN floor's level. */
   recomputeFOV(): void {
-    // Separate fog per player: each sees only their own field of view, with their own memory.
-    const r0 = this.player.blind > 0 ? 1 : 8; // blindness shrinks sight to arm's reach
-    this.level.computeFOV(this.player.x, this.player.y, r0);
-    if (this.coPlayer) {
-      const r1 = this.coPlayer.blind > 0 ? 1 : 8;
-      this.level.computeFOVCo(this.coPlayer.x, this.coPlayer.y, r1);
-    }
+    const fovOn = (p: Player, co: boolean) => {
+      const lvl = p.floorKey === this.activeKey ? this.level : this.slots.get(p.floorKey)?.level;
+      if (!lvl) return; // floor not generated yet (mid-build) — the transition will recompute
+      const r = p.blind > 0 ? 1 : 8; // blindness shrinks sight to arm's reach
+      if (co) lvl.computeFOVCo(p.x, p.y, r); else lvl.computeFOV(p.x, p.y, r);
+    };
+    fovOn(this.player, false);
+    if (this.coPlayer) fovOn(this.coPlayer, true);
   }
 
   descend(): void {
     if (this.branch) { this.descendBranch(); return; } // floor-by-floor within a sub-dungeon
-    this.player.depth++;
-    this.player.maxDepthReached = Math.max(this.player.maxDepthReached, this.player.depth);
-    const kind = this.currentChain ? "normal" : this.levelKindFor(this.player.depth);
+    const me = this.acting; // co-op: only the descending adventurer moves
+    me.depth++;
+    me.maxDepthReached = Math.max(me.maxDepthReached, me.depth);
+    const kind = this.currentChain ? "normal" : this.levelKindFor(me.depth);
     const restored = this.beginLevel(this.levelKey(), kind);
-    this.player.x = this.level.start.x; // arrive at this level's up-stair (its start)
-    this.player.y = this.level.start.y;
+    me.x = this.level.start.x; // arrive at this level's up-stair (its start)
+    me.y = this.level.start.y;
     if (restored) {
       this.restoreEnter();
     } else {
@@ -562,23 +566,23 @@ export class Game {
       this.saveActive();
     }
     if (this.level.kind === "bigroom") this.log.add("You descend into THE MEMPOOL — a vast open churn of pending chaos. Loot, and a swarm.", "bad");
-    else if (this.level.kind === "maze") this.log.add(`You descend into the maze of ${realmName(this.player.depth)} — narrow, lightless, and patient.`, "bad");
-    else this.log.add(`You descend to depth ${this.player.depth} — ${realmName(this.player.depth)}.`, this.player.depth >= 9 ? "bad" : "sys");
-    if (this.player.depth >= 9 && this.player.depth < MAX_DEPTH) this.log.add("Chaos thickens. Expect Kusama.", "bad");
-    if (this.player.depth === MAX_DEPTH && !this.gehennomOpen) this.log.add("The foot of the relay. The vibrating square (≈) hums — perform the Invocation (I) with all three relics.", "bad");
-    else if (this.player.depth === MAX_DEPTH) this.log.add("The foot of the relay — the gate to the Dark Forest stands open below. (>)", "bad");
-    else if (this.player.depth > MAX_DEPTH && this.player.depth < GEHENNOM_BOTTOM) this.log.add("You sink into the Dark Forest — Gehennom. Censorship weeps from the walls.", "bad");
-    else if (this.player.depth >= GEHENNOM_BOTTOM) this.log.add("The bottom of all things. MOLOCH, the Central Planner, hoards the JAM here.", "bad");
+    else if (this.level.kind === "maze") this.log.add(`You descend into the maze of ${realmName(me.depth)} — narrow, lightless, and patient.`, "bad");
+    else this.log.add(`You descend to depth ${me.depth} — ${realmName(me.depth)}.`, me.depth >= 9 ? "bad" : "sys");
+    if (me.depth >= 9 && me.depth < MAX_DEPTH) this.log.add("Chaos thickens. Expect Kusama.", "bad");
+    if (me.depth === MAX_DEPTH && !this.gehennomOpen) this.log.add("The foot of the relay. The vibrating square (≈) hums — perform the Invocation (I) with all three relics.", "bad");
+    else if (me.depth === MAX_DEPTH) this.log.add("The foot of the relay — the gate to the Dark Forest stands open below. (>)", "bad");
+    else if (me.depth > MAX_DEPTH && me.depth < GEHENNOM_BOTTOM) this.log.add("You sink into the Dark Forest — Gehennom. Censorship weeps from the walls.", "bad");
+    else if (me.depth >= GEHENNOM_BOTTOM) this.log.add("The bottom of all things. MOLOCH, the Central Planner, hoards the JAM here.", "bad");
     this.draw();
   }
 
   // ── XCM: parachain side-branches (each scales difficulty × loot) ────────────
   private placePortals(): void {
-    if (this.currentChain || this.player.depth < 2 || this.player.depth >= MAX_DEPTH) return; // XCM branches off the relay descent (d2 .. foot of the relay), not Gehennom
+    if (this.currentChain || this.acting.depth < 2 || this.acting.depth >= MAX_DEPTH) return; // XCM branches off the relay descent (d2 .. foot of the relay), not Gehennom
     const n = ROT.RNG.getUniform() < 0.7 ? (ROT.RNG.getUniform() < 0.3 ? 2 : 1) : 0;
     for (let i = 0; i < n; i++) {
       const centers = this.level.roomCenters.filter(
-        (c) => this.level.tileAt(c.x, c.y) === "floor" && !(c.x === this.player.x && c.y === this.player.y) && !this.level.portalAt(c.x, c.y),
+        (c) => this.level.tileAt(c.x, c.y) === "floor" && !(c.x === this.acting.x && c.y === this.acting.y) && !this.level.portalAt(c.x, c.y),
       );
       if (!centers.length) break;
       const c = ROT.RNG.getItem(centers)!;
@@ -592,8 +596,8 @@ export class Game {
   enterChain(chain: ChainDef): void {
     this.currentChain = chain;
     const restored = this.beginLevel(this.levelKey(), (chain.layout as LevelKind) ?? "normal"); // each parachain has a signature layout
-    this.player.x = this.level.start.x;
-    this.player.y = this.level.start.y;
+    this.acting.x = this.level.start.x;
+    this.acting.y = this.level.start.y;
     if (restored) {
       this.restoreEnter();
     } else {
@@ -616,16 +620,16 @@ export class Game {
     const from = this.currentChain?.name ?? "the branch";
     this.currentChain = null;
     const restored = this.beginLevel(this.levelKey(), "normal");
-    this.player.x = this.level.stairs.x; // back on the relay, at its down-stair
-    this.player.y = this.level.stairs.y;
+    this.acting.x = this.level.stairs.x; // back on the relay, at its down-stair
+    this.acting.y = this.level.stairs.y;
     if (restored) {
       this.restoreEnter();
     } else {
-      if (this.player.depth > 1) this.placeUpStair();
+      if (this.acting.depth > 1) this.placeUpStair();
       this.enterLevel();
       this.saveActive();
     }
-    this.log.add(`XCM ← you return from ${from} to the relay at depth ${this.player.depth}.`, "sys");
+    this.log.add(`XCM ← you return from ${from} to the relay at depth ${this.acting.depth}.`, "sys");
     this.draw();
   }
 
@@ -634,10 +638,10 @@ export class Game {
   private placeBranchEntrance(): void {
     if (this.currentChain) return; // branches root in the main dungeon only
     for (const b of BRANCHES) {
-      if (this.player.depth !== b.entryDepth) continue;
+      if (this.acting.depth !== b.entryDepth) continue;
       if (this.level.branchEntries.some((e) => e.branchId === b.id)) continue;
       const centers = this.level.roomCenters.filter(
-        (c) => this.level.tileAt(c.x, c.y) === "floor" && !(c.x === this.player.x && c.y === this.player.y) && !this.level.portalAt(c.x, c.y),
+        (c) => this.level.tileAt(c.x, c.y) === "floor" && !(c.x === this.acting.x && c.y === this.acting.y) && !this.level.portalAt(c.x, c.y),
       );
       const c = centers.length ? ROT.RNG.getItem(centers)! : this.level.randomFloor();
       this.level.tiles[c.y][c.x] = "branchDown";
@@ -657,7 +661,6 @@ export class Game {
 
   /** Enter a branch at its mouth (floor 1); progress runs via > toward the prize on the End floor. */
   enterBranch(def: BranchDef): void {
-    this.branchReturnDepth = this.player.depth;
     this.enterBranchFloor(def, 1, "down");
     this.log.add(`${branchEntryFlavor(def) ?? `You clamber down into ${chainName(def)}.`} (< to climb back toward ${fp("the dungeon", "the relay")})`, "bad");
     this.draw();
@@ -688,19 +691,19 @@ export class Game {
     // top floor → leave the branch, back onto the host relay level at the branch-stair
     this.currentChain = null;
     this.branchFloor = 0;
-    this.player.depth = this.branchReturnDepth;
-    const restored = this.beginLevel(this.levelKey(), this.levelKindFor(this.player.depth));
+    this.acting.depth = def.entryDepth; // a branch always roots at its entryDepth on the main descent
+    const restored = this.beginLevel(this.levelKey(), this.levelKindFor(this.acting.depth));
     const entry = this.level.branchEntries.find((e) => e.branchId === def.id);
     const at = entry ?? this.level.start;
-    this.player.x = at.x; this.player.y = at.y;
+    this.acting.x = at.x; this.acting.y = at.y;
     if (restored) {
       this.restoreEnter();
     } else {
-      if (this.player.depth > 1) this.placeUpStair();
+      if (this.acting.depth > 1) this.placeUpStair();
       this.enterLevel();
       this.saveActive();
     }
-    this.log.add(`You climb out of ${def.name}, back onto the relay at depth ${this.player.depth}.`, "sys");
+    this.log.add(`You climb out of ${def.name}, back onto the relay at depth ${this.acting.depth}.`, "sys");
     this.draw();
   }
 
@@ -708,16 +711,16 @@ export class Game {
   private enterBranchFloor(def: BranchDef, floor: number, dir: "up" | "down"): void {
     this.currentChain = def;
     this.branchFloor = floor;
-    this.player.depth = def.entryDepth + floor; // effective depth scales spawns/loot
-    this.player.maxDepthReached = Math.max(this.player.maxDepthReached, this.player.depth);
+    this.acting.depth = def.entryDepth + floor; // effective depth scales spawns/loot
+    this.acting.maxDepthReached = Math.max(this.acting.maxDepthReached, this.acting.depth);
     const restored = this.beginLevel(this.levelKey(), def.sokoban ? "sokoban" : (def.layout as LevelKind));
     if (!restored && def.sokoban) this.buildSokobanFloor(def, floor); // stamp the prefab (sets start/stairs) before we read them
     const arrive = dir === "down" ? this.level.start : this.level.stairs; // down→up-stair, up→down-stair
-    this.player.x = arrive.x; this.player.y = arrive.y;
+    this.acting.x = arrive.x; this.acting.y = arrive.y;
     if (restored) {
       this.restoreEnter();
     } else if (def.sokoban) {
-      this.placeParty(); this.scheduleParty(); // a hand-built floor is fully populated by buildSokobanFloor — no procedural spawn
+      this.placeParty(); this.rebuildSchedule(); // a hand-built floor is fully populated by buildSokobanFloor — no procedural spawn
       this.saveActive();
     } else {
       this.placeUpStair(); // the way back up toward the relay
@@ -745,7 +748,7 @@ export class Game {
     const guard = MONSTERS.find((m) => m.ch === "O") ?? MONSTERS[MONSTERS.length - 1]; // a whale wards the hoard
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]] as [number, number][]) {
       const x = s.x + dx, y = s.y + dy;
-      if (this.level.isPassable(x, y) && !this.monsterAt(x, y) && !(x === this.player.x && y === this.player.y)) {
+      if (this.level.isPassable(x, y) && !this.monsterAt(x, y) && !(x === this.acting.x && y === this.acting.y)) {
         const m = new Monster(this, guard, x, y);
         this.monsters.push(m);
         this.scheduler.add(m, true); // enterLevel already scheduled; add the late-placed guardian
@@ -758,9 +761,9 @@ export class Game {
   /** Open the homeland portal once, on the quest depth, until the Quest is done. */
   private placeQuestPortal(): void {
     if (this.questDone || this.inQuest || this.currentChain) return; // only on the main relay descent
-    const q = questFor(this.player.archetype);
-    if (this.player.depth !== q.portalDepth) return;
-    const centers = this.level.roomCenters.filter((c) => this.level.tileAt(c.x, c.y) === "floor" && !this.level.portalAt(c.x, c.y) && !(c.x === this.player.x && c.y === this.player.y));
+    const q = questFor(this.acting.archetype);
+    if (this.acting.depth !== q.portalDepth) return;
+    const centers = this.level.roomCenters.filter((c) => this.level.tileAt(c.x, c.y) === "floor" && !this.level.portalAt(c.x, c.y) && !(c.x === this.acting.x && c.y === this.acting.y));
     const c = centers.length ? ROT.RNG.getItem(centers)! : this.level.randomFloor();
     this.level.tiles[c.y][c.x] = "portal";
     this.level.portals.push({ x: c.x, y: c.y, chain: CHAINS[0], quest: true });
@@ -769,11 +772,12 @@ export class Game {
 
   /** Enter the Quest homeland: your nemesis guards your signature artifact. */
   enterQuest(): void {
-    const q = questFor(this.player.archetype);
+    const me = this.acting;
+    const q = questFor(me.archetype);
     if (this.questDone) {
       // the homeland portal persists on the relay level now — spend it once the Quest is fulfilled
-      this.level.tiles[this.player.y][this.player.x] = "floor";
-      const pi = this.level.portals.findIndex((p) => p.x === this.player.x && p.y === this.player.y);
+      this.level.tiles[me.y][me.x] = "floor";
+      const pi = this.level.portals.findIndex((p) => p.x === me.x && p.y === me.y);
       if (pi >= 0) this.level.portals.splice(pi, 1);
       this.log.add("Your Quest is fulfilled — the homeland portal has gone dark.", "dim");
       this.recomputeFOV(); this.draw();
@@ -782,8 +786,8 @@ export class Game {
     this.inQuest = true;
     this.currentChain = null;
     const restored = this.beginLevel(this.levelKey(), "normal");
-    this.player.x = this.level.start.x;
-    this.player.y = this.level.start.y;
+    me.x = this.level.start.x;
+    me.y = this.level.start.y;
     if (restored) {
       this.restoreEnter();
     } else {
@@ -806,16 +810,16 @@ export class Game {
   private exitQuest(): void {
     this.inQuest = false;
     const restored = this.beginLevel(this.levelKey(), "normal");
-    this.player.x = this.level.stairs.x;
-    this.player.y = this.level.stairs.y;
+    this.acting.x = this.level.stairs.x;
+    this.acting.y = this.level.stairs.y;
     if (restored) {
       this.restoreEnter();
     } else {
-      if (this.player.depth > 1) this.placeUpStair();
+      if (this.acting.depth > 1) this.placeUpStair();
       this.enterLevel();
       this.saveActive();
     }
-    this.log.add(`You return from your Quest to the relay at depth ${this.player.depth}.`, "sys");
+    this.log.add(`You return from your Quest to the relay at depth ${this.acting.depth}.`, "sys");
     this.draw();
   }
 
@@ -825,16 +829,17 @@ export class Game {
     if (this.currentChain) { this.exitChain(); return; }
     if (this.plane > 0) { this.enterPlane(this.plane + 1); return; } // climb higher through the Planes
     const holder = this.allPlayers().find((p) => p.hasJam);
-    const newDepth = this.player.depth - 1;
+    const me = this.acting; // co-op: only the climbing adventurer moves
+    const newDepth = me.depth - 1;
     if (newDepth < 1) {
       // at the surface: the JAM drags you UPWARD into the Planes; without it, the world ends here
       if (holder) this.enterPlane(1);
       return;
     }
-    this.player.depth = newDepth;
+    me.depth = newDepth;
     const restored = this.beginLevel(this.levelKey(), this.levelKindFor(newDepth));
-    this.player.x = this.level.stairs.x; // you climb up INTO the down-stairs of the level above
-    this.player.y = this.level.stairs.y;
+    me.x = this.level.stairs.x; // you climb up INTO the down-stairs of the level above
+    me.y = this.level.stairs.y;
     if (restored) {
       this.restoreEnter();
     } else {
@@ -843,7 +848,7 @@ export class Game {
       this.saveActive();
     }
     // with the JAM at the surface, a stair beyond the world opens upward into the Planes
-    if (newDepth === 1 && holder) this.level.tiles[this.player.y][this.player.x] = "stairsUp";
+    if (newDepth === 1 && holder) this.level.tiles[me.y][me.x] = "stairsUp";
     this.log.add(`You climb to depth ${newDepth} — ${realmName(newDepth)}.`, "sys");
     if (newDepth === 1 && holder) this.log.add("The surface is near — but the JAM hauls you UPWARD, past the world itself. Climb (<) into the Planes.", "good");
     this.draw();
@@ -852,13 +857,15 @@ export class Game {
   /** Enter the n-th Plane of the ascent (1..PLANES.length). The last is the Genesis Plane. */
   private enterPlane(n: number): void {
     if (n > PLANES.length) return; // already atop the Genesis Plane — offer the JAM, don't climb
-    this.saveActive(); // persist the dungeon level being left (planes themselves aren't stored — no path back down)
+    this.saveActive(); // persist the dungeon/plane level being left (no descent back, but keep its slot live)
+    this.activeKey = `plane:${n}`; // the live floor is now this plane — so per-actor setActive finds it
     this.plane = n;
     this.currentChain = null;
     this.level = new Level(W, MAP_H, PLANE_KINDS[n - 1] ?? "normal"); // each Plane its own layout
-    this.player.x = this.level.start.x;
-    this.player.y = this.level.start.y;
-    this.enterLevel(); // routes through setupPlane() since plane > 0
+    this.acting.x = this.level.start.x;
+    this.acting.y = this.level.start.y;
+    this.enterLevel(); // routes through setupPlane() since plane > 0; rebuildSchedule tags acting.floorKey = plane:n
+    this.slots.set(this.activeKey, { level: this.level, monsters: this.monsters }); // register so setActive can return here
     const def = PLANES[n - 1];
     this.log.add(`You rise onto ${def.name}. ${def.flavor}`, n === PLANES.length ? "good" : "sys");
     this.draw();
@@ -897,8 +904,9 @@ export class Game {
   /** Once the JAM is taken, THE CENSOR keeps resurrecting to chase it. Called each player turn. */
   censorHuntTick(): void {
     if (this.over) return;
-    const hunting = this.allPlayers().some((q) => q.alive && q.hasJam) || this.jamStolen;
-    if (!hunting) return;
+    const holder = this.allPlayers().find((q) => q.alive && q.hasJam);
+    if (!holder && !this.jamStolen) return;
+    if (holder) this.setActive(holder.floorKey); // the hunt always rises on the JAM-bearer's floor
     if (this.monsters.some((m) => m.alive && m.isHunter)) return; // a hunter already stalks this level
     if (this.censorTimer > 0) { this.censorTimer--; return; }
     this.summonCensor();
