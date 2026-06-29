@@ -2680,11 +2680,11 @@ export class Game {
 
   async tryBuy(): Promise<void> {
     if (this.busy) return;
-    if (this.coop) { this.log.add("Shops & forging are solo-only in co-op for now.", "dim"); return; }
     const fi = this.level.itemAt(this.acting.x, this.acting.y);
     if (!fi || !fi.price) { this.log.add("There is nothing for sale here.", "dim"); return; }
 
-    // Standard wares are bought with in-game gold — instant, no wallet.
+    // Standard wares are bought with in-game gold — instant, no wallet. Works in co-op too:
+    // each adventurer spends their own purse (giveItem credits the acting player).
     if (!fi.nft) {
       const p = this.acting;
       if (p.gold < fi.price) { this.log.add(`Not enough gold — ${this.ident.name(fi.type)} costs ${fi.price}, you hold ${p.gold}.`, "bad"); return; }
@@ -2692,12 +2692,13 @@ export class Game {
       this.breakConduct(p, "bankless");
       this.giveItem(fi.type, { enchant: fi.enchant, relic: fi.relic, buc: fi.buc, bucKnown: fi.bucKnown });
       this.level.items = this.level.items.filter((i) => i !== fi);
-      this.log.add(`You buy ${this.ident.name(fi.type)} for ${fi.price} gold. (${p.gold} left)`, "good");
+      this.log.add(`${this.sub(p)} ${this.verbS(p, "buy")} ${this.ident.name(fi.type)} for ${fi.price} gold. (${p.gold} left)`, "good");
       this.draw();
       return;
     }
 
-    // NFT gear — a real wallet transaction, like an NFT trade/mint.
+    // NFT gear — a real wallet transaction, like an NFT trade/mint. Solo-only for now (one wallet).
+    if (this.coop) { this.log.add("NFT relics are a solo-only purchase for now — but standard wares take gold.", "dim"); return; }
     if (!this.wallet) { this.log.add("That's an NFT relic — connect a wallet (button above) to mint-buy it.", "bad"); return; }
     if (this.player.pas < fi.price) { this.log.add(`Not enough PAS — ${this.ident.name(fi.type)} costs ${fi.price}, your wallet holds ${this.player.pas.toFixed(1)}.`, "bad"); return; }
 
