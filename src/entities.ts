@@ -1,6 +1,7 @@
 import * as ROT from "rot-js";
 import type { Game } from "./game";
-import { COLORS, MonsterDef, SPELLS, spellById } from "./data";
+import { COLORS, MonsterDef, SPELLS, spellById, monName } from "./data";
+import { fp } from "./flavor";
 import { Inventory, Item } from "./inventory";
 import { bucDelta, ITEMS, ItemType, ArmorSlot } from "./items";
 
@@ -213,11 +214,11 @@ export class Player extends Entity {
     if (this.blind > 0 && --this.blind === 0) { this.game.log.add(`${this.name === "you" ? "Your sight returns" : this.name + "'s sight returns"}.`, "good"); this.game.recomputeFOV(); }
     // Petrification & illness are countdowns you must out-race (prayer / a cure).
     if (this.stoning > 0 && --this.stoning === 0) {
-      this.game.log.add(`${this.name === "you" ? "You freeze" : this.name + " freezes"} solid — finality denied.`, "bad");
+      this.game.log.add(`${this.name === "you" ? "You freeze" : this.name + " freezes"} solid — ${fp("turned to stone", "finality denied")}.`, "bad");
       this.game.killPlayer(this);
     }
     if (this.illness > 0 && --this.illness === 0) {
-      this.game.log.add(`${this.name === "you" ? "You succumb" : this.name + " succumbs"} to the bad block.`, "bad");
+      this.game.log.add(`${this.name === "you" ? "You succumb" : this.name + " succumbs"} to ${fp("the sickness", "the bad block")}.`, "bad");
       this.game.killPlayer(this);
     }
     this.game.turn++;
@@ -784,7 +785,7 @@ export class Monster extends Entity {
     this.y = y;
     this.ch = def.ch;
     this.fg = def.fg;
-    this.name = def.name;
+    this.name = monName(def);
     this.hp = this.maxHp = def.hp;
     this.attackDmg = def.dmg;
     // Phase 18 balance: ordinary monsters scale with depth so the lengthened d1–20 descent keeps
@@ -949,7 +950,7 @@ export class Pet extends Entity {
   constructor(game: Game, x: number, y: number) {
     super(game);
     this.x = x; this.y = y;
-    this.ch = "d"; this.fg = "#80d080"; this.name = "your nominator";
+    this.ch = "d"; this.fg = "#80d080"; this.name = fp("your hound", "your nominator");
     this.hp = this.maxHp = 14;
     this.attackDmg = [2, 4];
   }

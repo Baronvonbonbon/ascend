@@ -4,10 +4,12 @@ import { Entity, Player, Monster, Pet } from "./entities";
 import { Item } from "./inventory";
 import { Log } from "./log";
 import {
-  COLORS, TILE_GLYPH, TileType, MONSTERS, MonsterDef, DEATHS, GREETINGS,
-  MAX_DEPTH, CENSOR, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, PRIEST, realmName, GRAY_PAPER, ChainDef, CHAINS, BranchDef, BRANCHES, branchById, questFor,
+  COLORS, TILE_GLYPH, TileType, MONSTERS, MonsterDef, deaths, greetings,
+  MAX_DEPTH, CENSOR, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, PRIEST, realmName, grayPaper, ChainDef, CHAINS, BranchDef, BRANCHES, branchById, questFor,
   abilityMod, archetypeById, ATTRS, ATTR_LABEL, spellById, Ethos,
+  monName, questHomeland, archetypeName, ethosName, spellName, chainName, branchEnd, branchEntryFlavor,
 } from "./data";
+import { fp, skin, toggleFlavor } from "./flavor";
 import { Idents, ITEMS, JAM, CORPSE, CHEST, WRITABLE_SCROLLS, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
 import { connectWallet, Wallet } from "./chain/wallet";
 import { walletBalancePas, buyDirect } from "./chain/bank";
@@ -105,6 +107,7 @@ export class Game {
   private busy = false; // a wallet transaction is in flight — input is frozen
   private debugPending = false; // DEBUG: a backtick was pressed; the next key is a debug command
   private godMode = false;      // DEBUG: negate player death
+  private konami: string[] = []; // recent keys, watched for the Konami code (flavor toggle)
 
   // ── co-op (host-authoritative over WebRTC) ──
   acting!: Player;              // the player whose input is currently being processed
@@ -168,8 +171,8 @@ export class Game {
     }
     this.enterLevel();
     this.saveActive(); // register depth 1 in the level store
-    this.log.add(ROT.RNG.getItem(GREETINGS)!, "sys");
-    for (const line of GRAY_PAPER) this.log.add(line, "dim");
+    this.log.add(ROT.RNG.getItem(greetings())!, "sys");
+    for (const line of grayPaper()) this.log.add(line, "dim");
     if (this.coop) this.log.add(`Co-op (${this.coopMode}) — Host and Guest share this dungeon. Find the JAM together.`, "sys");
     else this.log.add("Your nominator (d) pads at your heels — it backs you, and bites for you.", "dim");
     this.log.add("Keys: move · , pick up · o open chest · @ sheet · p buy · F forge · P pray · O offer · q faucet · s search/sit · z zap · Z cast · t throw · a apply · E engrave · < > stairs · i/w/W/q/r/e/d items.", "dim");
@@ -296,13 +299,13 @@ export class Game {
 
   showCharSheet(): void {
     const p = this.acting;
-    this.log.add(`— ${p.name === "you" ? "You" : p.name}, ${p.title ? p.title + " " : ""}${cap(p.archetype)} · ${p.ethos} · epoch ${p.level} —`, "sys");
+    this.log.add(`— ${p.name === "you" ? "You" : p.name}, ${p.title ? p.title + " " : ""}${archetypeName(archetypeById(p.archetype))} · ${ethosName(p.ethos)} · epoch ${p.level} —`, "sys");
     this.log.add(`  ${ATTRS.map((a) => `${ATTR_LABEL[a]} ${p[a]}`).join("  ")}`, "dim");
     this.log.add(`  HP ${p.hp}/${p.maxHp}  AC ${p.ac}  Fortune ${this.luckOf(p) >= 0 ? "+" : ""}${this.luckOf(p)}  XP ${p.xp}/${this.xpForLevel(p.level + 1)}`, "dim");
     const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", fast: "fast", telepathy: "telepathy" } as Record<string, string>)[i] ?? i);
     if (intr.length) this.log.add(`  Intrinsics: ${intr.join(", ")}.`, "good");
-    if (p.spells.size) this.log.add(`  Energy ${p.energy}/${p.maxEnergy}. Extrinsics: ${[...p.spells].map((id) => spellById(id)?.name ?? id).join(", ")}. (Z to cast)`, "sys");
-    this.log.add(`  Ethos: ${p.ethos}, favor ${p.favor}${p.crowned ? " — Technical Fellowship " + p.title : ""}.`, "dim");
+    if (p.spells.size) this.log.add(`  Energy ${p.energy}/${p.maxEnergy}. ${fp("Spells", "Extrinsics")}: ${[...p.spells].map((id) => { const s = spellById(id); return s ? spellName(s) : id; }).join(", ")}. (Z to cast)`, "sys");
+    this.log.add(`  ${fp("Alignment", "Ethos")}: ${ethosName(p.ethos)}, favor ${p.favor}${p.crowned ? ` — ${fp("Knighted", "Technical Fellowship")} ${p.title}` : ""}.`, "dim");
     const kept = CONDUCTS.filter((c) => p.conducts.has(c.id));
     if (kept.length) this.log.add(`  Vows kept: ${kept.map((c) => c.label).join(", ")}.`, "good");
     else this.log.add("  Vows kept: none — you walk no narrow path.", "dim");
@@ -311,8 +314,8 @@ export class Game {
   /** `#audit` (A) — a full enlightenment dump: everything the character sheet has, and more. A free read. */
   showAudit(): void {
     const p = this.acting;
-    this.log.add(`— Audit report: ${p.name === "you" ? "you" : p.name}, ${p.title ? p.title + " " : ""}${cap(p.archetype)} —`, "sys");
-    this.log.add(`  ${p.ethos} · epoch ${p.level} · XP ${p.xp}/${this.xpForLevel(p.level + 1)}${p.crowned ? ` · Technical Fellowship ${p.title}` : ""}.`, "dim");
+    this.log.add(`— ${fp("Character record", "Audit report")}: ${p.name === "you" ? "you" : p.name}, ${p.title ? p.title + " " : ""}${archetypeName(archetypeById(p.archetype))} —`, "sys");
+    this.log.add(`  ${ethosName(p.ethos)} · epoch ${p.level} · XP ${p.xp}/${this.xpForLevel(p.level + 1)}${p.crowned ? ` · ${fp("Knighted", "Technical Fellowship")} ${p.title}` : ""}.`, "dim");
     this.log.add(`  ${ATTRS.map((a) => `${ATTR_LABEL[a]} ${p[a]}`).join("  ")}`, "dim");
     this.log.add(`  HP ${p.hp}/${p.maxHp}  AC ${p.ac}  En ${p.energy}/${p.maxEnergy}  Speed ${p.getSpeed()}  Fortune ${this.luckOf(p) >= 0 ? "+" : ""}${this.luckOf(p)}.`, "dim");
     // weapon skills
@@ -557,7 +560,7 @@ export class Game {
       }
       this.saveActive();
     }
-    this.log.add(`XCM → ${chain.name}: difficulty ×${chain.difficulty}, loot ×${chain.loot}. (< to return to the relay)`, chain.difficulty >= 1 ? "bad" : "sys");
+    this.log.add(`${fp("You enter", "XCM →")} ${chainName(chain)}: difficulty ×${chain.difficulty}, loot ×${chain.loot}. (< to return to ${fp("the dungeon", "the relay")})`, chain.difficulty >= 1 ? "bad" : "sys");
     this.draw();
   }
 
@@ -608,7 +611,7 @@ export class Game {
   enterBranch(def: BranchDef): void {
     this.branchReturnDepth = this.player.depth;
     this.enterBranchFloor(def, 1, "down");
-    this.log.add(`${def.entryFlavor ?? `You clamber down into ${def.name}.`} (< to climb back toward the relay)`, "bad");
+    this.log.add(`${branchEntryFlavor(def) ?? `You clamber down into ${chainName(def)}.`} (< to climb back toward ${fp("the dungeon", "the relay")})`, "bad");
     this.draw();
   }
 
@@ -618,8 +621,8 @@ export class Game {
     this.enterBranchFloor(def, this.branchFloor + 1, "down");
     const atEnd = this.branchFloor >= def.floors;
     this.log.add(
-      atEnd ? `You reach ${def.end}. ${itemById(def.prizeId)!.name} gleams in the dark — and something guards it.`
-            : `You press deeper into ${def.name} — floor ${this.branchFloor} of ${def.floors}.`,
+      atEnd ? `You reach ${branchEnd(def)}. ${this.ident.name(itemById(def.prizeId)!)} gleams in the dark — and something guards it.`
+            : `You press deeper into ${chainName(def)} — floor ${this.branchFloor} of ${def.floors}.`,
       "bad",
     );
     this.draw();
@@ -630,7 +633,7 @@ export class Game {
     const def = this.branch!;
     if (this.branchFloor > 1) {
       this.enterBranchFloor(def, this.branchFloor - 1, "up");
-      this.log.add(`You climb back up ${def.name} — floor ${this.branchFloor} of ${def.floors}.`, "sys");
+      this.log.add(`You climb back up ${chainName(def)} — floor ${this.branchFloor} of ${def.floors}.`, "sys");
       this.draw();
       return;
     }
@@ -713,7 +716,7 @@ export class Game {
     const c = centers.length ? ROT.RNG.getItem(centers)! : this.level.randomFloor();
     this.level.tiles[c.y][c.x] = "portal";
     this.level.portals.push({ x: c.x, y: c.y, chain: CHAINS[0], quest: true });
-    this.log.add(`A portal pulses with your homeland's sigil — your Quest awaits in ${q.homeland} (Ω, > to enter). Slay your nemesis, claim your artifact.`, "good");
+    this.log.add(`A portal pulses with your homeland's sigil — your Quest awaits in ${questHomeland(q)} (Ω, > to enter). Slay your nemesis, claim your artifact.`, "good");
   }
 
   /** Enter the Quest homeland: your nemesis guards your signature artifact. */
@@ -748,7 +751,7 @@ export class Game {
       this.scheduler.add(nemesis, true); // enterLevel already scheduled; add the late-placed nemesis
       this.saveActive();
     }
-    this.log.add(`You step into ${q.homeland}. ${cap(q.nemesis.name)} bars the way to ${itemById(q.artifactId)!.name}. (< to flee home)`, "bad");
+    this.log.add(`You step into ${questHomeland(q)}. ${cap(monName(q.nemesis))} bars the way to ${this.ident.name(itemById(q.artifactId)!)}. (< to flee home)`, "bad");
     this.draw();
   }
 
@@ -839,7 +842,7 @@ export class Game {
   noteTile(p: Player): void {
     if (this.plane !== PLANES.length) return;
     const a = this.genesisAltars.find((g) => g.x === p.x && g.y === p.y);
-    if (a) this.log.add(`This altar resonates with ${a.ethos}.${a.ethos === p.ethos ? " It is yours — offer the JAM (O)." : " Not your alignment."}`, a.ethos === p.ethos ? "good" : "dim");
+    if (a) this.log.add(`This altar resonates with ${ethosName(a.ethos)}.${a.ethos === p.ethos ? ` It is yours — offer the ${fp("Amulet", "JAM")} (O).` : " Not your alignment."}`, a.ethos === p.ethos ? "good" : "dim");
   }
 
   // ── the Censor's hunt (Phase 12d) ──
@@ -1437,7 +1440,7 @@ export class Game {
     }
     const it = this.level.itemAt(x, y);
     if (it) {
-      const what = it.corpse ? `the corpse of ${it.corpse.def.name}` : it.chest ? `a ${it.chest.locked ? "locked " : ""}chest` : this.ident.name(it.type);
+      const what = it.corpse ? `the corpse of ${monName(it.corpse.def)}` : it.chest ? `a ${it.chest.locked ? "locked " : ""}chest` : this.ident.name(it.type);
       this.log.add(`You see ${what} lying there.`, "sys");
       return;
     }
@@ -1576,12 +1579,12 @@ export class Game {
     if (this.plane === PLANES.length && p.hasJam) {
       const altar = this.genesisAltars.find((g) => g.x === p.x && g.y === p.y);
       if (altar && altar.ethos === p.ethos) {
-        this.log.add(`You lay the JAM upon the ${altar.ethos} altar of pure intent. It dissolves into first light.`, "good");
+        this.log.add(`You lay the ${fp("Amulet", "JAM")} upon the ${ethosName(altar.ethos)} altar of pure intent. It dissolves into first light.`, "good");
         this.win(p);
         return true;
       }
       // wrong-aligned altar: rejected, blasted, and a guardian erupts — find your own altar
-      this.log.add(`The ${altar?.ethos ?? "alien"} altar flares and REJECTS your offering — this is not your alignment (${p.ethos}). Seek your own.`, "bad");
+      this.log.add(`The ${altar ? ethosName(altar.ethos) : "alien"} altar flares and REJECTS your offering — this is not your alignment (${ethosName(p.ethos)}). Seek your own.`, "bad");
       const dmg = ROT.RNG.getUniformInt(5, 12); p.hp -= dmg;
       this.log.add(`Reproachful fire scours you for ${dmg}.`, "bad");
       const spot = this.adjacentFree(p.x, p.y);
@@ -1600,7 +1603,7 @@ export class Game {
     if (!fi || !fi.corpse) { this.log.add("There's no corpse on or beside the altar to offer. (kill something near it)", "dim"); return false; }
     this.breakConduct(p, "atheist"); // sacrificing at an altar ends Self-custodian
     const rotten = this.turn - fi.corpse.born > 60;
-    const name = fi.corpse.def.name;
+    const name = monName(fi.corpse.def);
     this.level.items = this.level.items.filter((i) => i !== fi);
     if (rotten) {
       p.luck = Math.max(-13, p.luck - 1);
@@ -1686,7 +1689,7 @@ export class Game {
     this.over = true;
     this.engine.lock(); // stop the engine looping forever over the surviving monsters (no player promise → freeze)
     this.player.hp = 0;
-    this.log.add(ROT.RNG.getItem(DEATHS)!, "bad");
+    this.log.add(ROT.RNG.getItem(deaths())!, "bad");
     this.log.add(`You fell at depth ${this.player.depth} (deepest ${this.player.maxDepthReached}). Press R to try again.`, "sys");
     this.conductReport(this.player);
     this.music.playStinger("death");
@@ -1766,7 +1769,7 @@ export class Game {
     }
     else if (a instanceof Player && d instanceof Player) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg} — friendly fire!`, "bad");
     else if (a === this.pet) this.log.add(`Your nominator savages ${d.name} for ${dmg}.`, "good");
-    else if (d === this.pet) this.log.add(`${cap(a.name)} mauls your nominator for ${dmg}.`, "bad");
+    else if (d === this.pet) this.log.add(`${cap(a.name)} mauls ${this.pet?.name ?? fp("your hound", "your nominator")} for ${dmg}.`, "bad");
     if (d.hp <= 0) {
       if (a instanceof Player && d instanceof Monster) this.gainXp(a, d.maxHp); // XP = the foe's vitality
       this.kill(d);
@@ -2351,7 +2354,7 @@ export class Game {
     const fi = this.level.itemAt(who.x, who.y);
     if (!fi) { this.log.add("There is nothing here to pick up.", "dim"); return false; }
     if (fi.chest) { this.log.add("It's a chest — press o to open it.", "dim"); return false; }
-    if (fi.corpse) { this.log.add(`Best eaten where it lies — press e to eat the ${fi.corpse.def.name} corpse.`, "dim"); return false; }
+    if (fi.corpse) { this.log.add(`Best eaten where it lies — press e to eat the ${monName(fi.corpse.def)} corpse.`, "dim"); return false; }
     if (fi.type.id === "jam") {
       who.hasJam = true;
       this.level.items = this.level.items.filter((i) => i !== fi);
@@ -2931,6 +2934,32 @@ export class Game {
   }
   // ═══ end DEBUG block ═══════════════════════════════════════════════════════
 
+  private static readonly KONAMI = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "b", "a"];
+  /** Track recent keys; on the full Konami code, toggle flavor. Returns true only on completion (consumes the key). */
+  private konamiCheck(key: string): boolean {
+    this.konami.push(key);
+    if (this.konami.length > Game.KONAMI.length) this.konami.shift();
+    if (this.konami.length === Game.KONAMI.length && Game.KONAMI.every((k, i) => k === this.konami[i])) {
+      this.konami = [];
+      this.toggleFlavorMode();
+      return true;
+    }
+    return false;
+  }
+
+  /** Flip the whole game between the fantasy skin and the Polkadot skin, live. */
+  private toggleFlavorMode(): void {
+    const f = toggleFlavor();
+    for (const slot of this.slots.values()) for (const m of slot.monsters) m.name = monName(m.def);
+    for (const m of this.monsters) m.name = monName(m.def);
+    if (this.pet) this.pet.name = fp("your hound", "your nominator");
+    this.log.add(f === "fantasy"
+      ? "✦ The chains fade — a classic dungeon of fantasy reveals itself."
+      : "✦ The veil lifts — the Polkadot truth shows through.", "good");
+    this.recomputeFOV();
+    this.draw();
+  }
+
   private onKey(e: KeyboardEvent): void {
     if (e.ctrlKey || e.metaKey || e.altKey) return; // let browser shortcuts (refresh, copy, devtools) through
     if (this.netRole === "guest") { this.peer?.send({ t: "input", key: e.key }); e.preventDefault(); return; }
@@ -2940,6 +2969,7 @@ export class Game {
       return;
     }
     if (this.coop && !this.player.alive) { e.preventDefault(); return; } // host downed — spectate
+    if (this.konamiCheck(e.key)) { e.preventDefault(); return; } // the Konami code toggles fantasy ⇄ polkadot flavor
     if (DEBUG && this.debugIntercept(e.key)) { e.preventDefault(); return; } // ── DEBUG hook (remove for release) ──
     this.player.feed(e.key);
     e.preventDefault();
@@ -3007,7 +3037,7 @@ export class Game {
   }
 
   private buildHuds(): [string, string] {
-    return [this.buildHud(this.player), this.coPlayer ? this.buildHud(this.coPlayer) : ""];
+    return [skin(this.buildHud(this.player)), this.coPlayer ? skin(this.buildHud(this.coPlayer)) : ""];
   }
 
   draw(): void {

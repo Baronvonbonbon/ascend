@@ -1,5 +1,7 @@
 // Scrolling message log (DOM).
 
+import { skin } from "./flavor";
+
 type Kind = "" | "good" | "bad" | "sys" | "dim";
 
 export class Log {
@@ -20,7 +22,7 @@ export class Log {
   paint(text: string, kind: Kind = "") {
     const div = document.createElement("div");
     if (kind) div.className = `msg--${kind}`;
-    div.textContent = text;
+    div.textContent = skin(text); // apply the fantasy proper-noun skin at render (no-op in polkadot mode)
     this.el.appendChild(div);
     this.el.scrollTop = this.el.scrollHeight;
     // Trim old lines to keep the DOM light.
