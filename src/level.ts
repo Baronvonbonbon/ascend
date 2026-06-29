@@ -2,6 +2,7 @@ import * as ROT from "rot-js";
 import type { TileType, ChainDef } from "./data";
 import type { ItemType } from "./items";
 
+export type LevelKind = "normal" | "bigroom" | "maze" | "cave" | "labyrinth" | "grid";
 export interface Portal { x: number; y: number; chain: ChainDef; quest?: boolean; }
 
 export interface FloorItem { x: number; y: number; type: ItemType; price?: number; enchant?: number; relic?: boolean; mintOnBuy?: boolean; buc?: import("./items").Buc; bucKnown?: boolean; corpse?: { def: import("./data").MonsterDef; born: number }; chest?: { locked: boolean }; } // price = shop ware; relic/enchant/mintOnBuy = NFT gear; buc = sanctity; corpse = edible remains; chest = container
@@ -25,13 +26,13 @@ export class Level {
   roomCenters: { x: number; y: number }[] = [];
   start = { x: 1, y: 1 };
   stairs = { x: 1, y: 1 };
-  readonly kind: "normal" | "bigroom" | "maze";
+  readonly kind: LevelKind;
 
   private visible = new Set<string>();
   private fov: InstanceType<typeof ROT.FOV.PreciseShadowcasting>;
   private floors: { x: number; y: number }[] = [];
 
-  constructor(width: number, height: number, kind: "normal" | "bigroom" | "maze" = "normal") {
+  constructor(width: number, height: number, kind: LevelKind = "normal") {
     this.width = width;
     this.height = height;
     this.kind = kind;
@@ -45,8 +46,128 @@ export class Level {
     }
     if (kind === "bigroom") this.generateBigRoom();
     else if (kind === "maze") this.generateMaze();
+    else if (kind === "cave") this.generateCave();
+    else if (kind === "labyrinth") this.generateLabyrinth();
+    else if (kind === "grid") this.generateGrid();
     else this.generate();
     this.fov = new ROT.FOV.PreciseShadowcasting((x, y) => this.lightPasses(x, y));
+  }
+
+  /** Wipe a half-built layout and fall back to standard rooms (degenerate-generation guard). */
+  private resetAndGenerate(): void {
+    for (let y = 0; y < this.height; y++) for (let x = 0; x < this.width; x++) this.tiles[y][x] = "wall";
+    this.floors = []; this.roomCenters = [];
+    this.generate();
+  }
+
+  /** BFS the floors reachable from a point (8-dir, matching player movement). */
+  private reachableFrom(s: { x: number; y: number }): Set<string> {
+    const seen = new Set<string>([`${s.x},${s.y}`]);
+    const q: { x: number; y: number }[] = [s];
+    const offs = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]];
+    while (q.length) {
+      const c = q.shift()!;
+      for (const [dx, dy] of offs) {
+        const nx = c.x + dx, ny = c.y + dy, k = `${nx},${ny}`;
+        if (!seen.has(k) && this.tiles[ny]?.[nx] && this.tiles[ny][nx] !== "wall") { seen.add(k); q.push({ x: nx, y: ny }); }
+      }
+    }
+    return seen;
+  }
+
+  /** Shared finish: pick a start near a corner, the down-stair at the farthest *reachable* cell. */
+  private finishLayout(): void {
+    if (this.floors.length < 40) { this.resetAndGenerate(); return; } // too cramped — fall back to standard rooms
+    this.start = this.floors.reduce((a, b) => (a.x + a.y <= b.x + b.y ? a : b));
+    const reach = this.reachableFrom(this.start);
+    if (reach.size < 40) { this.resetAndGenerate(); return; }
+    let far = this.start, best = -1;
+    for (const k of reach) {
+      const [x, y] = k.split(",").map(Number);
+      const d = Math.abs(x - this.start.x) + Math.abs(y - this.start.y);
+      if (d > best) { best = d; far = { x, y }; }
+    }
+    this.stairs = { ...far };
+    this.tiles[this.stairs.y][this.stairs.x] = "stairsDown";
+    if (this.roomCenters.length === 0) this.roomCenters = ROT.RNG.shuffle(this.floors.slice()).slice(0, 16);
+    this.floors = this.floors.filter((f) => reach.has(`${f.x},${f.y}`)); // only spawn in reachable space
+  }
+
+  /** Caves: cellular-automata caverns — organic, open (the Mines). */
+  private generateCave(): void {
+    const w = this.width, h = this.height;
+    let m: boolean[][] = []; // true = wall
+    for (let y = 0; y < h; y++) { m[y] = []; for (let x = 0; x < w; x++) m[y][x] = x === 0 || y === 0 || x === w - 1 || y === h - 1 || ROT.RNG.getUniform() < 0.45; }
+    for (let it = 0; it < 4; it++) {
+      const n: boolean[][] = [];
+      for (let y = 0; y < h; y++) {
+        n[y] = [];
+        for (let x = 0; x < w; x++) {
+          if (x === 0 || y === 0 || x === w - 1 || y === h - 1) { n[y][x] = true; continue; }
+          let walls = 0;
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (!(dx === 0 && dy === 0) && m[y + dy][x + dx]) walls++;
+          n[y][x] = walls >= 5;
+        }
+      }
+      m = n;
+    }
+    // keep only the largest open region (guarantees one connected cavern)
+    const region = new Map<string, number>();
+    let regions: { x: number; y: number }[][] = [];
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+      if (m[y][x] || region.has(`${x},${y}`)) continue;
+      const cells: { x: number; y: number }[] = []; const q = [{ x, y }]; region.set(`${x},${y}`, regions.length);
+      while (q.length) {
+        const c = q.shift()!; cells.push(c);
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = c.x + dx, ny = c.y + dy, k = `${nx},${ny}`;
+          if (!m[ny]?.[nx] && !region.has(k)) { region.set(k, regions.length); q.push({ x: nx, y: ny }); }
+        }
+      }
+      regions.push(cells);
+    }
+    const big = regions.sort((a, b) => b.length - a.length)[0] ?? [];
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) this.tiles[y][x] = "wall";
+    for (const c of big) { this.tiles[c.y][c.x] = "floor"; this.floors.push(c); }
+    this.finishLayout();
+  }
+
+  /** Labyrinth: a maze with open chambers carved into it (rooms + corridors). */
+  private generateLabyrinth(): void {
+    const maze = new ROT.Map.EllerMaze(this.width, this.height);
+    maze.create((x, y, wall) => { if (!wall && x > 0 && y > 0 && x < this.width - 1 && y < this.height - 1) { this.tiles[y][x] = "floor"; } });
+    // carve a handful of rectangular rooms over the maze
+    const centers: { x: number; y: number }[] = [];
+    for (let i = 0; i < 7; i++) {
+      const rw = 4 + Math.floor(ROT.RNG.getUniform() * 5), rh = 3 + Math.floor(ROT.RNG.getUniform() * 3);
+      const rx = 2 + Math.floor(ROT.RNG.getUniform() * (this.width - rw - 4)), ry = 2 + Math.floor(ROT.RNG.getUniform() * (this.height - rh - 4));
+      for (let y = ry; y < ry + rh; y++) for (let x = rx; x < rx + rw; x++) this.tiles[y][x] = "floor";
+      centers.push({ x: rx + (rw >> 1), y: ry + (rh >> 1) });
+    }
+    for (let y = 1; y < this.height - 1; y++) for (let x = 1; x < this.width - 1; x++) if (this.tiles[y][x] === "floor") this.floors.push({ x, y });
+    this.roomCenters = centers;
+    this.finishLayout();
+  }
+
+  /** Grid / city: rooms in blocks joined by orthogonal streets (a rollup metropolis). */
+  private generateGrid(): void {
+    const w = this.width, h = this.height, cell = 11;
+    const carve = (x: number, y: number) => { if (x > 0 && y > 0 && x < w - 1 && y < h - 1) this.tiles[y][x] = "floor"; };
+    // streets: a connected grid of corridors
+    for (let x = cell; x < w - 1; x += cell) for (let y = 1; y < h - 1; y++) carve(x, y);
+    for (let y = cell; y < h - 1; y += cell) for (let x = 1; x < w - 1; x++) carve(x, y);
+    // blocks: a room inset in each cell, with a doorway onto a street
+    const centers: { x: number; y: number }[] = [];
+    for (let bx = 1; bx < w - cell; bx += cell) for (let by = 1; by < h - cell; by += cell) {
+      const rx = bx + 1, ry = by + 1, rw = cell - 3, rh = cell - 3;
+      if (rx + rw >= w - 1 || ry + rh >= h - 1) continue;
+      for (let y = ry; y < ry + rh; y++) for (let x = rx; x < rx + rw; x++) carve(x, y);
+      carve(rx + (rw >> 1), ry + rh); carve(rx + (rw >> 1), ry - 1); // doorways to the streets above/below
+      centers.push({ x: rx + (rw >> 1), y: ry + (rh >> 1) });
+    }
+    for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) if (this.tiles[y][x] === "floor") this.floors.push({ x, y });
+    this.roomCenters = centers;
+    this.finishLayout();
   }
 
   /** Gehennom: a claustrophobic perfect maze of narrow corridors (NetHack's Hell). */

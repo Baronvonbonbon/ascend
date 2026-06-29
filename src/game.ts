@@ -1,5 +1,5 @@
 import * as ROT from "rot-js";
-import { Level, Trap, TrapKind } from "./level";
+import { Level, Trap, TrapKind, LevelKind } from "./level";
 import { Entity, Player, Monster, Pet } from "./entities";
 import { Item } from "./inventory";
 import { Log } from "./log";
@@ -441,7 +441,7 @@ export class Game {
   /** XCM call: hop to a parachain branch (its multipliers shape spawns + loot). */
   enterChain(chain: ChainDef): void {
     this.currentChain = chain;
-    this.level = new Level(W, MAP_H);
+    this.level = new Level(W, MAP_H, (chain.layout as LevelKind) ?? "normal"); // each parachain has a signature layout
     this.player.x = this.level.start.x;
     this.player.y = this.level.start.y;
     this.placeUpStair(); // the way back to the relay
@@ -691,11 +691,14 @@ export class Game {
     return { distress, presence, danger: this.dangerLevel(), bossNear, crowd, jamNear, faucet: onFeat("faucet"), altar: onFeat("altar") };
   }
 
-  /** Which level layout a depth uses: the Mempool big room, a Gehennom maze, or normal rooms. */
-  private levelKindFor(depth: number): "normal" | "bigroom" | "maze" {
-    if (depth === MEMPOOL_DEPTH) return "bigroom";
+  /** Which level layout a depth uses — the descent moves through layout zones. */
+  private levelKindFor(depth: number): LevelKind {
+    if (depth === MEMPOOL_DEPTH) return "bigroom";                  // the Mempool
     if (depth > MAX_DEPTH && depth < GEHENNOM_BOTTOM) return "maze"; // Gehennom 9–11: claustrophobic mazes
-    return "normal";
+    if (depth === 3) return "grid";                                 // a rollup metropolis
+    if (depth === 4 || depth === 6) return "cave";                  // the Mines — organic caverns
+    if (depth === 7) return "labyrinth";                            // the Kusama labyrinth
+    return "normal";                                                // standard rooms-and-corridors
   }
 
   private placeJamAndBoss(): void {
