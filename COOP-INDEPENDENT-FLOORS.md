@@ -17,11 +17,12 @@
 - **Two individuals** — separate per-adventurer state:
   - [x] **Items** — already per-player (`Player.inventory`). _(was already true)_
   - [x] **Identifications** — per-character knowledge over shared world appearances. _(shipped)_
-  - [ ] **Logs** — actor-routed: each adventurer's log shows their own actions; combat
-        routes to the player fighting; shared world lines go to both.
-  - [ ] **Signal messaging** — a free, once-per-turn 60-char message that degrades
-        with distance + line-of-sight (the example: `theres an enemy in there` →
+  - [x] **Logs** — actor-routed: each adventurer's log shows their own actions; combat
+        routes to the player fighting; shared world lines go to both. _(shipped — Stage 5)_
+  - [x] **Signal messaging** — a free, once-per-turn 60-char message (key `"`) that
+        degrades with distance + line-of-sight (`theres an enemy in there` →
         `th.. a. .nem. .. ..er.` farther away; nothing beyond earshot / another floor).
+        _(shipped — Stage 6)_
 
 ## Why it's a core-loop rearchitecture
 Almost everything assumes a single active level: `this.level` (~274 refs),
@@ -150,30 +151,27 @@ Goal: each adventurer sees their own log, not a shared feed. **Decision: pragmat
 - [ ] Verify: each adventurer's log shows only its own actions; both see the
       shared world beats. _(playtest)_
 
-## Stage 6 — signal messaging _(decided)_
+## Stage 6 — signal messaging ✅ _(decided)_
 Goal: a once-per-turn 60-char message that degrades with distance + line-of-sight.
 **Decisions: free action, once/turn · distance + LOS gating.**
-- [ ] **Compose**: a key (pick a free one, e.g. `T`/`"`) enters compose mode
-      (per-player `msgBuf` + `composing` flag on `Player`, reusing the `pendingName`
-      text-input pattern in `handleKey`); type up to 60 chars; Enter sends, Esc
-      cancels. Prompt echoed via the player's own (routed) log. Free action — does
-      **not** call `endTurn`; gated by a `signalledThisTurn` flag reset in `endTurn`.
-      Works for the guest too (keystrokes already forward via `handleRemoteInput →
-      coPlayer.feed`).
-- [ ] **Deliver / degrade** (`sendSignal(from)`):
-      - different floor (`from.floorKey !== to.floorKey`) → undelivered ("your call
-        goes unheard").
-      - `dist = Chebyshev(from, to)`; earshot `R ≈ 14`. `dist > R` → undelivered.
-      - `keep = clamp(1 - dist/R, 0, 1)`; if no line-of-sight between them,
-        `keep *= 0.45` (muffled by walls / out of eyeshot).
-      - mask: per char, keep spaces; `Math.random() < keep ? ch : "."` → scattered
-        survivors, more dots farther/blocked (`th.. a. .nem. .. ..er.`).
-      - sender's log (routed to sender): full text — `You signal: "…"`.
-        recipient's log (routed to recipient): the degraded text — `Partner signals: "…"`.
-      - LOS helper: reuse the ranged-attack sight check if present, else a Bresenham
-        wall check between the two tiles.
-- [ ] **Ties into independent floors**: cross-floor = undelivered falls out naturally
-      once players can split (Stages 2–4); on a shared floor it's pure distance + LOS.
+- [x] **Compose**: the `"` key enters compose mode (`composing` + `msgBuf` on
+      `Player`, mirroring the `pendingName` text-input path in `handleKey`); type up
+      to 60 chars; Enter sends, Esc cancels. Prompt echoes via the composer's own
+      (routed) log. Free action — does **not** call `endTurn`; gated by a
+      `signalledThisTurn` flag reset in `endTurn`. Works for the guest (keystrokes
+      forward via `handleRemoteInput → coPlayer.feed`, all host-side).
+- [x] **Deliver / degrade** (`sendSignal(from, msg)`):
+      - different floor → undelivered ("your call goes unheard").
+      - `dist = Chebyshev`; earshot `R = 14`; `dist > R` → undelivered ("too far").
+      - `keep = clamp(1 - dist/R, 0, 1)`; no line-of-sight → `keep *= 0.45`.
+      - mask: keep spaces; `ROT.RNG.getUniform() < keep ? ch : "."` (host-RNG so the
+        host's authoritative sim stays deterministic).
+      - sender hears the full text (`You signal: "…"`, routed to sender); recipient
+        gets the degraded text (`Partner signals: "…"`, routed to recipient).
+      - LOS: reuses the existing `hasLineOfSight` (both are on the active floor here,
+        so it reads `this.level` correctly).
+- [x] **Ties into independent floors**: cross-floor = undelivered falls out of the
+      `floorKey` check; on a shared floor it's pure distance + LOS.
 
 ## Risks / watch-list
 - **Context leakage:** any code that reads `this.level`/`this.currentChain`

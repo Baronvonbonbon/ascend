@@ -183,7 +183,7 @@ export class Game {
     for (const line of grayPaper()) this.log.add(line, "dim", "both");
     if (this.coop) this.log.add(`Co-op (${this.coopMode}) — Host and Guest share this dungeon. Find the JAM together.`, "sys", "both");
     else this.log.add("Your nominator (d) pads at your heels — it backs you, and bites for you.", "dim");
-    this.log.add("Keys: move · , pick up · o open chest · @ sheet · p buy · F forge · P pray · O offer · q faucet · s search/sit · z zap · Z cast · t throw · a apply · E engrave · < > stairs · i/w/W/q/r/e/d items.", "dim", "both");
+    this.log.add(`Keys: move · , pick up · o open chest · @ sheet · p buy · F forge · P pray · O offer · q faucet · s search/sit · z zap · Z cast · t throw · a apply · E engrave${this.coop ? ' · " signal partner' : ""} · < > stairs · i/w/W/q/r/e/d items.`, "dim", "both");
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
@@ -526,6 +526,23 @@ export class Game {
 
   // ── co-op party helpers ──────────────────────────────────────────────────────
   allPlayers(): Player[] { return this.coPlayer ? [this.player, this.coPlayer] : [this.player]; }
+
+  /** A free once-per-turn shout to the partner: it degrades with distance + walls, and a different
+   *  floor swallows it entirely. The sender always hears its own call in full. */
+  sendSignal(from: Player, msg: string): void {
+    this.log.add(`You signal: "${msg}"`, "sys", from);
+    const R = 14; // earshot radius (Chebyshev)
+    for (const to of this.allPlayers()) {
+      if (to === from || !to.alive) continue;
+      if (to.floorKey !== from.floorKey) { this.log.add("…your call goes unheard — your partner is on another floor.", "dim", from); continue; }
+      const dist = Math.max(Math.abs(from.x - to.x), Math.abs(from.y - to.y));
+      if (dist > R) { this.log.add("…too far — your call dies in the dark.", "dim", from); continue; }
+      let keep = Math.max(0, Math.min(1, 1 - dist / R)); // closer = clearer
+      if (!this.hasLineOfSight(from.x, from.y, to.x, to.y)) keep *= 0.45; // walls muffle it (both on this floor → this.level)
+      const degraded = [...msg].map((ch) => (ch === " " ? " " : ROT.RNG.getUniform() < keep ? ch : ".")).join("");
+      this.log.add(`Partner signals: "${degraded}"`, "sys", to);
+    }
+  }
   livingPlayers(): Player[] { return this.allPlayers().filter((p) => p.alive); } // global — for game-over
   /** Living players standing on the floor currently being acted (co-op: floors run independently). */
   playersHere(): Player[] { return this.livingPlayers().filter((p) => p.floorKey === this.activeKey); }
