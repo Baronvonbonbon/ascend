@@ -33,6 +33,9 @@ export const CORPSE: ItemType = { id: "corpse", kind: "food", name: "a corpse", 
 /** A chest — a floor container you open (o) for loot; the real state rides on FloorItem.chest. */
 export const CHEST: ItemType = { id: "chest", kind: "tool", name: "a chest", ch: "(", fg: "#b08040", weight: 0 };
 
+/** A pile of gold — the in-game coin. Auto-collected on step; the amount rides on FloorItem.coins. */
+export const GOLD: ItemType = { id: "gold", kind: "tool", name: "gold", ch: "$", fg: "#e0b94d", weight: 0 };
+
 export interface ItemType {
   id: string;
   kind: ItemKind;

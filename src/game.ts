@@ -1,5 +1,5 @@
 import * as ROT from "rot-js";
-import { Level, Trap, TrapKind, LevelKind } from "./level";
+import { Level, Trap, TrapKind, LevelKind, FloorItem } from "./level";
 import { Entity, Player, Monster, Pet } from "./entities";
 import { Item } from "./inventory";
 import { Log } from "./log";
@@ -10,7 +10,7 @@ import {
   monName, questHomeland, archetypeName, ethosName, spellName, chainName, branchEnd, branchEntryFlavor,
 } from "./data";
 import { fp, skin, toggleFlavor } from "./flavor";
-import { Idents, ITEMS, JAM, CORPSE, CHEST, WRITABLE_SCROLLS, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
+import { Idents, ITEMS, JAM, CORPSE, CHEST, GOLD, WRITABLE_SCROLLS, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
 import { connectWallet, Wallet } from "./chain/wallet";
 import { walletBalancePas, buyDirect } from "./chain/bank";
 import { recordRun, readRecent, RunEntry } from "./chain/ledger";
@@ -23,7 +23,10 @@ import type { CoopMode, Cell, NetMsg } from "./net/protocol";
 
 const PARTNER_FG = "#5fd0d0"; // the co-op partner's @ renders teal
 
-const PRICE: Record<string, number> = { weapon: 6, armor: 5, potion: 4, scroll: 4, food: 2 };
+// Gold prices for standard (non-NFT) shop wares, by item kind. NFT gear is priced separately, in PAS.
+const PRICE_GOLD: Record<string, number> = { weapon: 60, armor: 55, potion: 35, scroll: 35, food: 8, ring: 90, wand: 80, tool: 50, spellbook: 70, amulet: 120 };
+const STARTING_GOLD = 25;     // a small purse so the first shop isn't out of reach
+const RELIC_IMPORT_CAP = 3;   // up to this many owned NFT relics carried into a run
 
 const W = 80;
 const MAP_H = 30;
@@ -190,6 +193,7 @@ export class Game {
     const owned = await readGear(this.wallet.address);
     let added = 0;
     for (const g of owned) {
+      if (added >= RELIC_IMPORT_CAP) break; // only a limited kit may ride into a run
       if (this.loadedRelics.has(g.tokenId)) continue;
       const type = itemById(g.itemId);
       if (!type || !isGear(type)) continue;
@@ -199,7 +203,7 @@ export class Game {
       added++;
     }
     if (added > 0) {
-      this.log.add(`✦ ${added} on-chain relic${added > 1 ? "s" : ""} materialise in your pack (yours forever — tradeable).`, "good");
+      this.log.add(`✦ ${added} on-chain relic${added > 1 ? "s" : ""} materialise in your pack (up to ${RELIC_IMPORT_CAP} per run — yours forever, tradeable).`, "good");
       this.draw();
     }
     const deed = await readDeed(this.wallet.address);
@@ -248,6 +252,7 @@ export class Game {
   }
 
   private giveStartingKit(who: Player): void {
+    who.gold = STARTING_GOLD;
     const dagger = ITEMS.find((i) => i.id === "dagger")!;
     const ration = ITEMS.find((i) => i.id === "ration")!;
     const wielded = who.inventory.add(dagger);
@@ -410,6 +415,7 @@ export class Game {
       const cozy = this.level.kind !== "maze"; // Gehennom's mazes have no shops, faucets, thrones, or chests
       this.spawnMonsters();
       this.spawnItems();
+      this.placeGold();
       if (cozy) {
         this.spawnShop();
         this.placeAltar();
@@ -1317,7 +1323,13 @@ export class Game {
         if (this.level.isPassable(x, y) && !this.level.itemAt(x, y)) { this.level.items.push({ x, y, type, buc: rollBuc() }); dropped++; break; }
       }
     }
-    this.log.add(dropped ? `The chest holds ${dropped} item${dropped > 1 ? "s" : ""} — they spill out. (, to pick up)` : "The chest is empty.", dropped ? "good" : "dim");
+    // chests usually hold a purse of gold alongside the loot
+    if (ROT.RNG.getUniform() < 0.75) {
+      const amount = ROT.RNG.getUniformInt(10, 30) + this.player.depth * 5;
+      const spot = this.adjacentFreeFloor(p.x, p.y);
+      if (spot) { this.level.items.push({ x: spot.x, y: spot.y, type: GOLD, coins: amount }); dropped++; }
+    }
+    this.log.add(dropped ? `The chest holds ${dropped} ${dropped > 1 ? "things" : "thing"} — they spill out. (, to pick up)` : "The chest is empty.", dropped ? "good" : "dim");
     return true;
   }
 
@@ -1407,6 +1419,7 @@ export class Game {
       ")": "a weapon", "[": "a piece of armor", "(": "a tool, or a chest",
       "!": "a potion", "?": "a scroll", "=": "a ring", "/": "a wand",
       "%": "food — or a corpse you can eat (e)", "*": "an amulet or gem",
+      "$": "a pile of gold — step on it to scoop it up",
     };
     const mons = [...MONSTERS, SHOPKEEPER, PRIEST, HONEYPOT, CENSOR, MOLOCH, ...Object.values(MINIBOSSES)].find((m) => m.ch === key);
     const parts: string[] = [];
@@ -1984,6 +1997,44 @@ export class Game {
     }
   }
 
+  /** Scatter a few piles of gold across the floor (the main coin source). */
+  private placeGold(): void {
+    const loot = this.currentChain?.loot ?? 1;
+    const n = ROT.RNG.getUniformInt(1, 3) + (this.player.depth >= 6 ? 1 : 0);
+    for (let i = 0; i < n; i++) {
+      if (ROT.RNG.getUniform() > 0.75 * loot) continue; // not every roll lands a pile
+      let pos = this.level.randomFloor(), tries = 0;
+      while (tries < 30 && (this.level.itemAt(pos.x, pos.y) || (pos.x === this.player.x && pos.y === this.player.y) || this.level.tileAt(pos.x, pos.y) === "stairsDown")) { pos = this.level.randomFloor(); tries++; }
+      if (tries >= 30) continue;
+      const amount = Math.round((ROT.RNG.getUniformInt(4, 12) + this.player.depth * ROT.RNG.getUniformInt(1, 3)) * loot);
+      this.level.items.push({ x: pos.x, y: pos.y, type: GOLD, coins: amount });
+    }
+  }
+
+  /** Scoop up a gold pile underfoot. */
+  collectGold(p: Player, fi: FloorItem): void {
+    p.gold += fi.coins ?? 0;
+    this.level.items = this.level.items.filter((i) => i !== fi);
+    this.log.add(`${this.sub(p)} ${this.verbS(p, "scoop")} up ${fi.coins} gold. (${p.gold} total)`, "good");
+  }
+
+  /** Drop a little gold where a monster fell (depth-scaled). */
+  private dropGold(x: number, y: number): void {
+    if (ROT.RNG.getUniform() > 0.5) return; // only some foes carry coin
+    const amount = ROT.RNG.getUniformInt(1, 3 + this.player.depth);
+    const spot = this.level.itemAt(x, y) ? this.adjacentFreeFloor(x, y) : { x, y };
+    if (spot) this.level.items.push({ x: spot.x, y: spot.y, type: GOLD, coins: amount });
+  }
+
+  /** A passable floor cell adjacent to (x,y) with no item, for dropping loot. */
+  private adjacentFreeFloor(x: number, y: number): { x: number; y: number } | null {
+    for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]) {
+      const nx = x + dx, ny = y + dy;
+      if (this.level.isPassable(nx, ny) && !this.level.itemAt(nx, ny)) return { x: nx, y: ny };
+    }
+    return null;
+  }
+
   /** A thief snatches a random pack item (unequipping it if worn/wielded). Returns it, or null if the pack is bare. */
   stealItem(target: Player): Item | null {
     const p = target;
@@ -2353,6 +2404,7 @@ export class Game {
     const who = this.acting;
     const fi = this.level.itemAt(who.x, who.y);
     if (!fi) { this.log.add("There is nothing here to pick up.", "dim"); return false; }
+    if (fi.coins != null) { this.collectGold(who, fi); return true; }
     if (fi.chest) { this.log.add("It's a chest — press o to open it.", "dim"); return false; }
     if (fi.corpse) { this.log.add(`Best eaten where it lies — press e to eat the ${monName(fi.corpse.def)} corpse.`, "dim"); return false; }
     if (fi.type.id === "jam") {
@@ -2559,7 +2611,7 @@ export class Game {
       this.wallet = await connectWallet();
       this.player.pas = await walletBalancePas(this.wallet.address);
       const a = this.wallet.address;
-      this.log.add(`Wallet connected: ${a.slice(0, 6)}…${a.slice(-4)} — ${this.player.pas.toFixed(1)} PAS. Shops charge your wallet directly.`, "sys");
+      this.log.add(`Wallet connected: ${a.slice(0, 6)}…${a.slice(-4)} — ${this.player.pas.toFixed(1)} PAS. Standard wares cost gold; only NFT relics charge your wallet.`, "sys");
       this.onWallet?.(a, this.player.pas);
       this.draw();
       void this.loadRelics(); // bring any owned NFT relics into the current pack
@@ -2583,13 +2635,13 @@ export class Game {
         const x = c.x + dx, y = c.y + dy;
         if (this.level.isPassable(x, y) && !this.level.itemAt(x, y) &&
             this.level.tileAt(x, y) !== "stairsDown" && !(x === this.player.x && y === this.player.y)) {
-          this.level.items.push({ x, y, type: t, price: PRICE[t.kind] ?? 4, buc: "uncursed", bucKnown: true });
+          this.level.items.push({ x, y, type: t, price: PRICE_GOLD[t.kind] ?? 30, buc: "uncursed", bucKnown: true });
           break;
         }
       }
     }
     // From the Parachain Reaches on, the bazaar may carry a relic — an NFT ware
-    // that mints to you (gasless) on purchase and persists across runs.
+    // that mints to you on purchase (a wallet tx) and persists across runs.
     if (this.player.depth >= 5 && ROT.RNG.getUniform() < 0.5) {
       const relicTypes = ITEMS.filter((i) => isGear(i));
       const rt = ROT.RNG.getItem(relicTypes)!;
@@ -2599,8 +2651,8 @@ export class Game {
         const x = c.x + dx, y = c.y + dy;
         if (this.level.isPassable(x, y) && !this.level.itemAt(x, y) &&
             this.level.tileAt(x, y) !== "stairsDown" && !(x === this.player.x && y === this.player.y)) {
-          this.level.items.push({ x, y, type: rt, price: 12 + enchant * 4, enchant, buc: "blessed", bucKnown: true });
-          this.log.add("A fine enchanted ware is among the stock — forge it (F) into an NFT relic later.", "dim");
+          this.level.items.push({ x, y, type: rt, price: 12 + enchant * 4, nft: true, relic: true, mintOnBuy: true, enchant, buc: "blessed", bucKnown: true });
+          this.log.add("A fine enchanted relic is among the stock — an NFT ware, bought with your wallet (p).", "dim");
           break;
         }
       }
@@ -2631,7 +2683,22 @@ export class Game {
     if (this.coop) { this.log.add("Shops & forging are solo-only in co-op for now.", "dim"); return; }
     const fi = this.level.itemAt(this.acting.x, this.acting.y);
     if (!fi || !fi.price) { this.log.add("There is nothing for sale here.", "dim"); return; }
-    if (!this.wallet) { this.log.add("Connect a wallet (button above) to buy.", "bad"); return; }
+
+    // Standard wares are bought with in-game gold — instant, no wallet.
+    if (!fi.nft) {
+      const p = this.acting;
+      if (p.gold < fi.price) { this.log.add(`Not enough gold — ${this.ident.name(fi.type)} costs ${fi.price}, you hold ${p.gold}.`, "bad"); return; }
+      p.gold -= fi.price;
+      this.breakConduct(p, "bankless");
+      this.giveItem(fi.type, { enchant: fi.enchant, relic: fi.relic, buc: fi.buc, bucKnown: fi.bucKnown });
+      this.level.items = this.level.items.filter((i) => i !== fi);
+      this.log.add(`You buy ${this.ident.name(fi.type)} for ${fi.price} gold. (${p.gold} left)`, "good");
+      this.draw();
+      return;
+    }
+
+    // NFT gear — a real wallet transaction, like an NFT trade/mint.
+    if (!this.wallet) { this.log.add("That's an NFT relic — connect a wallet (button above) to mint-buy it.", "bad"); return; }
     if (this.player.pas < fi.price) { this.log.add(`Not enough PAS — ${this.ident.name(fi.type)} costs ${fi.price}, your wallet holds ${this.player.pas.toFixed(1)}.`, "bad"); return; }
 
     // A direct wallet transaction — the game halts until it confirms on-chain.
@@ -2661,6 +2728,7 @@ export class Game {
     const mi = this.monsters.indexOf(m); // splice in place — the array identity is the persisted level's monster list
     if (mi >= 0) this.monsters.splice(mi, 1);
     this.scheduler.remove(m);
+    if (m.def.weight > 0 && !m.def.keeper && !m.def.priest) this.dropGold(m.x, m.y); // ordinary foes may scatter a few coins
     // Slay the resurrected Censor while it holds the JAM and you wrest it back.
     if (m.isHunter && this.jamStolen) {
       this.jamStolen = false;
@@ -3024,7 +3092,8 @@ export class Game {
       (p.maxEnergy > 5 || p.spells.size ? `%c{${COLORS.dim}}  En %c{#7aa0e0}${p.energy}%c{${COLORS.dim}}/${p.maxEnergy}` : "") +
       (this.luckOf(p) !== 0 ? `%c{${COLORS.dim}}  Luck %c{${this.luckOf(p) > 0 ? COLORS.good : COLORS.bad}}${this.luckOf(p) > 0 ? "+" : ""}${this.luckOf(p)}` : "") +
       (p.polyForm ? `%c{${COLORS.dim}}  %c{#d070d0}Fork:${p.polyForm.name.replace(/^an? /, "")} ${p.polyTurns}` : "") +
-      (this.coop ? "" : `%c{${COLORS.dim}}  PAS %c{${COLORS.gold}}${p.pas.toFixed(1)}`) +
+      `%c{${COLORS.dim}}  Gold %c{${COLORS.gold}}${p.gold}` +
+      (this.wallet && !this.coop ? `%c{${COLORS.dim}}  PAS %c{${COLORS.gold}}${p.pas.toFixed(1)}` : "") +
       (hunger ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}${hunger}` : "") +
       (p.poison > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Psn` : "") +
       (p.confused > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Cfz` : "") +

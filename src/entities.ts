@@ -71,6 +71,7 @@ export class Player extends Entity {
   riding = false;                          // mounted on the steed (#ride / M)
   private regenTimer = 0;
   hasJam = false;
+  gold = 0;            // in-game coin — buys standard wares (NFT gear still needs the wallet)
   maxDepthReached = 1;
   weaponBonus = 0; // from scrolls of enchantment
   prayerCooldown = 0;
@@ -707,11 +708,12 @@ export class Player extends Entity {
     this.game.recomputeFOV();
     const here = this.game.level.itemAt(this.x, this.y);
     if (here) {
-      if (here.chest) this.game.log.add(`A ${here.chest.locked ? "locked " : ""}chest sits here. (o to open)`, "dim");
+      if (here.coins != null) this.game.collectGold(this, here); // gold is scooped up on contact
+      else if (here.chest) this.game.log.add(`A ${here.chest.locked ? "locked " : ""}chest sits here. (o to open)`, "dim");
       else if (here.corpse) this.game.log.add(`A ${here.corpse.def.name} corpse lies here. (e to eat)`, "dim");
       else {
         const nm = this.game.ident.name(here.type);
-        this.game.log.add(here.price ? `${nm} — ${here.price} PAS (press p to buy).` : `You see ${nm} here. (, to pick up)`, "dim");
+        this.game.log.add(here.price ? (here.nft ? `${nm} — ${here.price} PAS, an NFT (press p to mint-buy).` : `${nm} — ${here.price} gold (press p to buy).`) : `You see ${nm} here. (, to pick up)`, "dim");
       }
     }
     const grave = this.game.level.graveAt(this.x, this.y);

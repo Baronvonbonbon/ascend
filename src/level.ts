@@ -5,7 +5,7 @@ import type { ItemType } from "./items";
 export type LevelKind = "normal" | "bigroom" | "maze" | "cave" | "labyrinth" | "grid" | "swamp" | "sokoban" | "fortress" | "concentric";
 export interface Portal { x: number; y: number; chain: ChainDef; quest?: boolean; }
 
-export interface FloorItem { x: number; y: number; type: ItemType; price?: number; enchant?: number; relic?: boolean; mintOnBuy?: boolean; buc?: import("./items").Buc; bucKnown?: boolean; corpse?: { def: import("./data").MonsterDef; born: number }; chest?: { locked: boolean }; } // price = shop ware; relic/enchant/mintOnBuy = NFT gear; buc = sanctity; corpse = edible remains; chest = container
+export interface FloorItem { x: number; y: number; type: ItemType; price?: number; nft?: boolean; coins?: number; enchant?: number; relic?: boolean; mintOnBuy?: boolean; buc?: import("./items").Buc; bucKnown?: boolean; corpse?: { def: import("./data").MonsterDef; born: number }; chest?: { locked: boolean }; } // price = shop ware (gold, or PAS/wallet if nft); coins = a gold pile; relic/enchant/mintOnBuy = NFT gear; buc = sanctity; corpse = edible remains; chest = container
 export type TrapKind = "gas" | "reorg" | "slash" | "fork";
 export interface Trap { x: number; y: number; kind: TrapKind; revealed: boolean; }
 /** A sigil scratched in the dust (the Gray Paper) that wards monsters from the tile; it scuffs away. */
