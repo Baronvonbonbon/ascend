@@ -3,7 +3,7 @@ import type { Game } from "./game";
 import { COLORS, MonsterDef, SPELLS, spellById, monName } from "./data";
 import { fp } from "./flavor";
 import { Inventory, Item } from "./inventory";
-import { bucDelta, ITEMS, ItemType, ArmorSlot } from "./items";
+import { bucDelta, ITEMS, ItemType, ArmorSlot, Idents } from "./items";
 
 type Verb = "wield" | "wear" | "takeoff" | "quaff" | "read" | "eat" | "drop" | "zap" | "throw" | "forge" | "apply" | "quiver" | "name" | "offhand";
 const VERB_PROMPT: Record<Verb, string> = {
@@ -55,6 +55,7 @@ export class Player extends Entity {
   nutrition = 900;
   ac = 0; // total evasion bonus from worn armor (higher = harder to hit)
   inventory = new Inventory();
+  ident!: Idents;     // this adventurer's own identification knowledge (shared world appearances)
   weapon: Item | null = null;
   wornArmor: Item[] = []; // up to one piece per slot
   ring: Item | null = null;

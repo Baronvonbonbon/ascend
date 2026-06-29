@@ -133,10 +133,10 @@ const POTION_LOOKS_P = ["a fizzy potion", "a murky potion", "a glowing vial", "a
 const SCROLL_LOOKS_F = ["a scroll labeled XYZZY", "a scroll labeled ELBERETH", "a scroll labeled NR 9", "a scroll labeled FOOBAR", "a scroll labeled VENZAR", "a scroll labeled THARR", "a scroll labeled JUYED"];
 const SCROLL_LOOKS_P = ["a scroll labeled XYZZY", "a scroll labeled ELBERETH", "a scroll labeled HODL", "a scroll labeled WAGMI", "a scroll labeled GM", "a scroll labeled DYOR", "a scroll labeled REKT"];
 
-/** Per-game randomised appearances + which item *types* the player has identified. */
-export class Idents {
+/** Per-GAME randomised appearances — the world's potions/scrolls look the same to everyone.
+ *  Shared by all adventurers; only *knowledge* of what they are is per-character (Idents). */
+export class Appearances {
   private apIdx = new Map<string, number>(); // id → index into the look list (resolved to fantasy/polkadot at display time)
-  private known = new Set<string>();
 
   constructor() {
     const potions = ITEMS.filter((i) => i.kind === "potion");
@@ -145,12 +145,21 @@ export class Idents {
     ROT.RNG.shuffle(scrolls.map((_, i) => i)).forEach((idx, i) => this.apIdx.set(scrolls[i].id, idx));
   }
 
-  private look(t: ItemType): string {
+  look(t: ItemType): string {
     const idx = this.apIdx.get(t.id) ?? 0;
     const fant = getFlavor() === "fantasy";
     const list = t.kind === "potion" ? (fant ? POTION_LOOKS_F : POTION_LOOKS_P) : (fant ? SCROLL_LOOKS_F : SCROLL_LOOKS_P);
     return list[idx] ?? (t.kind === "potion" ? "a strange potion" : "a strange scroll");
   }
+}
+
+/** One adventurer's identification knowledge — which item *types* they've learned.
+ *  Appearances are shared (the world looks the same); knowledge is per-character. */
+export class Idents {
+  private known = new Set<string>();
+  constructor(private appearances: Appearances) {}
+
+  private look(t: ItemType): string { return this.appearances.look(t); }
 
   isKnown(t: ItemType): boolean {
     return (t.kind !== "potion" && t.kind !== "scroll") || this.known.has(t.id);

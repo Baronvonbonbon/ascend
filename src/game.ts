@@ -10,7 +10,7 @@ import {
   monName, questHomeland, archetypeName, ethosName, spellName, chainName, branchEnd, branchEntryFlavor,
 } from "./data";
 import { fp, skin, toggleFlavor } from "./flavor";
-import { Idents, ITEMS, JAM, CORPSE, CHEST, GOLD, WRITABLE_SCROLLS, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
+import { Idents, Appearances, ITEMS, JAM, CORPSE, CHEST, GOLD, WRITABLE_SCROLLS, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
 import { connectWallet, Wallet } from "./chain/wallet";
 import { walletBalancePas, buyDirect } from "./chain/bank";
 import { recordRun, readRecent, RunEntry } from "./chain/ledger";
@@ -79,7 +79,9 @@ export class Game {
   readonly log: Log;
   level!: Level;
   player!: Player;
-  ident!: Idents;
+  appearances!: Appearances;        // the world's shared potion/scroll looks
+  /** Identification is per-character: this resolves to whichever player is currently acting. */
+  get ident(): Idents { return this.acting.ident; }
   monsters: Monster[] = [];
   pet: Pet | null = null;
   // Phase 15 — persistence: each visited level is generated once and stored, so revisiting
@@ -153,9 +155,10 @@ export class Game {
     this.branchReturnDepth = 0;
     this.slots.clear();
     this.activeKey = "dungeon:1";
-    this.ident = new Idents();
+    this.appearances = new Appearances();
     this.level = new Level(W, MAP_H);
     this.player = new Player(this, this.level.start.x, this.level.start.y);
+    this.player.ident = new Idents(this.appearances);
     this.acting = this.player;
     this.giveStartingKit(this.player);
     this.applyArchetype(this.player, this.archetypeId);
@@ -165,6 +168,7 @@ export class Game {
       const spot = this.adjacentFree(this.level.start.x, this.level.start.y) ?? this.level.start;
       this.coPlayer = new Player(this, spot.x, spot.y);
       this.coPlayer.name = "Guest";
+      this.coPlayer.ident = new Idents(this.appearances); // shared world looks, separate knowledge
       this.giveStartingKit(this.coPlayer);
       this.applyArchetype(this.coPlayer, "nominator"); // the partner runs as a Nominator in co-op v1
       this.pet = null; // no nominators in co-op v1
