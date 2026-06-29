@@ -10,10 +10,10 @@
 ## Goal
 - [x] **Separate fog of war** — each player sees only their own FOV, with their own
       explored memory (no shared/union sight). _(shipped)_
-- [ ] **Independent floors** — players can be on different floors (`dungeon:N`,
+- [x] **Independent floors** — players can be on different floors (`dungeon:N`,
       a parachain, a branch, a plane) at the same time, both **fully simulated**
       (monsters act on each floor and target the player *there*), each rendering
-      their own floor.
+      their own floor. _(shipped — Stages 2–4; awaits two-client playtest)_
 - **Two individuals** — separate per-adventurer state:
   - [x] **Items** — already per-player (`Player.inventory`). _(was already true)_
   - [x] **Identifications** — per-character knowledge over shared world appearances. _(shipped)_
