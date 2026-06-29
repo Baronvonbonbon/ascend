@@ -90,21 +90,45 @@ const semi = (root: number, n: number) => root * Math.pow(2, n / 12);
 interface Voice { osc: OscillatorNode; gain: GainNode; lfo?: OscillatorNode; }
 interface ActiveTrack { def: TrackDef; bus: GainNode; voices: Voice[]; }
 
+/** The game's per-frame snapshot of what's around — drives distress, density, and reactions. */
+export interface MusicContext {
+  distress: number;   // 0..1 — deeper + more peril = sicker
+  presence: number;   // 0..1 — structural melodic density (fuller shallow, sparser deep)
+  danger: number;     // 0..1 — the tension layer
+  bossNear: boolean;  // a boss / dragon / Censor in view → a menace rumble
+  crowd: number;      // 0..1 — how thronged the area is
+  jamNear: boolean;   // the JAM is on the level / held → a deep ominous pulse
+  faucet: boolean;    // standing by a faucet → drips (foley)
+  altar: boolean;     // standing by an altar → a soft chime (foley)
+}
+
 export class MusicEngine {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
+  private murk!: BiquadFilterNode;   // global lowpass the ambient bed runs through — closes with distress
   private reverb!: ConvolverNode;
   private reverbReturn!: GainNode;
   private active: ActiveTrack | null = null;
   private tensionBus!: GainNode;
   private tensionWet!: GainNode;
+  private menaceGain!: GainNode;     // a low rumble that rises when a boss looms
+  private noiseBuf: AudioBuffer | null = null;
   private timer: number | null = null;
   private nextMel = 0;       // next melody-note time
   private melIdx = 0;        // position within the leitmotif phrase
+  private phraseFresh = true;        // a new phrase is about to be decided
+  private phraseSkip = false;        // this cycle is an ambient drift (no melody)
+  private phraseTranspose = 0;       // chord-tone shift for anti-loop variety
+  private phraseOct = 1;             // octave for this restatement
   private nextTensionMote = 0;
   private nextPulse = 0;
   private nextTensionPulse = 0;
+  private nextJam = 0;
+  private nextChime = 0;
+  private nextDrip = 0;
+  private ebbPhase = Math.random() * Math.PI * 2;
   private danger = 0;          // 0..1, smoothed target for the tension layer
+  private c: MusicContext = { distress: 0, presence: 1, danger: 0, bossNear: false, crowd: 0, jamNear: false, faucet: false, altar: false };
   private _enabled = false;
   private _mode: string;       // "auto" | "shuffle" | a track id
   private area = "legacy";
@@ -157,6 +181,9 @@ export class MusicEngine {
   /** The game sets a 0..1 danger level each turn; the tension layer follows it. */
   setDanger(level: number): void { this.danger = Math.max(0, Math.min(1, level)); }
 
+  /** The game's per-frame context — drives distress, density, and reactive layers. */
+  setContext(c: MusicContext): void { this.c = c; this.danger = c.danger; }
+
   /** A one-shot musical cue on death (falling, gloomy) or ascension (rising, luminous). */
   playStinger(kind: "death" | "ascend"): void {
     if (!this._enabled) return;
@@ -191,19 +218,39 @@ export class MusicEngine {
     this.master = this.ctx.createGain();
     this.master.gain.value = 0.6;
     this.master.connect(this.ctx.destination);
-    // a generated reverb impulse (exponentially-decaying noise)
+    // a global lowpass the whole ambient bed passes through — it closes as distress rises (murk)
+    this.murk = this.ctx.createBiquadFilter();
+    this.murk.type = "lowpass";
+    this.murk.frequency.value = 8500;
+    this.murk.connect(this.master);
+    // a generated reverb impulse (exponentially-decaying noise) — returns into the murk
     this.reverb = this.ctx.createConvolver();
     this.reverb.buffer = this.makeImpulse(3.2, 2.6);
     this.reverbReturn = this.ctx.createGain();
     this.reverbReturn.gain.value = 0.9;
-    this.reverb.connect(this.reverbReturn).connect(this.master);
-    // the tension layer's own bus (a dry + wet split), driven by danger
+    this.reverb.connect(this.reverbReturn).connect(this.murk);
+    // the tension layer's own bus (a dry + wet split) — dry cuts through the murk straight to master
     this.tensionBus = this.ctx.createGain();
     this.tensionBus.gain.value = 0;
     const tDry = this.ctx.createGain(); tDry.gain.value = 0.6;
     this.tensionWet = this.ctx.createGain(); this.tensionWet.gain.value = 0.5;
     this.tensionBus.connect(tDry).connect(this.master);
     this.tensionBus.connect(this.tensionWet).connect(this.reverb);
+    // a low rumble (filtered noise) that swells when a boss looms
+    this.noiseBuf = this.makeNoise(2);
+    const rumble = this.ctx.createBufferSource(); rumble.buffer = this.noiseBuf; rumble.loop = true;
+    const rumbleLp = this.ctx.createBiquadFilter(); rumbleLp.type = "lowpass"; rumbleLp.frequency.value = 120;
+    this.menaceGain = this.ctx.createGain(); this.menaceGain.gain.value = 0;
+    rumble.connect(rumbleLp).connect(this.menaceGain).connect(this.murk);
+    rumble.start();
+  }
+
+  private makeNoise(seconds: number): AudioBuffer {
+    const rate = this.ctx!.sampleRate, len = Math.floor(rate * seconds);
+    const buf = this.ctx!.createBuffer(1, len, rate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
   }
 
   private makeImpulse(seconds: number, decay: number): AudioBuffer {
@@ -217,12 +264,12 @@ export class MusicEngine {
     return buf;
   }
 
-  /** Build a per-track bus that routes to master (dry) + reverb (wet). Returns the input gain. */
+  /** Build a per-track bus that routes through the murk (dry) + reverb (wet). Returns the input gain. */
   private makeBus(wet: number): GainNode {
     const bus = this.ctx!.createGain();
     const dry = this.ctx!.createGain(); dry.gain.value = 1 - wet * 0.5;
     const wetg = this.ctx!.createGain(); wetg.gain.value = wet;
-    bus.connect(dry).connect(this.master);
+    bus.connect(dry).connect(this.murk);
     bus.connect(wetg).connect(this.reverb);
     return bus;
   }
@@ -265,7 +312,9 @@ export class MusicEngine {
     this.active = { def, bus, voices };
     this.nextMel = now + 1.2; // let the bed establish before the leitmotif enters
     this.melIdx = 0;
+    this.phraseFresh = true; this.phraseOct = def.melOct; this.phraseTranspose = 0; this.phraseSkip = false;
     this.nextPulse = now + 0.5;
+    this.nextJam = this.nextChime = this.nextDrip = now + 1;
   }
 
   private makeDrone(def: TrackDef, freq: number, level: number, bus: GainNode): Voice {
@@ -295,9 +344,9 @@ export class MusicEngine {
   }
 
   /** A short plucked/bowed note into a bus (motes + tension stabs). */
-  private note(freq: number, when: number, dur: number, bus: GainNode, type: Wave, peak: number, cutoff: number): void {
+  private note(freq: number, when: number, dur: number, bus: GainNode, type: Wave, peak: number, cutoff: number, detune = 0): void {
     const ctx = this.ctx!;
-    const osc = ctx.createOscillator(); osc.type = type; osc.frequency.value = freq;
+    const osc = ctx.createOscillator(); osc.type = type; osc.frequency.value = freq; osc.detune.value = detune;
     const filt = ctx.createBiquadFilter(); filt.type = "lowpass"; filt.frequency.value = cutoff;
     const g = ctx.createGain(); g.gain.value = 0;
     osc.connect(filt).connect(g).connect(bus);
@@ -306,6 +355,9 @@ export class MusicEngine {
     g.gain.exponentialRampToValueAtTime(0.0008, when + dur);
     osc.start(when); osc.stop(when + dur + 0.05);
   }
+
+  /** Slow swell-and-recede envelope (~70s) — the ebb and flow of the whole bed. */
+  private ebb(now: number): number { return 0.5 + 0.5 * Math.sin((now / 70) * Math.PI * 2 + this.ebbPhase); }
 
   private startScheduler(): void {
     if (this.timer != null) return;
@@ -320,47 +372,75 @@ export class MusicEngine {
     // shuffle mode rotates tracks over time
     if (this._mode === "shuffle" && now > this.shuffleUntil) this.pickShuffle();
 
+    // ── distress → murk + detune the whole bed (deeper/perilous = sicker) ──
+    const ds = this.c.distress;
+    this.murk.frequency.setTargetAtTime(8500 - ds * 7600, now, 1.2);
+    this.menaceGain.gain.setTargetAtTime((this.c.bossNear ? 0.13 : 0) + this.c.crowd * 0.05, now, 0.8);
+
     const t = this.active?.def;
     if (t && this.active) {
-      // the leitmotif — step through the rhythmic phrase, then rest, then repeat (same melody, any variant)
+      for (const v of this.active.voices) v.osc.detune.setTargetAtTime(t.detune + ds * 34, now, 1.5); // beating sours the bed
+      // structural density: fuller shallow, sparser deep — modulated by the slow ebb
+      const presence = Math.max(0.08, Math.min(1, this.c.presence * (0.45 + 0.55 * this.ebb(now))));
+
+      // the leitmotif — a continuously-mutating line: each restatement varies, with ambient drifts
       while (this.nextMel < horizon) {
+        if (this.phraseFresh) {
+          this.phraseFresh = false;
+          if (Math.random() > presence * 0.85 + 0.12) {
+            this.phraseSkip = true; // this cycle is an ambient drift — no motif
+          } else {
+            this.phraseSkip = false;
+            this.phraseTranspose = Math.random() < 0.35 ? (t.chord[1 + Math.floor(Math.random() * (t.chord.length - 1))] ?? 0) : 0;
+            const r = Math.random();
+            this.phraseOct = r < 0.18 ? t.melOct * 2 : r < 0.34 ? Math.max(1, t.melOct / 2) : t.melOct;
+          }
+        }
+        if (this.phraseSkip) {
+          this.nextMel += t.melStep * (14 + Math.random() * 18 + (1 - presence) * 16); // a long, variable silence
+          this.melIdx = 0; this.phraseFresh = true;
+          continue;
+        }
         if (this.melIdx < t.melody.length) {
           const [deg, steps] = t.melody[this.melIdx];
-          if (deg !== REST) {
-            const freq = semi(t.root, deg) * t.melOct;
+          const dropP = (1 - presence) * 0.4 + ds * 0.15;
+          if (deg !== REST && Math.random() > dropP) {
+            const freq = semi(t.root, deg + this.phraseTranspose) * this.phraseOct;
             const dur = Math.min(steps * t.melStep * 1.25, steps * t.melStep + 0.4);
-            this.note(freq, this.nextMel, dur, this.active.bus, t.melWave, 0.085, t.cutoff * 2.5);
+            const bend = Math.random() < ds * 0.4 ? -ds * 45 * Math.random() : 0; // notes sag flat under distress
+            this.note(freq, this.nextMel, dur, this.active.bus, t.melWave, 0.085 * (0.55 + 0.45 * presence), t.cutoff * 2.5, bend);
           }
-          this.nextMel += steps * t.melStep;
+          this.nextMel += steps * t.melStep * (1 + (Math.random() - 0.5) * ds * 0.5); // timing falters when sick
           this.melIdx++;
         } else {
-          this.nextMel += t.melStep * 4; // a breath between repetitions
-          this.melIdx = 0;
+          this.nextMel += t.melStep * (4 + (1 - presence) * 9); // a breath that lengthens when sparse
+          this.melIdx = 0; this.phraseFresh = true;
         }
       }
+
       // low pulse / heartbeat
       if (t.pulseBpm > 0) {
         const beat = 60 / t.pulseBpm;
-        while (this.nextPulse < horizon) {
-          this.pulse(t.root * 0.5, this.nextPulse, this.active.bus, 0.18);
-          this.nextPulse += beat;
-        }
-      } else {
-        this.nextPulse = now; // keep it current so re-enabling a pulsed track resyncs
-      }
+        while (this.nextPulse < horizon) { this.pulse(t.root * 0.5, this.nextPulse, this.active.bus, 0.18); this.nextPulse += beat; }
+      } else this.nextPulse = now;
+
+      // ── context reactions ──
+      // the JAM on the level: a deep, slow, ominous pulse
+      if (this.c.jamNear) { while (this.nextJam < horizon) { this.pulse(t.root * 0.5, this.nextJam, this.active.bus, 0.16); this.nextJam += 2.4; } } else this.nextJam = now;
+      // altar: a soft high chime (musical reaction + signature foley)
+      if (this.c.altar) { while (this.nextChime < horizon) { this.note(semi(t.root, 12) * 4, this.nextChime, 2.6, this.active.bus, "sine", 0.05, 4000); this.nextChime += 3.5 + Math.random() * 2.5; } } else this.nextChime = now;
+      // faucet: occasional water drips (signature foley)
+      if (this.c.faucet) { while (this.nextDrip < horizon) { this.drip(this.nextDrip); this.nextDrip += 0.7 + Math.random() * 1.8; } } else this.nextDrip = now;
     }
 
     // ── the tension layer, scaled by danger ──
-    const target = this.danger * 0.5;
-    this.tensionBus.gain.setTargetAtTime(target, now, 0.6);
+    this.tensionBus.gain.setTargetAtTime(this.danger * 0.5, now, 0.6);
     if (this.danger > 0.05 && t) {
-      // dissonant stabs (a tritone above the root) at a rate that rises with danger
       while (this.nextTensionMote < horizon) {
         const f = semi(t.root, 6 + (Math.random() < 0.5 ? 0 : 1)) * 3;
         this.note(f, this.nextTensionMote, 0.5 + Math.random(), this.tensionBus, "sawtooth", 0.05, 1400);
         this.nextTensionMote += (1.6 - this.danger) * (0.7 + Math.random() * 0.6);
       }
-      // a quickening pulse when danger is high
       if (this.danger > 0.4) {
         const beat = 60 / (90 + this.danger * 60);
         while (this.nextTensionPulse < horizon) { this.pulse(t.root * 0.5, this.nextTensionPulse, this.tensionBus, 0.12); this.nextTensionPulse += beat; }
@@ -369,6 +449,20 @@ export class MusicEngine {
       this.nextTensionMote = now;
       this.nextTensionPulse = now;
     }
+  }
+
+  /** A water drip — a quick high blip that falls in pitch. */
+  private drip(when: number): void {
+    if (!this.active) return;
+    const ctx = this.ctx!;
+    const osc = ctx.createOscillator(); osc.type = "sine";
+    const f = 900 + Math.random() * 700;
+    osc.frequency.setValueAtTime(f, when); osc.frequency.exponentialRampToValueAtTime(f * 0.45, when + 0.12);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(0.05, when + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0006, when + 0.18);
+    osc.connect(g).connect(this.active.bus);
+    osc.start(when); osc.stop(when + 0.22);
   }
 
   private pulse(freq: number, when: number, bus: GainNode, peak: number): void {

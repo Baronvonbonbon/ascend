@@ -249,7 +249,13 @@ stays recognisable while repeat visits and runs sound fresh. **Auto (by area)** 
 where you are; **Shuffle all** rotates every couple of minutes; or pin one theme. A **tension
 layer** swells in over the ambience when foes close, a boss looms, or the Censor hunts — and
 **death** and **ascension** each get a short musical **stinger** (a sinking knell / a rising
-luminous chord).
+luminous chord). The score is **alive**: the leitmotif never loops verbatim (each restatement
+mutates — transposed, fragmented, re-registered — interleaved with ambient drifts), a slow
+**ebb-and-flow** envelope swells and recedes, the music grows **more distressed the deeper and
+more imperilled you are** (the bed sours and murks, notes sag flat, timing falters — and the
+ascent stays uneasy until you truly win), and it's **context-aware** — a soft chime by an altar,
+water drips at a faucet, a low rumble when a boss/dragon/Censor is in view, a deep ominous pulse
+when the JAM is on the level.
 
 `npm run build` → typecheck + production bundle in `dist/`.
 

@@ -16,7 +16,7 @@ import { readGear, forgeGear, forgePrice } from "./chain/gear";
 import { claimDeed, readDeed, deedConfigured } from "./chain/deed";
 import { RARITY } from "./chain/config";
 import type { Peer } from "./net/peer";
-import { MusicEngine } from "./audio/music";
+import { MusicEngine, MusicContext } from "./audio/music";
 import type { CoopMode, Cell, NetMsg } from "./net/protocol";
 
 const PARTNER_FG = "#5fd0d0"; // the co-op partner's @ renders teal
@@ -665,6 +665,30 @@ export class Game {
     }
     if (this.jamStolen) danger = Math.max(danger, 0.5);
     return danger;
+  }
+
+  /** The per-frame snapshot the music engine reacts to: distress, density, and nearby context. */
+  private musicContext(): MusicContext {
+    const p = this.player;
+    // depth fraction across the descent; the Planes stay uneasy (a held undercurrent)
+    const depthFrac = this.plane > 0 ? 0.62 : Math.min(1, (p.depth - 1) / (GEHENNOM_BOTTOM - 1));
+    // peril: low HP, afflictions, being hunted
+    let peril = 0;
+    if (p.hp < p.maxHp * 0.4) peril = Math.max(peril, 1 - p.hp / (p.maxHp * 0.4));
+    if (p.stoning > 0 || p.illness > 0) peril = Math.max(peril, 0.7);
+    if (p.poison > 0) peril = Math.max(peril, 0.4);
+    if (this.jamStolen || this.monsters.some((m) => m.alive && m.isHunter)) peril = Math.max(peril, 0.55);
+    const distress = Math.min(1, depthFrac * 0.8 + peril * 0.45);
+    const presence = Math.max(0.18, 1 - depthFrac * 0.7); // fuller shallow, sparser deep
+    const vis = (m: Monster) => this.level.isVisible(m.x, m.y);
+    const bossNear = this.monsters.some((m) => m.alive && (m.def.boss || m.isHunter || m.def === MOLOCH || m.def === CENSOR) && vis(m));
+    const crowd = Math.min(1, this.monsters.filter((m) => m.alive && !m.peaceful && vis(m)).length / 6);
+    const jamNear = this.allPlayers().some((q) => q.hasJam) || this.jamStolen || this.level.items.some((i) => i.type.id === "jam");
+    const onFeat = (tile: string) => {
+      for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]) if (this.level.tileAt(p.x + dx, p.y + dy) === tile) return true;
+      return false;
+    };
+    return { distress, presence, danger: this.dangerLevel(), bossNear, crowd, jamNear, faucet: onFeat("faucet"), altar: onFeat("altar") };
   }
 
   /** Which level layout a depth uses: the Mempool big room, a Gehennom maze, or normal rooms. */
@@ -2521,7 +2545,7 @@ export class Game {
 
   draw(): void {
     if (this.netRole === "guest") return; // the guest only paints frames it receives
-    if (this.player) this.music.setDanger(this.dangerLevel()); // tension layer follows the threat
+    if (this.player) this.music.setContext(this.musicContext()); // distress, density, and reactions
     const cells = this.buildCells();
     const huds = this.buildHuds();
     this.display.clear();
