@@ -2,6 +2,12 @@
 
 > Living plan for growing Ascend from ~12+4 levels to a full, branched, NetHack-scale
 > dungeon. Built over several sessions. Decisions locked with the maintainer below.
+>
+> **Status: Phases 14a–18 all shipped.** The descent runs d1–20 (vibrating square d12, Gehennom
+> d13–19, Moloch+JAM d20) across nine generators, with persistent levels, the Mines + Consensus
+> Vault branches, per-Plane layouts, and a depth-scaled balance pass. Remaining work is the
+> follow-ups noted under each section (richer Sokoban, sealed vaults, swim, `radial`, mandatory
+> branch gating) and **playtest-driven balance tuning**.
 
 ## Locked decisions
 - **Length:** full scale — **~45–60 levels** across branches (a ~25–30 main descent + several side branches).
@@ -83,4 +89,10 @@ A **god/debug mode** lives behind a single `const DEBUG = true` in `game.ts` (fe
 
 To strip for release: set `DEBUG = false`, or delete the flag + the `DEBUG`-fenced blocks (the constructor `installMobileDebug` call, the onKey hook, the debug methods incl. `installMobileDebug`, the `downPlayer` guard) + the `debugPending`/`godMode` fields.
 - **17 — fortress + concentric + per-Plane layouts:** `fortress` (Council Fort, moat+drawbridge, d16) and `concentric` (Moloch's arena d20 + Genesis Plane) generators; the Planes each get a distinct layout (`PLANE_KINDS`); Gehennom gains the fort as a landmark amid the mazes. ✅
-- **18:** balance pass across the longer run (XP curve, hunger, spawn rates, the Censor cadence), more monsters/items to fill the space.
+- **18 — balance pass for the d1–20 run:** ✅
+  - **Depth-scaled monsters:** ordinary monsters (`weight > 0`) scale HP **+6%/depth** and damage **+4%/depth** at construction — fixes the difficulty plateau (the bestiary's `minDepth` topped out ~10, so deep floors were trivial). Since a kill awards the foe's `maxHp`, **XP scales with it automatically**, keeping levelling paced. Uniques/bosses/keepers/priests keep their hand-tuned stats.
+  - **Level cap 20 → 30** so HP keeps pace with the scaled threat over the longer descent (energy already scaled with level).
+  - **Fewer-but-tougher swarms:** spawn-count coefficient 1.5 → 1.2 and cap 44 → 40, since each monster is now beefier — deep floors press by accumulation, not grind.
+  - **3 deep-Gehennom monsters** (cartel enforcer d13, darkpool kraken d15, sovereign daemon d17) so the back half has fresh terrors.
+  - Hunger (more floors ⇒ more rations found) and the Censor cadence (self-scales with the longer JAM-carry climb) were left as-is.
+  - Curve modelled across d1–20: a single hit stays ~10–29% of player HP (no one-shots), monster HP grows smoothly (no runaway values), player HP (~29→176) tracks the scaled threat. **First pass — wants playtest validation; tune from feel.**

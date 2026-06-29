@@ -787,6 +787,16 @@ export class Monster extends Entity {
     this.name = def.name;
     this.hp = this.maxHp = def.hp;
     this.attackDmg = def.dmg;
+    // Phase 18 balance: ordinary monsters scale with depth so the lengthened d1–20 descent keeps
+    // biting (the bestiary's minDepth tops out ~10, so deep floors would otherwise be trivial).
+    // This also scales the XP reward, since a kill awards the foe's maxHp. Uniques, bosses,
+    // keepers and priests (weight 0) keep their hand-tuned stats.
+    if (def.weight > 0) {
+      const d = Math.max(1, game.player?.depth ?? 1);
+      const hpF = 1 + 0.06 * (d - 1), dmgF = 1 + 0.04 * (d - 1);
+      this.hp = this.maxHp = Math.max(1, Math.round(def.hp * hpF));
+      this.attackDmg = [Math.max(1, Math.round(def.dmg[0] * dmgF)), Math.max(1, Math.round(def.dmg[1] * dmgF))];
+    }
     if (def.mimic) {
       const look = ROT.RNG.getItem(ITEMS.filter((i) => i.kind !== "amulet"))!;
       this.disguiseCh = look.ch; this.disguiseFg = look.fg; this.disguiseType = look;

@@ -216,6 +216,10 @@ export const MONSTERS: MonsterDef[] = [
   { name: "a permission daemon", ch: "P", fg: "#d05050", hp: 24, dmg: [4, 7], ai: "chase", minDepth: 9,  weight: 2, summons: true },
   { name: "a rent-seeker imp",   ch: "j", fg: "#d0a040", hp: 12, dmg: [3, 5], ai: "chase", minDepth: 9,  weight: 3, steals: true, speed: 120 },
   { name: "a censorship demon",  ch: "X", fg: "#e03030", hp: 30, dmg: [5, 9], ai: "chase", minDepth: 10, weight: 2, breath: 14, fearless: true },
+  // ── deep Gehennom (Phase 18) — the back half of the descent gets fresh terrors, not just scaled-up shallows ──
+  { name: "a cartel enforcer",   ch: "B", fg: "#d06030", hp: 34, dmg: [6, 10], ai: "chase", minDepth: 13, weight: 2, corrodes: true, speed: 85 },
+  { name: "a darkpool kraken",   ch: "Y", fg: "#5060c0", hp: 30, dmg: [5, 9],  ai: "chase", minDepth: 15, weight: 2, ranged: true, inflict: "confuse" },
+  { name: "a sovereign daemon",  ch: "Z", fg: "#e02020", hp: 42, dmg: [6, 11], ai: "chase", minDepth: 17, weight: 1, summons: true, fearless: true, breath: 16 },
 ];
 
 /** The Marketmaker — a bazaar shopkeeper. Peaceful while you pay; lethal if you shoplift. */

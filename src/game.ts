@@ -285,7 +285,7 @@ export class Game {
     if (fromKill) this.breakConduct(p, "pacifist"); // a kill by your own hand ends Pacifist
     if (!p.alive || amount <= 0) return;
     p.xp += amount;
-    while (p.level < 20 && p.xp >= this.xpForLevel(p.level + 1)) {
+    while (p.level < 30 && p.xp >= this.xpForLevel(p.level + 1)) { // Phase 18: cap raised 20→30 so HP keeps pace over the d1–20 descent
       p.level++;
       const gain = Math.max(2, ROT.RNG.getUniformInt(3, 8) + abilityMod(p.con));
       p.maxHp += gain; p.hp += gain;
@@ -2693,8 +2693,9 @@ export class Game {
     const diff = this.currentChain?.difficulty ?? 1;
     // A chain's difficulty shifts the monster pool deeper/shallower and scales the count.
     const poolDepth = Math.max(1, this.player.depth + Math.round((diff - 1) * 4));
-    // count grows with depth; capped so the lengthened descent (Phase 16c) stays sane until the Phase 18 balance pass.
-    const count = Math.min(44, Math.round((4 + this.player.depth * 1.5) * diff) + (this.player.depth >= 9 ? 4 : 0) + (this.level.kind === "bigroom" ? 12 : 0));
+    // Phase 18: fewer-but-tougher — the per-depth coefficient is gentler (1.5→1.2) and the cap
+    // lower (44→40) now that monster HP/damage scale with depth, so deep floors press without grinding.
+    const count = Math.min(40, Math.round((4 + this.player.depth * 1.2) * diff) + (this.player.depth >= 9 ? 4 : 0) + (this.level.kind === "bigroom" ? 12 : 0));
     for (let i = 0; i < count; i++) {
       const def = this.pickMonster(poolDepth);
       let pos = this.level.randomFloor();
