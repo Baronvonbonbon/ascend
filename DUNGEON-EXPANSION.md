@@ -6,7 +6,7 @@
 ## Locked decisions
 - **Length:** full scale — **~45–60 levels** across branches (a ~25–30 main descent + several side branches).
 - **Branching:** **NetHack-style mandatory branches** — some branches are on the critical path (a Sokoban-equivalent prize-gate, a Mines pass-through), not just optional loot.
-- **Persistence:** **levels persist** — each level is generated once and stored; revisiting returns the *same* layout with your dropped items, bones, monsters' state. (Today we regenerate on revisit — this is the big architecture change.)
+- **Persistence:** **levels persist** — each level is generated once and stored; revisiting returns the *same* layout with your dropped items, bones, monsters' state. *(Shipped in Phase 15 for the dungeon, chains, and quest; planes excluded. Was: regenerate-on-revisit.)*
 - **Generators first:** caves, labyrinth (maze+rooms), grid/city, swamp/water + special rooms.
 
 ## Layout generators
@@ -48,13 +48,16 @@ A branch graph instead of a single spine:
 - **Parachains** (XCM side-branches) — optional, each its own layout/palette/monster set.
 - **The endgame ladder** — vibrating square → Gehennom (mazes, ~d9–11, expand toward ~20) → Moloch's Sanctum → the Planes → Genesis.
 
-## Persistence architecture (Phase 15 — foundational)
-- A `Map<levelKey, Level>` on `Game`, keyed by branch+depth (e.g. `"dungeon:7"`, `"mines:3"`, `"kusama:1"`).
-- `descend/ascend/enterChain/enterQuest/enterPlane` look up the stored level; generate + store only on first visit.
-- Store per level: tiles, items, monsters (positions/HP/state), traps, engravings, boulders, explored mask, stairs.
-- The Censor hunt + bones already lean on "what's here"; persistence makes backtracking and branch loops coherent.
+## Persistence architecture (Phase 15 — foundational) ✅ SHIPPED
+- `slots: Map<string, { level: Level; monsters: Monster[] }>` on `Game`, keyed by branch+depth via `levelKey()` (`"dungeon:7"`, `"kusama:1"`, `"quest"`).
+- A unified `beginLevel(key, kind)`: saves the level being left, switches to the keyed slot, and returns `true` if it already exists (restore — skip generation/spawn) or `false` (generate fresh, then `saveActive()`). `descend/ascend/enterChain/exitChain/enterQuest/exitQuest` all route through it; fresh-only setup (loot caches, the quest nemesis, special rooms) lives in the `!restored` branch.
+- `enterLevel` (fresh) populates then calls `placeParty` + `scheduleParty`; `restoreEnter` (revisit) re-places the party and rebuilds the schedule **without respawning**. Both share `scheduleParty` (clear → add player/partner/alive-monsters/pet → FOV → music).
+- Stored per level: everything already on `Level` (tiles, items, traps, engravings, boulders, portals, graves, explored mask, stairs) **+** its `monsters[]` (positions/HP/state). The Level's own arrays are reached through the stored ref, so reassigning `level.items` is safe; only `Game.monsters` is duplicated into the slot, so `kill()` now **splices in place** (was a `filter`-reassign) to keep the array identity — dead monsters stay dead on revisit.
+- Only the **active** level's actors are scheduled; stored levels freeze until revisited.
+- **Planes are excluded** — the ascent only ever climbs *up* (`ascend` on a plane → `enterPlane(n+1)`), so a plane is never revisited; they regenerate per entry (and keep `genesisAltars` simple). `enterPlane` still `saveActive()`s the dungeon level it leaves.
+- Edges handled: a monster frozen on the arrival stair nudges the player to a free neighbour; a **completed** Quest's homeland portal — which now persists on the relay level — goes inert (tile cleared) on re-touch instead of re-opening a dead quest.
 - Co-op: host owns the level store; guests render frames (unchanged).
-- Risk: monster scheduling across stored levels — only the active level's actors are scheduled; others freeze until revisited.
+- **Deferred:** plane persistence (incl. `genesisAltars`/guardian state) and serialising the store for save/resume across page reloads.
 
 ## Polkadot flavor for new areas
 - Mines → "the Storage Caverns" (a storage/DA parachain). Swamp → "the Liquidity Pools." Grid → "the Rollup City." Fortress → "the Council Fort." Vault → "the Treasury." Temple → "a Gavin shrine." Zoo → "an airdrop trap room."
@@ -62,7 +65,7 @@ A branch graph instead of a single spine:
 ## Phased rollout
 - **14a — generators (this session):** cave, labyrinth, grid + zoning + parachain layouts. ✅
 - **14b — swamp + special rooms:** the `water` tile + `swamp` generator (zoned onto the Hydration parachain) + first special rooms (temple, zoo, vault) dropped into `normal` floors. ✅
-- **15 — persistence:** the level store + revisit-identical levels. *Foundational; unblocks real branches.*
+- **15 — persistence:** the level store + revisit-identical levels (dungeon + chains + quest; planes excluded). *Foundational; unblocks real branches.* ✅
 - **16 — branch graph:** multi-branch dungeon; build the Mines + the Consensus Vault (Sokoban) as mandatory branches; lengthen the main descent toward ~25–30.
 - **17:** fortress + concentric generators; per-Plane unique layouts; expand Gehennom.
 - **18:** balance pass across the longer run (XP curve, hunger, spawn rates, the Censor cadence), more monsters/items to fill the space.

@@ -58,6 +58,12 @@ export class Game {
   ident!: Idents;
   monsters: Monster[] = [];
   pet: Pet | null = null;
+  // Phase 15 — persistence: each visited level is generated once and stored, so revisiting
+  // returns the *same* layout with its dropped items, bones, traps, and monsters' state.
+  // Keyed by branch+depth ("dungeon:7", "kusama:1", "quest"). Planes are excluded — the ascent
+  // only ever climbs up, so a plane is never revisited.
+  private slots = new Map<string, { level: Level; monsters: Monster[] }>();
+  private activeKey = "dungeon:1"; // the key of the level currently in this.level
   private currentChain: ChainDef | null = null; // null = the main relay-chain dungeon
   private defeatedBosses = new Set<number>();    // relay depths whose mini-boss is slain
   private gehennomOpen = false;                  // the Invocation has been performed — the Dark Forest lies below
@@ -112,6 +118,8 @@ export class Game {
     this.loadedRelics.clear();
     this.downed.clear();
     this.turn = 0;
+    this.slots.clear();
+    this.activeKey = "dungeon:1";
     this.ident = new Idents();
     this.level = new Level(W, MAP_H);
     this.player = new Player(this, this.level.start.x, this.level.start.y);
@@ -132,6 +140,7 @@ export class Game {
       this.pet = new Pet(this, this.level.start.x, this.level.start.y);
     }
     this.enterLevel();
+    this.saveActive(); // register depth 1 in the level store
     this.log.add(ROT.RNG.getItem(GREETINGS)!, "sys");
     for (const line of GRAY_PAPER) this.log.add(line, "dim");
     if (this.coop) this.log.add(`Co-op (${this.coopMode}) — Host and Guest share this dungeon. Find the JAM together.`, "sys");
@@ -317,19 +326,48 @@ export class Game {
     for (const c of kept) this.log.add(`  ${c.label}: ${c.note}.`, "good");
   }
 
-  /** Populate the current level and (re)build the turn schedule. */
+  // ── Phase 15: the level store ──────────────────────────────────────────────
+  /** Branch+depth key for the level currently described by (plane/quest/chain/depth) state. */
+  private levelKey(): string {
+    if (this.plane > 0) return `plane:${this.plane}`; // never stored (no path back down a plane)
+    if (this.inQuest) return "quest";
+    if (this.currentChain) return `${this.currentChain.id}:${this.player.depth}`;
+    return `dungeon:${this.player.depth}`;
+  }
+
+  /** Persist the active level + its monsters under the active key (idempotent — same refs). */
+  private saveActive(): void {
+    if (this.plane > 0) return; // planes aren't persisted
+    this.slots.set(this.activeKey, { level: this.level, monsters: this.monsters });
+  }
+
+  /** Switch to the level for `key`. Returns true if it already exists (restore) — the caller
+   *  then skips fresh generation/population. Saves the level being left first. */
+  private beginLevel(key: string, kind: LevelKind): boolean {
+    this.saveActive();
+    this.activeKey = key;
+    const slot = this.slots.get(key);
+    if (slot) { this.level = slot.level; this.monsters = slot.monsters; return true; }
+    this.level = new Level(W, MAP_H, kind);
+    this.monsters = [];
+    return false;
+  }
+
+  /** Re-enter an already-generated level: re-place the party beside the arriving player and
+   *  rebuild the schedule from the stored (frozen) actors. No respawn, no new loot. */
+  private restoreEnter(): void {
+    // a monster may have frozen on the very stair we arrive at — step the player to a free neighbour
+    if (this.monsterAt(this.player.x, this.player.y)) {
+      const spot = this.adjacentFree(this.player.x, this.player.y);
+      if (spot) { this.player.x = spot.x; this.player.y = spot.y; }
+    }
+    this.placeParty();
+    this.scheduleParty();
+  }
+
+  /** Populate a freshly generated level, then place the party and build the schedule. */
   private enterLevel(): void {
     this.monsters = [];
-    this.scheduler.clear();
-    this.scheduler.add(this.player, true);
-    // The partner descends alongside — placed next to the host, sharing the schedule.
-    if (this.coPlayer && this.coPlayer.alive) {
-      const spot = this.adjacentFree(this.player.x, this.player.y);
-      if (spot) { this.coPlayer.x = spot.x; this.coPlayer.y = spot.y; }
-      else { this.coPlayer.x = this.player.x; this.coPlayer.y = this.player.y; }
-      this.coPlayer.depth = this.player.depth; // shared depth for the HUD
-      this.scheduler.add(this.coPlayer, true);
-    }
     if (this.plane > 0) {
       this.setupPlane();
     } else {
@@ -357,12 +395,31 @@ export class Game {
         else if (this.player.depth >= GEHENNOM_BOTTOM) this.placeJamAndBoss();
       }
     }
-    for (const m of this.monsters) this.scheduler.add(m, true);
+    this.placeParty();
+    this.scheduleParty();
+  }
+
+  /** Place the co-op partner and the pet beside the arriving player (the party travels together). */
+  private placeParty(): void {
+    if (this.coPlayer && this.coPlayer.alive) {
+      const spot = this.adjacentFree(this.player.x, this.player.y);
+      if (spot) { this.coPlayer.x = spot.x; this.coPlayer.y = spot.y; }
+      else { this.coPlayer.x = this.player.x; this.coPlayer.y = this.player.y; }
+      this.coPlayer.depth = this.player.depth; // shared depth for the HUD
+    }
     if (this.pet && this.pet.alive) {
       const spot = this.adjacentFree(this.player.x, this.player.y);
       if (spot) { this.pet.x = spot.x; this.pet.y = spot.y; }
-      this.scheduler.add(this.pet, true);
     }
+  }
+
+  /** Rebuild the turn scheduler around the active level's actors (only the active level runs). */
+  private scheduleParty(): void {
+    this.scheduler.clear();
+    this.scheduler.add(this.player, true);
+    if (this.coPlayer && this.coPlayer.alive) this.scheduler.add(this.coPlayer, true);
+    for (const m of this.monsters) if (m.alive) this.scheduler.add(m, true);
+    if (this.pet && this.pet.alive) this.scheduler.add(this.pet, true);
     this.recomputeFOV();
     this.music.setArea(this.currentAreaId()); // crossfade to this area's soundtrack
   }
@@ -407,11 +464,17 @@ export class Game {
   descend(): void {
     this.player.depth++;
     this.player.maxDepthReached = Math.max(this.player.maxDepthReached, this.player.depth);
-    this.level = new Level(W, MAP_H, this.currentChain ? "normal" : this.levelKindFor(this.player.depth));
-    this.player.x = this.level.start.x;
+    const kind = this.currentChain ? "normal" : this.levelKindFor(this.player.depth);
+    const restored = this.beginLevel(this.levelKey(), kind);
+    this.player.x = this.level.start.x; // arrive at this level's up-stair (its start)
     this.player.y = this.level.start.y;
-    this.placeUpStair();
-    this.enterLevel();
+    if (restored) {
+      this.restoreEnter();
+    } else {
+      this.placeUpStair();
+      this.enterLevel();
+      this.saveActive();
+    }
     if (this.level.kind === "bigroom") this.log.add("You descend into THE MEMPOOL — a vast open churn of pending chaos. Loot, and a swarm.", "bad");
     else if (this.level.kind === "maze") this.log.add(`You descend into the maze of ${realmName(this.player.depth)} — narrow, lightless, and patient.`, "bad");
     else this.log.add(`You descend to depth ${this.player.depth} — ${realmName(this.player.depth)}.`, this.player.depth >= 7 ? "bad" : "sys");
@@ -442,17 +505,22 @@ export class Game {
   /** XCM call: hop to a parachain branch (its multipliers shape spawns + loot). */
   enterChain(chain: ChainDef): void {
     this.currentChain = chain;
-    this.level = new Level(W, MAP_H, (chain.layout as LevelKind) ?? "normal"); // each parachain has a signature layout
+    const restored = this.beginLevel(this.levelKey(), (chain.layout as LevelKind) ?? "normal"); // each parachain has a signature layout
     this.player.x = this.level.start.x;
     this.player.y = this.level.start.y;
-    this.placeUpStair(); // the way back to the relay
-    this.enterLevel();
-    const goodies = ITEMS.filter((i) => i.kind === "ring" || i.kind === "wand");
-    const cacheN = Math.max(0, Math.round(2 * chain.loot));
-    for (let i = 0; i < cacheN; i++) {
-      const pos = this.level.randomFloor();
-      if (this.level.tileAt(pos.x, pos.y) === "floor" && !this.level.itemAt(pos.x, pos.y))
-        this.level.items.push({ x: pos.x, y: pos.y, type: ROT.RNG.getItem(goodies)! });
+    if (restored) {
+      this.restoreEnter();
+    } else {
+      this.placeUpStair(); // the way back to the relay
+      this.enterLevel();
+      const goodies = ITEMS.filter((i) => i.kind === "ring" || i.kind === "wand");
+      const cacheN = Math.max(0, Math.round(2 * chain.loot));
+      for (let i = 0; i < cacheN; i++) {
+        const pos = this.level.randomFloor();
+        if (this.level.tileAt(pos.x, pos.y) === "floor" && !this.level.itemAt(pos.x, pos.y))
+          this.level.items.push({ x: pos.x, y: pos.y, type: ROT.RNG.getItem(goodies)! });
+      }
+      this.saveActive();
     }
     this.log.add(`XCM → ${chain.name}: difficulty ×${chain.difficulty}, loot ×${chain.loot}. (< to return to the relay)`, chain.difficulty >= 1 ? "bad" : "sys");
     this.draw();
@@ -461,11 +529,16 @@ export class Game {
   private exitChain(): void {
     const from = this.currentChain?.name ?? "the branch";
     this.currentChain = null;
-    this.level = new Level(W, MAP_H);
-    this.player.x = this.level.stairs.x;
+    const restored = this.beginLevel(this.levelKey(), "normal");
+    this.player.x = this.level.stairs.x; // back on the relay, at its down-stair
     this.player.y = this.level.stairs.y;
-    if (this.player.depth > 1) this.placeUpStair();
-    this.enterLevel();
+    if (restored) {
+      this.restoreEnter();
+    } else {
+      if (this.player.depth > 1) this.placeUpStair();
+      this.enterLevel();
+      this.saveActive();
+    }
     this.log.add(`XCM ← you return from ${from} to the relay at depth ${this.player.depth}.`, "sys");
     this.draw();
   }
@@ -486,31 +559,51 @@ export class Game {
   /** Enter the Quest homeland: your nemesis guards your signature artifact. */
   enterQuest(): void {
     const q = questFor(this.player.archetype);
+    if (this.questDone) {
+      // the homeland portal persists on the relay level now — spend it once the Quest is fulfilled
+      this.level.tiles[this.player.y][this.player.x] = "floor";
+      const pi = this.level.portals.findIndex((p) => p.x === this.player.x && p.y === this.player.y);
+      if (pi >= 0) this.level.portals.splice(pi, 1);
+      this.log.add("Your Quest is fulfilled — the homeland portal has gone dark.", "dim");
+      this.recomputeFOV(); this.draw();
+      return;
+    }
     this.inQuest = true;
     this.currentChain = null;
-    this.level = new Level(W, MAP_H);
+    const restored = this.beginLevel(this.levelKey(), "normal");
     this.player.x = this.level.start.x;
     this.player.y = this.level.start.y;
-    this.placeUpStair(); // the way home
-    this.enterLevel();
-    // the nemesis guards the artifact near the far end
-    const s = this.level.stairs;
-    this.level.tiles[s.y][s.x] = "floor";
-    this.level.items.push({ x: s.x, y: s.y, type: itemById(q.artifactId)!, relic: true, enchant: 2, buc: "blessed", bucKnown: true });
-    const spot = this.adjacentFree(s.x, s.y) ?? { x: s.x, y: s.y };
-    this.monsters.push(new Monster(this, q.nemesis, spot.x, spot.y));
-    this.scheduler.add(this.monsters[this.monsters.length - 1], true);
+    if (restored) {
+      this.restoreEnter();
+    } else {
+      this.placeUpStair(); // the way home
+      this.enterLevel();
+      // the nemesis guards the artifact near the far end
+      const s = this.level.stairs;
+      this.level.tiles[s.y][s.x] = "floor";
+      this.level.items.push({ x: s.x, y: s.y, type: itemById(q.artifactId)!, relic: true, enchant: 2, buc: "blessed", bucKnown: true });
+      const spot = this.adjacentFree(s.x, s.y) ?? { x: s.x, y: s.y };
+      const nemesis = new Monster(this, q.nemesis, spot.x, spot.y);
+      this.monsters.push(nemesis);
+      this.scheduler.add(nemesis, true); // enterLevel already scheduled; add the late-placed nemesis
+      this.saveActive();
+    }
     this.log.add(`You step into ${q.homeland}. ${cap(q.nemesis.name)} bars the way to ${itemById(q.artifactId)!.name}. (< to flee home)`, "bad");
     this.draw();
   }
 
   private exitQuest(): void {
     this.inQuest = false;
-    this.level = new Level(W, MAP_H);
+    const restored = this.beginLevel(this.levelKey(), "normal");
     this.player.x = this.level.stairs.x;
     this.player.y = this.level.stairs.y;
-    if (this.player.depth > 1) this.placeUpStair();
-    this.enterLevel();
+    if (restored) {
+      this.restoreEnter();
+    } else {
+      if (this.player.depth > 1) this.placeUpStair();
+      this.enterLevel();
+      this.saveActive();
+    }
     this.log.add(`You return from your Quest to the relay at depth ${this.player.depth}.`, "sys");
     this.draw();
   }
@@ -527,12 +620,18 @@ export class Game {
       return;
     }
     this.player.depth = newDepth;
-    this.level = new Level(W, MAP_H, this.levelKindFor(newDepth));
+    const restored = this.beginLevel(this.levelKey(), this.levelKindFor(newDepth));
     this.player.x = this.level.stairs.x; // you climb up INTO the down-stairs of the level above
     this.player.y = this.level.stairs.y;
-    if (newDepth > 1) this.placeUpStair();
-    else if (holder) { this.level.tiles[this.player.y][this.player.x] = "stairsUp"; } // a stair beyond the world opens
-    this.enterLevel();
+    if (restored) {
+      this.restoreEnter();
+    } else {
+      if (newDepth > 1) this.placeUpStair();
+      this.enterLevel();
+      this.saveActive();
+    }
+    // with the JAM at the surface, a stair beyond the world opens upward into the Planes
+    if (newDepth === 1 && holder) this.level.tiles[this.player.y][this.player.x] = "stairsUp";
     this.log.add(`You climb to depth ${newDepth} — ${realmName(newDepth)}.`, "sys");
     if (newDepth === 1 && holder) this.log.add("The surface is near — but the JAM hauls you UPWARD, past the world itself. Climb (<) into the Planes.", "good");
     this.draw();
@@ -541,6 +640,7 @@ export class Game {
   /** Enter the n-th Plane of the ascent (1..PLANES.length). The last is the Genesis Plane. */
   private enterPlane(n: number): void {
     if (n > PLANES.length) return; // already atop the Genesis Plane — offer the JAM, don't climb
+    this.saveActive(); // persist the dungeon level being left (planes themselves aren't stored — no path back down)
     this.plane = n;
     this.currentChain = null;
     this.level = new Level(W, MAP_H);
@@ -2381,7 +2481,8 @@ export class Game {
     if (d instanceof Player) { this.downPlayer(d); return; }
     if (d === this.pet) { this.log.add("Your nominator falls. You descend alone.", "bad"); this.scheduler.remove(this.pet); return; }
     const m = d as Monster;
-    this.monsters = this.monsters.filter((x) => x !== m);
+    const mi = this.monsters.indexOf(m); // splice in place — the array identity is the persisted level's monster list
+    if (mi >= 0) this.monsters.splice(mi, 1);
     this.scheduler.remove(m);
     // Slay the resurrected Censor while it holds the JAM and you wrest it back.
     if (m.isHunter && this.jamStolen) {
