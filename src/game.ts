@@ -999,7 +999,7 @@ export class Game {
   /** 0..1 danger for the music tension layer: adjacency, bosses, and the Censor hunt. */
   private dangerLevel(): number {
     let danger = 0;
-    const near = (m: Monster) => this.livingPlayers().some((p) => Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) <= 1);
+    const near = (m: Monster) => this.playersHere().some((p) => Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) <= 1); // this floor's adventurers
     for (const m of this.monsters) {
       if (!m.alive || m.peaceful) continue;
       if (near(m)) danger = Math.max(danger, 0.55);
