@@ -686,7 +686,13 @@ export class Player extends Entity {
     const boulder = this.game.level.boulderAt(nx, ny);
     if (boulder) {
       const bx = nx + dx, by = ny + dy;
-      if (this.game.level.isPassable(bx, by) && !this.game.level.boulderAt(bx, by) && !this.game.monsterAt(bx, by) && !this.game.playerAt(bx, by)) {
+      if (this.game.level.tileAt(bx, by) === "pit" && !this.game.level.boulderAt(bx, by) && !this.game.monsterAt(bx, by) && !this.game.playerAt(bx, by)) {
+        // shove the boulder into the chasm — it fills, the boulder is consumed, and you advance
+        this.game.level.boulders = this.game.level.boulders.filter((b) => b !== boulder);
+        this.game.level.tiles[by][bx] = "floor";
+        this.game.recomputeFOV();
+        this.game.log.add("You heave the boulder into the chasm — it fills with a grinding crunch.", "good");
+      } else if (this.game.level.isPassable(bx, by) && !this.game.level.boulderAt(bx, by) && !this.game.monsterAt(bx, by) && !this.game.playerAt(bx, by)) {
         boulder.x = bx; boulder.y = by;
         this.game.log.add("You heave the boulder forward.", "dim");
       } else { this.game.log.add("The boulder won't budge — break it (a fire ray) or go around.", "dim"); return false; }

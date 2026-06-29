@@ -44,11 +44,28 @@ const CONDUCTS: { id: string; label: string; note: string }[] = [
   { id: "bankless",   label: "Bankless",       note: "bought nothing, forged nothing — touched no market" },
 ];
 const VAULT_CAP = 12; // a multisig vault holds up to this many stashed items
+// Hand-built Consensus Vault (Sokoban) floors. A 1-wide tunnel of alternating boulders (O) and
+// chasms (_): you can only push forward, so each boulder fills the next pit — unbrickable by design.
+// `<` start/exit · `>` goal (the prize) · `#` wall · `.` floor · `O` boulder · `_` pit.
+const SOKOBAN_FLOORS: string[][] = [
+  [
+    "###################",
+    "#<.O._.O._.O._...>#",
+    "###################",
+  ],
+];
 const SKILL_RANKS = ["Unskilled", "Basic", "Skilled", "Expert"]; // weapon-skill ranks (#enhance)
 const SKILL_NEED = [0, 20, 60, 140]; // landed hits to reach each rank
 const SKILL_LABEL: Record<string, string> = { blade: "blades", blunt: "bludgeons", martial: "martial arts" };
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DEBUG / GOD MODE — developer testing only. To remove for release: set DEBUG
+// to false (disables all of it), or delete this flag + every block fenced with
+// a "DEBUG" comment (onKey hook, the debug methods, the downPlayer guard).
+// ═══════════════════════════════════════════════════════════════════════════
+const DEBUG = true;
 
 export class Game {
   readonly display: ROT.Display;
@@ -84,6 +101,8 @@ export class Game {
   private engine!: ROT.Engine;
   private over = false;
   private busy = false; // a wallet transaction is in flight — input is frozen
+  private debugPending = false; // DEBUG: a backtick was pressed; the next key is a debug command
+  private godMode = false;      // DEBUG: negate player death
 
   // ── co-op (host-authoritative over WebRTC) ──
   acting!: Player;              // the player whose input is currently being processed
@@ -578,11 +597,16 @@ export class Game {
     const e = this.level.branchEntryAt(x, y);
     const def = e ? branchById(e.branchId) : undefined;
     if (!def) return false;
+    this.enterBranch(def);
+    return true;
+  }
+
+  /** Enter a branch at its mouth (floor 1); progress runs via > toward the prize on the End floor. */
+  enterBranch(def: BranchDef): void {
     this.branchReturnDepth = this.player.depth;
     this.enterBranchFloor(def, 1, "down");
-    this.log.add(`You clamber down into ${def.name}. (< to climb back toward the relay)`, "bad");
+    this.log.add(`${def.entryFlavor ?? `You clamber down into ${def.name}.`} (< to climb back toward the relay)`, "bad");
     this.draw();
-    return true;
   }
 
   /** Descend one floor deeper within the active branch (the > handler routes here in a branch). */
@@ -632,17 +656,30 @@ export class Game {
     this.branchFloor = floor;
     this.player.depth = def.entryDepth + floor; // effective depth scales spawns/loot
     this.player.maxDepthReached = Math.max(this.player.maxDepthReached, this.player.depth);
-    const restored = this.beginLevel(this.levelKey(), def.layout as LevelKind);
+    const restored = this.beginLevel(this.levelKey(), def.sokoban ? "sokoban" : (def.layout as LevelKind));
+    if (!restored && def.sokoban) this.buildSokobanFloor(def, floor); // stamp the prefab (sets start/stairs) before we read them
     const arrive = dir === "down" ? this.level.start : this.level.stairs; // down→up-stair, up→down-stair
     this.player.x = arrive.x; this.player.y = arrive.y;
     if (restored) {
       this.restoreEnter();
+    } else if (def.sokoban) {
+      this.placeParty(); this.scheduleParty(); // a hand-built floor is fully populated by buildSokobanFloor — no procedural spawn
+      this.saveActive();
     } else {
       this.placeUpStair(); // the way back up toward the relay
       this.enterLevel();
       if (floor >= def.floors) this.placeBranchPrize(def); // the End — guaranteed prize, no stair deeper
       this.saveActive();
     }
+  }
+
+  /** Stamp a Sokoban branch floor from its template and lay the guaranteed prize on the goal tile. */
+  private buildSokobanFloor(def: BranchDef, floor: number): void {
+    this.monsters = []; // a pure puzzle — no spawns
+    this.level.loadSokoban(SOKOBAN_FLOORS[Math.min(floor, SOKOBAN_FLOORS.length) - 1]);
+    const s = this.level.stairs; // the goal `>` — the prize rests here (no stair deeper)
+    const prize = itemById(def.prizeId);
+    if (prize && !this.level.itemAt(s.x, s.y)) this.level.items.push({ x: s.x, y: s.y, type: prize, buc: "blessed", bucKnown: true });
   }
 
   /** A branch's end floor: its down-stair becomes the guaranteed prize, with a guardian beside it. */
@@ -1179,7 +1216,10 @@ export class Game {
     }
     if (this.level.boulderAt(nx, ny)) {
       const b = this.level.boulderAt(nx, ny)!, bx = nx + dx, by = ny + dy;
-      if (this.level.isPassable(bx, by) && !this.level.boulderAt(bx, by) && !this.monsterAt(bx, by) && !this.playerAt(bx, by)) { b.x = bx; b.y = by; this.log.add("You kick the boulder forward.", "dim"); }
+      if (this.level.tileAt(bx, by) === "pit" && !this.level.boulderAt(bx, by) && !this.monsterAt(bx, by) && !this.playerAt(bx, by)) {
+        this.level.boulders = this.level.boulders.filter((x) => x !== b); this.level.tiles[by][bx] = "floor";
+        this.recomputeFOV(); this.log.add("You kick the boulder into the chasm — it fills.", "good");
+      } else if (this.level.isPassable(bx, by) && !this.level.boulderAt(bx, by) && !this.monsterAt(bx, by) && !this.playerAt(bx, by)) { b.x = bx; b.y = by; this.log.add("You kick the boulder forward.", "dim"); }
       else { this.log.add("You kick the boulder — it doesn't move. Ow.", "dim"); if (ROT.RNG.getUniform() < 0.3) { p.hp -= 1; if (p.hp <= 0) this.killPlayer(p); } }
       this.draw(); return true;
     }
@@ -1403,6 +1443,7 @@ export class Game {
       throne: "the Sudo Throne", vibrating: "the vibrating square — invoke (I) the ritual here",
       water: "open water — too deep to wade; find a causeway or jump (XCM)",
       branchDown: "a branch-stair into the Storage Caverns — > to descend",
+      pit: "a chasm — impassable; shove a boulder into it to bridge across",
     };
     this.log.add(`You see ${names[t!] ?? "nothing notable"}.`, "dim");
   }
@@ -1902,6 +1943,7 @@ export class Game {
 
   /** A player falls. Solo (or last to fall) → game over; in co-op the survivor fights on. */
   private downPlayer(p: Player): void {
+    if (DEBUG && this.godMode) { p.hp = p.maxHp; this.log.add("[DEBUG] godmode — death negated.", "sys"); this.draw(); return; } // ── DEBUG (remove for release) ──
     if (p.hp > 0) p.hp = 0; // a downed player is simply at 0 HP (alive is hp > 0)
     if (this.downed.has(p)) return;
     this.downed.add(p);
@@ -2768,6 +2810,78 @@ export class Game {
   }
 
   // ── input + render ───────────────────────────────────────────────────────
+  // ═══ DEBUG / GOD MODE — developer testing only; remove this whole block for release ═══════
+  /** Intercept a key as a debug command (backtick = prefix, then one command key). */
+  private debugIntercept(key: string): boolean {
+    if (this.debugPending) { this.debugPending = false; this.debugCommand(key); return true; }
+    if (key === "`") {
+      this.debugPending = true;
+      this.log.add("[DEBUG] cmd? d/u down/up · 1-9 warp depth · m Mines · v Vault · x XCM-portal · Q quest-portal · g Gehennom@9 · J JAM@12 · r reveal · h heal · G godmode · k mob · K kit · T/t →down/up-stair", "sys");
+      this.draw();
+      return true;
+    }
+    return false;
+  }
+
+  private debugCommand(key: string): void {
+    const p = this.player;
+    if (key >= "1" && key <= "9") { this.debugWarp(Number(key)); this.log.add(`[DEBUG] warp → depth ${key}.`, "sys"); return; }
+    switch (key) {
+      case "d": this.log.add("[DEBUG] force descend.", "sys"); this.descend(); break;
+      case "u": this.log.add("[DEBUG] force ascend.", "sys"); this.ascend(); break;
+      case "m": { const b = branchById("mines"); if (b) this.enterBranch(b); break; }
+      case "v": { const b = branchById("vault"); if (b) this.enterBranch(b); else this.log.add("[DEBUG] no Vault branch defined.", "dim"); break; }
+      case "x": { const c = ROT.RNG.getItem(CHAINS)!; if (!this.level.portalAt(p.x, p.y)) this.level.portals.push({ x: p.x, y: p.y, chain: c }); this.level.tiles[p.y][p.x] = "portal"; this.recomputeFOV(); this.draw(); this.log.add(`[DEBUG] XCM portal to ${c.name} under you — press > to enter.`, "sys"); break; }
+      case "Q": { if (!this.level.portalAt(p.x, p.y)) this.level.portals.push({ x: p.x, y: p.y, chain: CHAINS[0], quest: true }); this.level.tiles[p.y][p.x] = "portal"; this.recomputeFOV(); this.draw(); this.log.add("[DEBUG] quest portal under you — press > to enter.", "sys"); break; }
+      case "g": this.gehennomOpen = true; this.debugWarp(9); this.log.add("[DEBUG] Gehennom opened, warped to depth 9.", "sys"); break;
+      case "J": this.gehennomOpen = true; this.debugWarp(GEHENNOM_BOTTOM); this.log.add("[DEBUG] warped to the JAM floor (Moloch).", "sys"); break;
+      case "r": this.level.revealAll(); this.recomputeFOV(); this.draw(); this.log.add("[DEBUG] level revealed.", "sys"); break;
+      case "h": this.debugHeal(p); if (this.coPlayer) this.debugHeal(this.coPlayer); this.draw(); this.log.add("[DEBUG] fully healed.", "sys"); break;
+      case "G": this.godMode = !this.godMode; this.log.add(`[DEBUG] god mode ${this.godMode ? "ON" : "off"}.`, "sys"); break;
+      case "k": this.debugSpawnMob(); break;
+      case "K": this.debugKit(p); this.draw(); break;
+      case "T": { const s = this.level.stairs; p.x = s.x; p.y = s.y; this.recomputeFOV(); this.draw(); this.log.add("[DEBUG] → down-stair.", "sys"); break; }
+      case "t": { const s = this.level.start; p.x = s.x; p.y = s.y; this.recomputeFOV(); this.draw(); this.log.add("[DEBUG] → up-stair.", "sys"); break; }
+      default: this.log.add(`[DEBUG] unknown command '${key}'.`, "dim"); break;
+    }
+  }
+
+  /** DEBUG: free warp to a main-dungeon depth (drops any branch/chain/quest/plane). */
+  private debugWarp(depth: number): void {
+    this.currentChain = null; this.branchFloor = 0; this.inQuest = false; this.plane = 0;
+    this.player.depth = depth;
+    this.player.maxDepthReached = Math.max(this.player.maxDepthReached, depth);
+    const restored = this.beginLevel(this.levelKey(), this.levelKindFor(depth));
+    this.player.x = this.level.start.x; this.player.y = this.level.start.y;
+    if (restored) this.restoreEnter();
+    else { if (depth > 1) this.placeUpStair(); this.enterLevel(); this.saveActive(); }
+    this.draw();
+  }
+
+  private debugHeal(p: Player): void {
+    p.hp = p.maxHp; p.energy = p.maxEnergy;
+    p.poison = 0; p.confused = 0; p.stoning = 0; p.illness = 0; p.blind = 0;
+    p.nutrition = Math.max(p.nutrition, 900);
+  }
+
+  private debugSpawnMob(): void {
+    const spot = this.adjacentFree(this.player.x, this.player.y);
+    if (!spot) { this.log.add("[DEBUG] no room to spawn.", "dim"); return; }
+    const def = this.pickMonster(Math.max(1, this.player.depth));
+    const m = new Monster(this, def, spot.x, spot.y);
+    this.monsters.push(m); this.scheduler.add(m, true);
+    this.log.add(`[DEBUG] spawned ${def.name}.`, "sys"); this.draw();
+  }
+
+  private debugKit(p: Player): void {
+    for (const id of ["bell", "candelabrum", "graybook", "vault", "hodlstone", "pickaxe", "wand_dig", "heal", "heal", "tele", "tele"]) {
+      const t = itemById(id);
+      if (t && !p.inventory.full) this.giveItem(t, { buc: "blessed", bucKnown: true });
+    }
+    this.log.add("[DEBUG] kit granted (3 relics, bag, luckstone, pickaxe, dig wand, potions, scrolls).", "sys");
+  }
+  // ═══ end DEBUG block ═══════════════════════════════════════════════════════
+
   private onKey(e: KeyboardEvent): void {
     if (e.ctrlKey || e.metaKey || e.altKey) return; // let browser shortcuts (refresh, copy, devtools) through
     if (this.netRole === "guest") { this.peer?.send({ t: "input", key: e.key }); e.preventDefault(); return; }
@@ -2777,6 +2891,7 @@ export class Game {
       return;
     }
     if (this.coop && !this.player.alive) { e.preventDefault(); return; } // host downed — spectate
+    if (DEBUG && this.debugIntercept(e.key)) { e.preventDefault(); return; } // ── DEBUG hook (remove for release) ──
     this.player.feed(e.key);
     e.preventDefault();
   }

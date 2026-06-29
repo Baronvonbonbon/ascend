@@ -43,7 +43,7 @@ Zoned into the existing descent + parachains so variety lands immediately:
 A branch graph instead of a single spine:
 - **Dungeons of Doom** (main, ~d1→d12 to the vibrating square) — the standard→cave→grid→labyrinth zones.
 - **The Mines** (branch off the upper dungeon) — caves, a themed "Mines' End" with a luckstone-grade prize. *Mandatory pass-through or strongly incentivised.* ✅ **shipped (16a)** as **the Storage Caverns** (`BranchDef`, entry d3, 3 cave floors, a blessed HODL stone + whale guardian at the End).
-- **The Consensus Vault** (Sokoban-equivalent) — a hand-built boulder-puzzle branch climbing *up*; clear it for a guaranteed artifact (bag of holding / amulet). *Mandatory prize-gate.*
+- **The Consensus Vault** (Sokoban-equivalent) — a hand-built boulder-puzzle branch climbing *up*; clear it for a guaranteed artifact (bag of holding / amulet). *Mandatory prize-gate.* ✅ **shipped (16b)**: a `sokoban` branch (entry d4) with a new `pit` tile + a boulder-fills-pit mechanic; a 1-wide alternating boulder/pit tunnel that's **unbrickable by construction** (forward-push only), with a guaranteed blessed multisig vault (bag of holding) on the goal. The "climb up" is narrative — mechanically it's a down-branch reusing the 16a machinery.
 - **The Quest** (per-archetype) — already shipped; fold into the graph as a gated branch (Phase 13c).
 - **Parachains** (XCM side-branches) — optional, each its own layout/palette/monster set.
 - **The endgame ladder** — vibrating square → Gehennom (mazes, ~d9–11, expand toward ~20) → Moloch's Sanctum → the Planes → Genesis.
@@ -68,7 +68,11 @@ A branch graph instead of a single spine:
 - **15 — persistence:** the level store + revisit-identical levels (dungeon + chains + quest; planes excluded). *Foundational; unblocks real branches.* ✅
 - **16 — branch graph:** multi-branch dungeon; build the Mines + the Consensus Vault (Sokoban) as mandatory branches; lengthen the main descent toward ~25–30. *(landing in increments)*
   - **16a — the branch system + the Mines** (the Storage Caverns): a generalised sub-dungeon branch on top of the Phase 15 store — a copper branch-stair (`branchDown`) on its host depth, a floor-by-floor descend/ascend keyed `mines:<floor>` (effective depth scales spawns), and a guaranteed prize + guardian on the End floor. Branches reuse `currentChain` so the existing relic/portal/miniboss/vibrating suppressors apply; `levelKey`/`beginLevel` extend cleanly. ✅
-  - **16b — the Consensus Vault (Sokoban):** a hand-built boulder-puzzle branch that climbs *up* (a `branchUp` stair); clear the puzzle for a guaranteed artifact. *(next)*
+  - **16b — the Consensus Vault (Sokoban):** the `pit` tile + boulder-fills-pit mechanic (in both the walk-push and kick paths) + a hand-built, unbrickable puzzle floor (`SOKOBAN_FLOORS`) loaded via `Level.loadSokoban`, with a guaranteed bag-of-holding prize. Built as a `sokoban: true` BranchDef reusing 16a. ✅
   - **16c — lengthen the main descent** toward ~25–30 and fold the Quest + parachains into the graph as gated branches. *(later)*
+  - *Follow-ups:* richer multi-room/2-D Sokoban layouts (the current puzzle is a deliberately-safe 1-wide tunnel); make the Mines/Vault truly mandatory (gate the critical path) rather than strongly-incentivised.
+
+## Dev tooling (remove before release)
+A **god/debug mode** lives behind a single `const DEBUG = true` in `game.ts` (fenced blocks marked `DEBUG`). Backtick (`` ` ``) then a key: `d/u` force descend/ascend · `1-9` warp to depth · `m` Mines · `v` Vault · `x` XCM portal · `Q` quest portal · `g` Gehennom@9 · `J` JAM@12 · `r` reveal · `h` heal · `G` godmode · `k` spawn mob · `K` debug kit · `T/t` to down/up-stair. To strip for release: set `DEBUG = false`, or delete the flag + the three `DEBUG`-fenced blocks (the onKey hook, the debug methods, the `downPlayer` guard) + the `debugPending`/`godMode` fields.
 - **17:** fortress + concentric generators; per-Plane unique layouts; expand Gehennom.
 - **18:** balance pass across the longer run (XP curve, hunger, spawn rates, the Censor cadence), more monsters/items to fill the space.

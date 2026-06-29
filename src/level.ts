@@ -2,7 +2,7 @@ import * as ROT from "rot-js";
 import type { TileType, ChainDef } from "./data";
 import type { ItemType } from "./items";
 
-export type LevelKind = "normal" | "bigroom" | "maze" | "cave" | "labyrinth" | "grid" | "swamp";
+export type LevelKind = "normal" | "bigroom" | "maze" | "cave" | "labyrinth" | "grid" | "swamp" | "sokoban";
 export interface Portal { x: number; y: number; chain: ChainDef; quest?: boolean; }
 
 export interface FloorItem { x: number; y: number; type: ItemType; price?: number; enchant?: number; relic?: boolean; mintOnBuy?: boolean; buc?: import("./items").Buc; bucKnown?: boolean; corpse?: { def: import("./data").MonsterDef; born: number }; chest?: { locked: boolean }; } // price = shop ware; relic/enchant/mintOnBuy = NFT gear; buc = sanctity; corpse = edible remains; chest = container
@@ -51,6 +51,7 @@ export class Level {
     else if (kind === "labyrinth") this.generateLabyrinth();
     else if (kind === "grid") this.generateGrid();
     else if (kind === "swamp") this.generateSwamp();
+    else if (kind === "sokoban") { /* hand-built — left all walls; stamped via loadSokoban() */ }
     else this.generate();
     this.fov = new ROT.FOV.PreciseShadowcasting((x, y) => this.lightPasses(x, y));
   }
@@ -262,11 +263,36 @@ export class Level {
   private lightPasses(x: number, y: number): boolean {
     const t = this.tiles[y]?.[x];
     // sight crosses open water (you see the far shore) but you cannot walk into it
-    return t === "floor" || t === "door" || t === "stairsDown" || t === "stairsUp" || t === "altar" || t === "portal" || t === "faucet" || t === "throne" || t === "vibrating" || t === "water" || t === "branchDown";
+    return t === "floor" || t === "door" || t === "stairsDown" || t === "stairsUp" || t === "altar" || t === "portal" || t === "faucet" || t === "throne" || t === "vibrating" || t === "water" || t === "branchDown" || t === "pit";
   }
 
   isPassable(x: number, y: number): boolean {
-    return this.lightPasses(x, y) && this.tiles[y]?.[x] !== "water";
+    const t = this.tiles[y]?.[x];
+    return this.lightPasses(x, y) && t !== "water" && t !== "pit"; // water/pits are seen across but not walked into
+  }
+
+  /** Stamp a hand-built Sokoban-style level from an ASCII template, centred on the map.
+   *  Glyphs: `#` wall · `.` floor · `_` pit (chasm) · `O` boulder · `<` start/exit · `>` goal. */
+  loadSokoban(rows: string[]): void {
+    this.floors = []; this.boulders = []; this.roomCenters = [];
+    for (let y = 0; y < this.height; y++) for (let x = 0; x < this.width; x++) this.tiles[y][x] = "wall";
+    const oy = Math.max(1, Math.floor((this.height - rows.length) / 2));
+    for (let r = 0; r < rows.length; r++) {
+      const row = rows[r], y = oy + r;
+      const ox = Math.max(1, Math.floor((this.width - row.length) / 2));
+      for (let c = 0; c < row.length; c++) {
+        const x = ox + c, ch = row[c];
+        if (x < 1 || y < 1 || x >= this.width - 1 || y >= this.height - 1) continue;
+        if (ch === "#") { this.tiles[y][x] = "wall"; continue; }
+        if (ch === "_") { this.tiles[y][x] = "pit"; continue; } // a chasm — not a floor, can't spawn here
+        this.tiles[y][x] = "floor"; this.floors.push({ x, y });
+        if (ch === "O") this.boulders.push({ x, y });
+        else if (ch === "<") this.start = { x, y };
+        else if (ch === ">") this.stairs = { x, y };
+      }
+    }
+    this.tiles[this.start.y][this.start.x] = "stairsUp"; // the way back out (toward the relay)
+    this.roomCenters = [this.start, this.stairs];
   }
 
   tileAt(x: number, y: number): TileType | null {

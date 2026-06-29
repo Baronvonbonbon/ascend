@@ -15,7 +15,7 @@ export const COLORS = {
   dim:       "#6c6a60",
 };
 
-export type TileType = "wall" | "floor" | "door" | "doorClosed" | "doorLocked" | "doorHidden" | "stairsDown" | "stairsUp" | "altar" | "portal" | "faucet" | "throne" | "vibrating" | "water" | "branchDown";
+export type TileType = "wall" | "floor" | "door" | "doorClosed" | "doorLocked" | "doorHidden" | "stairsDown" | "stairsUp" | "altar" | "portal" | "faucet" | "throne" | "vibrating" | "water" | "branchDown" | "pit";
 
 export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: string }> = {
   wall:       { ch: "#", fg: COLORS.wall,   fgDim: COLORS.wallDim },
@@ -33,6 +33,7 @@ export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: strin
   vibrating:  { ch: "≈", fg: "#ff60ff",     fgDim: "#7a307a" }, // the vibrating square — invoke (I) the ritual here
   water:      { ch: "}", fg: "#3f7ad0",     fgDim: "#1d3a66" }, // open water — impassable; cross by causeway or XCM jump (the Liquidity Pools)
   branchDown: { ch: ">", fg: "#c07a30",     fgDim: "#5a3a18" }, // a craggy side-stair into a branch (the Storage Caverns) — copper, not the gold main stair
+  pit:        { ch: "^", fg: "#6a78b0",     fgDim: "#33415e" }, // a chasm (Consensus Vault) — impassable; shove a boulder in to fill it
 };
 
 export const MAX_DEPTH = 8; // the JAM lies on the deepest floor
@@ -128,12 +129,19 @@ export interface BranchDef extends ChainDef {
   floors: number;     // how many floors deep the branch runs
   prizeId: string;    // the guaranteed reward on the end floor
   end: string;        // the themed name of the end floor ("the Storage Caverns' End")
+  entryFlavor?: string; // override the entry message (e.g. the Vault "climbs up")
+  sokoban?: boolean;  // hand-built boulder-puzzle floors (the Consensus Vault) instead of procedural
 }
 export const BRANCHES: BranchDef[] = [
   {
     id: "mines", name: "the Storage Caverns", branch: true, difficulty: 1.15, loot: 1.6, color: "#c9a04a",
     layout: "cave", entryDepth: 3, floors: 3, prizeId: "hodlstone", end: "the Storage Caverns' End",
   }, // a DA/storage parachain rendered as treasure caverns; its End yields a luckstone-grade HODL stone
+  {
+    id: "vault", name: "the Consensus Vault", branch: true, sokoban: true, difficulty: 0.5, loot: 0.5,
+    color: "#7ad0c0", layout: "normal", entryDepth: 4, floors: 1, prizeId: "vault", end: "the Vault's Crown",
+    entryFlavor: "You squeeze up into the Consensus Vault — a sealed puzzle of blocks and chasms. Shove the blocks into the gaps; claim the prize at the top.",
+  }, // a Sokoban-style boulder puzzle; clear it for a guaranteed multisig vault (bag of holding)
 ];
 export function branchById(id: string): BranchDef | undefined { return BRANCHES.find((b) => b.id === id); }
 
