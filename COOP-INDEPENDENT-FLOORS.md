@@ -107,20 +107,27 @@ stay scheduled.
 - [ ] Verify: split via stairs, regroup, branch/parachain/plane split. _(playtest —
       two browser tabs; cannot be checked headlessly)_
 
-## Stage 4 — render each player's own floor
+## Stage 4 — render each player's own floor ✅
 Goal: host sees its floor, guest sees its floor (each with separate fog from the
 fog-of-war work).
-- [ ] `recomputeFOV` computes each player's FOV on **their** floor's `Level`
-      (host → viewer 0 `computeFOV`, companion → viewer 1 `computeFOVCo`).
-- [ ] `buildCells(player, viewerIdx)` renders `slots.get(player.floorKey).level`
-      + that floor's monsters + players on that floor (currently it reads the
-      global `this.level`).
-- [ ] `draw`: host paints `buildCells(this.player, 0)`; stream
-      `buildCells(this.coPlayer, 1)` to the guest. Keep the downed-spectator fallback.
-- [ ] Per-player HUD: depth/realm/location label derived from each player's
-      `floorKey` (today `buildHud` reads the global `currentChain`/`plane`).
-- [ ] Music/area (`currentAreaId`) follows the **host's** floor (it's the host's
-      soundtrack); set context to the host's floor before `draw`.
+- [x] `recomputeFOV` computes each player's FOV on **its own** floor's `Level`
+      (done in Stage 3 — `fovOn` resolves `slots.get(p.floorKey).level`, host →
+      `computeFOV`, companion → `computeFOVCo`).
+- [x] `buildCells(viewer)` now resolves the viewer's floor (`me.floorKey` →
+      `slots`), and reads tiles/graves/traps/portals/items/boulders/**monsters**
+      from that floor's `Level`; the pet and other players draw only when they
+      stand on the viewer's floor.
+- [x] `draw`: host paints `buildCells(hostView)` (its own floor) and streams
+      `buildCells(guestView)` to the guest. Downed-spectator fallback kept. `draw`
+      anchors music + the host view to the host's floor via a **save/restore** of
+      `activeKey`, so it stays side-effect-free for mid-handler callers.
+- [x] Per-player HUD: location label derived from each player's `floorKey` via a
+      new pure `contextOf(key)` (also now backs `applyKeyContext`).
+- [x] Music/area follows the **host's** floor: `draw` sets the host's floor active
+      before `musicContext`; the `setArea` crossfade in `rebuildSchedule` only fires
+      on host (`this.acting === this.player`) transitions.
+- [ ] Verify: host + guest each see their own floor/fog/HUD; spectate on downing.
+      _(playtest — two browser tabs)_
 
 ## Stage 5 — per-player logs (actor + involved routing) _(decided)_
 Goal: each adventurer sees their own log, not a shared feed. **Decision: pragmatic

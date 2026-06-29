@@ -416,17 +416,20 @@ export class Game {
 
   /** Derive the location flags (chain / branch / plane / quest) implied by a floor key. */
   private applyKeyContext(key: string): void {
-    if (key === "quest") { this.currentChain = null; this.inQuest = true; this.plane = 0; this.branchFloor = 0; return; }
+    const c = this.contextOf(key);
+    this.plane = c.plane; this.currentChain = c.chain; this.inQuest = c.inQuest; this.branchFloor = c.branchFloor;
+  }
+
+  /** Pure: the location flags a floor key implies, without mutating game state (for per-player HUDs). */
+  private contextOf(key: string): { plane: number; chain: ChainDef | null; inQuest: boolean; branchFloor: number } {
+    if (key === "quest") return { plane: 0, chain: null, inQuest: true, branchFloor: 0 };
     const [id, numStr] = key.split(":");
     const num = Number(numStr) || 0;
-    this.inQuest = false;
-    if (id === "plane") { this.plane = num; this.currentChain = null; this.branchFloor = 0; return; }
-    this.plane = 0;
-    if (id === "dungeon") { this.currentChain = null; this.branchFloor = 0; return; }
+    if (id === "plane") return { plane: num, chain: null, inQuest: false, branchFloor: 0 };
+    if (id === "dungeon") return { plane: 0, chain: null, inQuest: false, branchFloor: 0 };
     const b = branchById(id);
-    if (b) { this.currentChain = b; this.branchFloor = num; return; }
-    this.currentChain = CHAINS.find((x) => x.id === id) ?? null;
-    this.branchFloor = 0;
+    if (b) return { plane: 0, chain: b, inQuest: false, branchFloor: num };
+    return { plane: 0, chain: CHAINS.find((x) => x.id === id) ?? null, inQuest: false, branchFloor: 0 };
   }
 
   /** Re-enter an already-generated level: re-place the party beside the arriving player and
@@ -504,7 +507,7 @@ export class Game {
     }
     if (this.pet && this.pet.alive) this.scheduler.add(this.pet, true);
     this.recomputeFOV();
-    this.music.setArea(this.currentAreaId()); // crossfade to this area's soundtrack
+    if (this.acting === this.player) this.music.setArea(this.currentAreaId()); // host's speakers follow the host's floor
   }
 
   adjacentEnemy(x: number, y: number): Monster | undefined {
@@ -3098,34 +3101,38 @@ export class Game {
    *  viewer 0 = host/solo, 1 = the co-op companion (each has separate sight + memory). */
   private buildCells(viewer = 0): Cell[] {
     const cells: Cell[] = [];
-    const vis = viewer === 1 ? (x: number, y: number) => this.level.isVisibleCo(x, y) : (x: number, y: number) => this.level.isVisible(x, y);
-    const explored = viewer === 1 ? this.level.exploredCo : this.level.explored;
     const me = viewer === 1 ? this.coPlayer : this.player; // whose eyes we render through
+    // co-op: render the viewer's OWN floor (it may differ from whatever floor is active)
+    const onFloor = me ? me.floorKey : this.activeKey;
+    const lvl = (onFloor === this.activeKey ? this.level : this.slots.get(onFloor)?.level) ?? this.level;
+    const mons = (onFloor === this.activeKey ? this.monsters : this.slots.get(onFloor)?.monsters) ?? this.monsters;
+    const vis = viewer === 1 ? (x: number, y: number) => lvl.isVisibleCo(x, y) : (x: number, y: number) => lvl.isVisible(x, y);
+    const explored = viewer === 1 ? lvl.exploredCo : lvl.explored;
     for (let y = 0; y < MAP_H; y++) {
       for (let x = 0; x < W; x++) {
-        const t = this.level.tileAt(x, y);
+        const t = lvl.tileAt(x, y);
         if (!t) continue;
         const g = TILE_GLYPH[t];
         if (vis(x, y)) cells.push([x, y, g.ch, g.fg]);
         else if (explored[y][x]) cells.push([x, y, g.ch, g.fgDim]);
       }
     }
-    for (const g of this.level.graves) if (vis(g.x, g.y)) cells.push([g.x, g.y, "‡", "#b0a890"]);
-    for (const t of this.level.traps) if (t.revealed && vis(t.x, t.y)) cells.push([t.x, t.y, "^", "#d06060"]);
-    for (const pr of this.level.portals) if (vis(pr.x, pr.y)) cells.push([pr.x, pr.y, "Ω", pr.chain.color]);
-    for (const e of this.level.engravings) if (vis(e.x, e.y)) cells.push([e.x, e.y, "§", "#b0a060"]);
-    for (const fi of this.level.items) if (vis(fi.x, fi.y)) cells.push([fi.x, fi.y, fi.type.ch, fi.type.fg]);
-    for (const b of this.level.boulders) if (vis(b.x, b.y)) cells.push([b.x, b.y, "0", "#9a8a6a"]);
+    for (const g of lvl.graves) if (vis(g.x, g.y)) cells.push([g.x, g.y, "‡", "#b0a890"]);
+    for (const t of lvl.traps) if (t.revealed && vis(t.x, t.y)) cells.push([t.x, t.y, "^", "#d06060"]);
+    for (const pr of lvl.portals) if (vis(pr.x, pr.y)) cells.push([pr.x, pr.y, "Ω", pr.chain.color]);
+    for (const e of lvl.engravings) if (vis(e.x, e.y)) cells.push([e.x, e.y, "§", "#b0a060"]);
+    for (const fi of lvl.items) if (vis(fi.x, fi.y)) cells.push([fi.x, fi.y, fi.type.ch, fi.type.fg]);
+    for (const b of lvl.boulders) if (vis(b.x, b.y)) cells.push([b.x, b.y, "0", "#9a8a6a"]);
     // Sense minds: only THIS viewer's blindness-telepathy or sense-minds spell reveals out-of-sight foes.
     const sensed = !!me && ((me.blind > 0 && me.intrinsics.has("telepathy")) || me.senseTurns > 0);
-    for (const m of this.monsters) {
+    for (const m of mons) {
       if (!m.alive || !(vis(m.x, m.y) || sensed)) continue;
       const dormant = m.def.mimic && !m.revealed;
       cells.push([m.x, m.y, dormant ? m.disguiseCh : m.ch, dormant ? m.disguiseFg : m.fg]);
     }
-    if (this.pet && this.pet.alive && vis(this.pet.x, this.pet.y)) cells.push([this.pet.x, this.pet.y, this.pet.ch, this.pet.fg]);
+    if (this.pet && this.pet.alive && this.pet.floorKey === onFloor && vis(this.pet.x, this.pet.y)) cells.push([this.pet.x, this.pet.y, this.pet.ch, this.pet.fg]);
     for (const pl of this.allPlayers()) {
-      if (!pl.alive) continue;
+      if (!pl.alive || pl.floorKey !== onFloor) continue; // only adventurers standing on this viewer's floor
       if (pl !== me && !(vis(pl.x, pl.y) || sensed)) continue; // you always see yourself; your partner only when in sight
       const ch = pl.polyForm ? pl.polyForm.ch : "@"; // you wear your fork's shape
       const fg = pl.polyForm ? pl.polyForm.fg : pl === this.player ? pl.fg : PARTNER_FG;
@@ -3137,12 +3144,13 @@ export class Game {
   private buildHud(p: Player): string {
     const hpCol = p.hp <= p.maxHp * 0.3 ? COLORS.bad : COLORS.good;
     const hunger = p.hungerWord();
+    const ctx = this.contextOf(p.floorKey); // each adventurer's location, from its own floor
     return (
       `%c{${COLORS.dim}}HP %c{${hpCol}}${p.hp}%c{${COLORS.dim}}/${p.maxHp}  Lv %c{${COLORS.good}}${p.level}%c{${COLORS.dim}}  ` +
-      (this.plane > 0
-        ? `%c{#ff60ff}${PLANES[this.plane - 1].name}`
+      (ctx.plane > 0
+        ? `%c{#ff60ff}${PLANES[ctx.plane - 1].name}`
         : `Depth %c{${COLORS.gold}}${p.depth}` +
-          (this.inQuest ? `%c{${COLORS.dim}} @%c{#e0c040}Quest` : this.currentChain ? `%c{${COLORS.dim}} @%c{${this.currentChain.color}}${this.currentChain.name}` : `%c{${COLORS.dim}} @%c{${COLORS.dim}}Relay`)) +
+          (ctx.inQuest ? `%c{${COLORS.dim}} @%c{#e0c040}Quest` : ctx.chain ? `%c{${COLORS.dim}} @%c{${ctx.chain.color}}${ctx.chain.name}` : `%c{${COLORS.dim}} @%c{${COLORS.dim}}Relay`)) +
       `%c{${COLORS.dim}}  AC %c{${COLORS.good}}${p.ac}` +
       (p.maxEnergy > 5 || p.spells.size ? `%c{${COLORS.dim}}  En %c{#7aa0e0}${p.energy}%c{${COLORS.dim}}/${p.maxEnergy}` : "") +
       (this.luckOf(p) !== 0 ? `%c{${COLORS.dim}}  Luck %c{${this.luckOf(p) > 0 ? COLORS.good : COLORS.bad}}${this.luckOf(p) > 0 ? "+" : ""}${this.luckOf(p)}` : "") +
@@ -3166,6 +3174,10 @@ export class Game {
 
   draw(): void {
     if (this.netRole === "guest") return; // the guest only paints frames it receives
+    // Anchor music + the host's own view to the host's floor, then restore the acting context so
+    // draw() stays side-effect-free for callers that keep working on the active floor afterwards.
+    const resume = this.activeKey;
+    if (this.player?.alive) this.setActive(this.player.floorKey);
     if (this.player) this.music.setContext(this.musicContext()); // distress, density, and reactions
     const huds = this.buildHuds();
     // each side renders its own fog; a downed player spectates the survivor's view
@@ -3179,5 +3191,6 @@ export class Game {
       const guestCells = guestView === hostView ? cells : this.buildCells(guestView);
       this.peer.send({ t: "frame", cells: guestCells, huds });
     }
+    if (this.activeKey !== resume) this.setActive(resume); // restore the acting floor
   }
 }
