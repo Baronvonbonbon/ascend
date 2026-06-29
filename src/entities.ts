@@ -27,7 +27,9 @@ export abstract class Entity {
   attackDmg: [number, number] = [1, 1];
   floorKey = "dungeon:1"; // which floor this actor stands on (co-op: players can be on different floors)
 
-  constructor(protected game: Game) {}
+  constructor(protected game: Game) {
+    this.floorKey = game.activeFloorKey; // an actor is born on whatever floor is live (no stale dungeon:1 for mid-play spawns)
+  }
 
   get alive(): boolean {
     return this.hp > 0;
@@ -171,6 +173,7 @@ export class Player extends Entity {
   }
 
   act(): Promise<void> {
+    this.game.setActive(this.floorKey); // this player's floor is the live context for its turn
     this.game.draw(); // start of the player's turn = monsters have moved
     return new Promise((resolve) => {
       this.resolveTurn = resolve;
@@ -187,6 +190,7 @@ export class Player extends Entity {
   }
 
   private drainQueue(): void {
+    this.game.setActive(this.floorKey); // process this player's input against its own floor
     while (this.awaiting && this.inputQueue.length) {
       const key = this.inputQueue.shift()!;
       const consumed = this.handleKey({ key } as KeyboardEvent);
@@ -815,6 +819,7 @@ export class Monster extends Entity {
   }
 
   act(): void {
+    this.game.setActive(this.floorKey); // act in this monster's floor context (co-op: floors run independently)
     const p = this.game.nearestPlayer(this.x, this.y); // target the closer of the party
     if (!p.alive || !this.alive) return;
 
@@ -963,6 +968,7 @@ export class Pet extends Entity {
 
   act(): void {
     if (!this.alive) return;
+    this.game.setActive(this.floorKey); // follow on whatever floor this pet stands
     const p = this.game.player;
     if (p.riding) { this.x = p.x; this.y = p.y; return; } // ridden — it moves only with its rider
 

@@ -58,19 +58,21 @@ visited floor by key, so "the other player's floor" is just another live slot.
 - [x] `scheduleParty` tags the party + monsters with the active floor.
 - Not wired into the turn loop yet → pure foundation. **Builds green.**
 
-## Stage 2 — wire the context switch into the turn loop
+## Stage 2 — wire the context switch into the turn loop ✅
 Goal: every action runs in its actor's floor context. Still single-floor in
 practice (party shares a floor), so behavior is unchanged — but the plumbing is live.
-- [ ] `Player.feed`/`drainQueue`: call `this.game.setActive(this.floorKey)` before
-      `handleKey`.
-- [ ] `Monster.act` and `Pet.act`: `this.game.setActive(this.floorKey)` at the top.
-- [ ] **Tag mid-play spawns** with `this.activeKey` so they don't carry a stale
-      default key. Audit every `new Monster(...)` outside `scheduleParty`:
-      summons (`sudo conjurer`), splits (`sybil`), breeders (`dust gremlin`),
-      faucet/throne bots, the Censor resurrection, minibosses, branch guardian,
-      quest nemesis. Add a `spawnMonster(def,x,y)` helper that sets
-      `floorKey = this.activeKey` + pushes + schedules, and route them through it.
-- [ ] Verify: solo unchanged; same-floor co-op unchanged. _(playtest)_
+- [x] `Player.act`/`drainQueue`: `this.game.setActive(this.floorKey)` before the
+      start-of-turn draw and before `handleKey`.
+- [x] `Monster.act` and `Pet.act`: `this.game.setActive(this.floorKey)` at the top.
+- [x] **Tag mid-play spawns** so they never carry a stale default key. Done at the
+      source instead of per-site: the `Entity` constructor now sets
+      `floorKey = game.activeFloorKey`, so every `new Monster(...)` (summons, splits,
+      breeders, faucet/throne bots, the Censor resurrection, minibosses, branch
+      guardian, quest nemesis) is born on the live floor — no `spawnMonster` helper
+      and no per-site audit to forget. `scheduleParty`'s bulk re-tag is now redundant
+      but harmless. Exposed `Game.activeFloorKey` getter for this.
+- [ ] Verify: solo unchanged; same-floor co-op unchanged. _(playtest — provably a
+      no-op while `floorKey === activeKey`; `setActive` early-returns)_
 
 ## Stage 3 — transitions move only the acting player + scheduler membership
 Goal: a stair/portal moves only `this.acting`; the partner stays put; both floors

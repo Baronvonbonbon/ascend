@@ -90,6 +90,8 @@ export class Game {
   // only ever climbs up, so a plane is never revisited.
   private slots = new Map<string, { level: Level; monsters: Monster[] }>();
   private activeKey = "dungeon:1"; // the key of the level currently in this.level
+  /** The floor key whose level+monsters are currently live in `this.level` — newly spawned actors stand here. */
+  get activeFloorKey(): string { return this.activeKey; }
   private currentChain: ChainDef | null = null; // null = the main relay-chain dungeon; a BranchDef when in a sub-dungeon (the Mines)
   private branchFloor = 0;        // 1-based floor within the current branch (0 = not in a branch)
   private branchReturnDepth = 0;  // the main-dungeon depth to restore on leaving the branch
