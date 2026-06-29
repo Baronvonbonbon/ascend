@@ -25,6 +25,7 @@ export abstract class Entity {
   hp = 1;
   maxHp = 1;
   attackDmg: [number, number] = [1, 1];
+  floorKey = "dungeon:1"; // which floor this actor stands on (co-op: players can be on different floors)
 
   constructor(protected game: Game) {}
 

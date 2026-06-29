@@ -394,6 +394,37 @@ export class Game {
     return false;
   }
 
+  // ── Co-op independent floors (staged): each actor stands on its own floorKey, and
+  //    setActive loads that floor's context before the actor takes its turn. While the party
+  //    still shares a floor this is a no-op; it's the substrate for players splitting up. ──
+  /** Make `key`'s floor the live context (level + monsters + chain/branch/plane flags), saving
+   *  whatever was active. Safe no-op when that floor is already loaded. */
+  setActive(key: string): void {
+    if (key === this.activeKey) return;
+    if (this.slots.has(this.activeKey)) this.slots.set(this.activeKey, { level: this.level, monsters: this.monsters });
+    const slot = this.slots.get(key);
+    if (!slot) return; // not generated yet — a transition is mid-build and owns the context
+    this.activeKey = key;
+    this.level = slot.level;
+    this.monsters = slot.monsters;
+    this.applyKeyContext(key);
+  }
+
+  /** Derive the location flags (chain / branch / plane / quest) implied by a floor key. */
+  private applyKeyContext(key: string): void {
+    if (key === "quest") { this.currentChain = null; this.inQuest = true; this.plane = 0; this.branchFloor = 0; return; }
+    const [id, numStr] = key.split(":");
+    const num = Number(numStr) || 0;
+    this.inQuest = false;
+    if (id === "plane") { this.plane = num; this.currentChain = null; this.branchFloor = 0; return; }
+    this.plane = 0;
+    if (id === "dungeon") { this.currentChain = null; this.branchFloor = 0; return; }
+    const b = branchById(id);
+    if (b) { this.currentChain = b; this.branchFloor = num; return; }
+    this.currentChain = CHAINS.find((x) => x.id === id) ?? null;
+    this.branchFloor = 0;
+  }
+
   /** Re-enter an already-generated level: re-place the party beside the arriving player and
    *  rebuild the schedule from the stored (frozen) actors. No respawn, no new loot. */
   private restoreEnter(): void {
@@ -459,6 +490,10 @@ export class Game {
   /** Rebuild the turn scheduler around the active level's actors (only the active level runs). */
   private scheduleParty(): void {
     this.scheduler.clear();
+    this.player.floorKey = this.activeKey; // the party shares this floor (until co-op split, staged)
+    if (this.coPlayer) this.coPlayer.floorKey = this.activeKey;
+    if (this.pet) this.pet.floorKey = this.activeKey;
+    for (const m of this.monsters) m.floorKey = this.activeKey;
     this.scheduler.add(this.player, true);
     if (this.coPlayer && this.coPlayer.alive) this.scheduler.add(this.coPlayer, true);
     for (const m of this.monsters) if (m.alive) this.scheduler.add(m, true);
