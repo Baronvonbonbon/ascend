@@ -496,12 +496,13 @@ export class Game {
   }
   /** Union field-of-view over the whole living party (shared vision). */
   recomputeFOV(): void {
-    const list = this.livingPlayers().length ? this.livingPlayers() : [this.player];
-    list.forEach((p, i) => {
-      const r = p.blind > 0 ? 1 : 8; // blindness shrinks your sight to arm's reach
-      if (i === 0) this.level.computeFOV(p.x, p.y, r);
-      else this.level.addFOV(p.x, p.y, r);
-    });
+    // Separate fog per player: each sees only their own field of view, with their own memory.
+    const r0 = this.player.blind > 0 ? 1 : 8; // blindness shrinks sight to arm's reach
+    this.level.computeFOV(this.player.x, this.player.y, r0);
+    if (this.coPlayer) {
+      const r1 = this.coPlayer.blind > 0 ? 1 : 8;
+      this.level.computeFOVCo(this.coPlayer.x, this.coPlayer.y, r1);
+    }
   }
 
   descend(): void {
@@ -3044,17 +3045,20 @@ export class Game {
     e.preventDefault();
   }
 
-  /** Build the renderable map as a flat cell list (shared by local paint + the co-op stream). */
-  private buildCells(): Cell[] {
+  /** Build the renderable map as a flat cell list, from one viewer's fog of war.
+   *  viewer 0 = host/solo, 1 = the co-op companion (each has separate sight + memory). */
+  private buildCells(viewer = 0): Cell[] {
     const cells: Cell[] = [];
-    const vis = (x: number, y: number) => this.level.isVisible(x, y);
+    const vis = viewer === 1 ? (x: number, y: number) => this.level.isVisibleCo(x, y) : (x: number, y: number) => this.level.isVisible(x, y);
+    const explored = viewer === 1 ? this.level.exploredCo : this.level.explored;
+    const me = viewer === 1 ? this.coPlayer : this.player; // whose eyes we render through
     for (let y = 0; y < MAP_H; y++) {
       for (let x = 0; x < W; x++) {
         const t = this.level.tileAt(x, y);
         if (!t) continue;
         const g = TILE_GLYPH[t];
         if (vis(x, y)) cells.push([x, y, g.ch, g.fg]);
-        else if (this.level.explored[y][x]) cells.push([x, y, g.ch, g.fgDim]);
+        else if (explored[y][x]) cells.push([x, y, g.ch, g.fgDim]);
       }
     }
     for (const g of this.level.graves) if (vis(g.x, g.y)) cells.push([g.x, g.y, "‡", "#b0a890"]);
@@ -3063,8 +3067,8 @@ export class Game {
     for (const e of this.level.engravings) if (vis(e.x, e.y)) cells.push([e.x, e.y, "§", "#b0a060"]);
     for (const fi of this.level.items) if (vis(fi.x, fi.y)) cells.push([fi.x, fi.y, fi.type.ch, fi.type.fg]);
     for (const b of this.level.boulders) if (vis(b.x, b.y)) cells.push([b.x, b.y, "0", "#9a8a6a"]);
-    // Sense minds: blind+telepathy, or the sense-minds spell, reveals monsters out of sight.
-    const sensed = this.livingPlayers().some((p) => (p.blind > 0 && p.intrinsics.has("telepathy")) || p.senseTurns > 0);
+    // Sense minds: only THIS viewer's blindness-telepathy or sense-minds spell reveals out-of-sight foes.
+    const sensed = !!me && ((me.blind > 0 && me.intrinsics.has("telepathy")) || me.senseTurns > 0);
     for (const m of this.monsters) {
       if (!m.alive || !(vis(m.x, m.y) || sensed)) continue;
       const dormant = m.def.mimic && !m.revealed;
@@ -3073,6 +3077,7 @@ export class Game {
     if (this.pet && this.pet.alive && vis(this.pet.x, this.pet.y)) cells.push([this.pet.x, this.pet.y, this.pet.ch, this.pet.fg]);
     for (const pl of this.allPlayers()) {
       if (!pl.alive) continue;
+      if (pl !== me && !(vis(pl.x, pl.y) || sensed)) continue; // you always see yourself; your partner only when in sight
       const ch = pl.polyForm ? pl.polyForm.ch : "@"; // you wear your fork's shape
       const fg = pl.polyForm ? pl.polyForm.fg : pl === this.player ? pl.fg : PARTNER_FG;
       cells.push([pl.x, pl.y, ch, fg]);
@@ -3113,11 +3118,17 @@ export class Game {
   draw(): void {
     if (this.netRole === "guest") return; // the guest only paints frames it receives
     if (this.player) this.music.setContext(this.musicContext()); // distress, density, and reactions
-    const cells = this.buildCells();
     const huds = this.buildHuds();
+    // each side renders its own fog; a downed player spectates the survivor's view
+    const hostView = this.player.alive ? 0 : (this.coPlayer?.alive ? 1 : 0);
+    const cells = this.buildCells(hostView);
     this.display.clear();
     for (const [x, y, ch, fg] of cells) this.display.draw(x, y, ch, fg, COLORS.bg);
     this.display.drawText(1, MAP_H + 1, huds[0]);
-    if (this.netRole === "host" && this.peer) this.peer.send({ t: "frame", cells, huds });
+    if (this.netRole === "host" && this.peer) {
+      const guestView = this.coPlayer?.alive ? 1 : (this.player.alive ? 0 : 1);
+      const guestCells = guestView === hostView ? cells : this.buildCells(guestView);
+      this.peer.send({ t: "frame", cells: guestCells, huds });
+    }
   }
 }

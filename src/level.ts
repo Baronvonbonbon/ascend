@@ -16,7 +16,8 @@ export class Level {
   readonly width: number;
   readonly height: number;
   tiles: TileType[][] = [];
-  explored: boolean[][] = [];
+  explored: boolean[][] = [];    // viewer 0 (host / solo) explored memory
+  exploredCo: boolean[][] = [];  // viewer 1 (co-op companion) — its own fog memory
   items: FloorItem[] = [];
   graves: { x: number; y: number; label: string }[] = []; // bones of fallen heroes
   traps: Trap[] = [];
@@ -29,7 +30,8 @@ export class Level {
   stairs = { x: 1, y: 1 };
   readonly kind: LevelKind;
 
-  private visible = new Set<string>();
+  private visible = new Set<string>();   // viewer 0 currently-lit cells
+  private visibleCo = new Set<string>(); // viewer 1 currently-lit cells
   private fov: InstanceType<typeof ROT.FOV.PreciseShadowcasting>;
   private floors: { x: number; y: number }[] = [];
 
@@ -40,9 +42,11 @@ export class Level {
     for (let y = 0; y < height; y++) {
       this.tiles[y] = [];
       this.explored[y] = [];
+      this.exploredCo[y] = [];
       for (let x = 0; x < width; x++) {
         this.tiles[y][x] = "wall";
         this.explored[y][x] = false;
+        this.exploredCo[y][x] = false;
       }
     }
     if (kind === "bigroom") this.generateBigRoom();
@@ -344,22 +348,24 @@ export class Level {
     return this.tiles[y]?.[x] ?? null;
   }
 
-  isVisible(x: number, y: number): boolean {
-    return this.visible.has(`${x},${y}`);
-  }
+  isVisible(x: number, y: number): boolean { return this.visible.has(`${x},${y}`); }
+  isVisibleCo(x: number, y: number): boolean { return this.visibleCo.has(`${x},${y}`); }
 
-  computeFOV(px: number, py: number, radius = 8): void {
-    this.visible.clear();
-    this.addFOV(px, py, radius);
-  }
+  /** Recompute one viewer's field of view from a viewpoint (separate fog per player in co-op). */
+  computeFOV(px: number, py: number, radius = 8): void { this.computeInto(this.visible, this.explored, px, py, radius); }
+  computeFOVCo(px: number, py: number, radius = 8): void { this.computeInto(this.visibleCo, this.exploredCo, px, py, radius); }
 
-  /** Add one viewpoint's field of view to the visible set (for multi-player union FOV). */
+  /** Add a viewpoint to viewer 0's set without clearing (union FOV — solo multi-viewpoint helpers). */
   addFOV(px: number, py: number, radius = 8): void {
     this.fov.compute(px, py, radius, (x: number, y: number, _r: number, vis: number) => {
-      if (vis > 0 && this.tiles[y]?.[x]) {
-        this.visible.add(`${x},${y}`);
-        this.explored[y][x] = true;
-      }
+      if (vis > 0 && this.tiles[y]?.[x]) { this.visible.add(`${x},${y}`); this.explored[y][x] = true; }
+    });
+  }
+
+  private computeInto(set: Set<string>, explored: boolean[][], px: number, py: number, radius: number): void {
+    set.clear();
+    this.fov.compute(px, py, radius, (x: number, y: number, _r: number, vis: number) => {
+      if (vis > 0 && this.tiles[y]?.[x]) { set.add(`${x},${y}`); explored[y][x] = true; }
     });
   }
 
@@ -398,6 +404,6 @@ export class Level {
   revealAll(): void {
     for (let y = 0; y < this.height; y++)
       for (let x = 0; x < this.width; x++)
-        if (this.tiles[y][x]) this.explored[y][x] = true;
+        if (this.tiles[y][x]) { this.explored[y][x] = true; this.exploredCo[y][x] = true; }
   }
 }
