@@ -898,7 +898,9 @@ export class Monster extends Entity {
     // This also scales the XP reward, since a kill awards the foe's maxHp. Uniques, bosses,
     // keepers and priests (weight 0) keep their hand-tuned stats.
     if (def.weight > 0) {
-      const d = Math.max(1, game.player?.depth ?? 1);
+      // Scaling caps at d30 so the NetHack-scale ~48-floor descent doesn't run away — beyond that the
+      // ever-deeper bestiary pool (high-minDepth demons) carries the escalation, not raw multipliers.
+      const d = Math.min(30, Math.max(1, game.player?.depth ?? 1));
       const hpF = 1 + 0.06 * (d - 1), dmgF = 1 + 0.04 * (d - 1);
       this.hp = this.maxHp = Math.max(1, Math.round(def.hp * hpF));
       this.attackDmg = [Math.max(1, Math.round(def.dmg[0] * dmgF)), Math.max(1, Math.round(def.dmg[1] * dmgF))];

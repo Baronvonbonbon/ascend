@@ -2,7 +2,7 @@
 // run the full simulation from a shared RNG seed and exchange only keystrokes — each
 // renders its own player's view locally. No frames or logs cross the wire.
 
-export type CoopMode = "solo" | "coop" | "coop-ff" | "race";
+export type CoopMode = "solo" | "coop-ff";
 
 /** One drawn map cell: x, y, glyph, fg colour. (Local rendering only — never sent.) */
 export type Cell = [number, number, string, string];

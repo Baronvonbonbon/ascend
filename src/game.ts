@@ -45,15 +45,15 @@ const RELIC_IMPORT_CAP = 3;   // up to this many owned NFT relics carried into a
 const W = 80;
 const MAP_H = 30;
 const H = MAP_H + 2; // + a blank row + the status line
-const MEMPOOL_DEPTH = 8; // the Big Room special level — "the Mempool"
-const GEHENNOM_BOTTOM = 20; // after the Invocation the dungeon opens to here — Moloch + the JAM (Gehennom spans MAX_DEPTH+1 .. here)
+const MEMPOOL_DEPTH = 13; // the Big Room special level — "the Mempool"
+const GEHENNOM_BOTTOM = 48; // after the Invocation the dungeon opens to here — Moloch + the JAM (Gehennom spans MAX_DEPTH+1 .. here)
 const PLANES = [ // the ascent above the surface — climb them with the JAM to the Genesis altar
   { name: "the Plane of Consensus", flavor: "The ground itself votes; agreement hums beneath your feet." },
   { name: "the Plane of Finality", flavor: "Nothing here can be undone — every step is irreversible." },
   { name: "the Plane of Light Clients", flavor: "Proofs drift like motes of dust; the whole sky is one header." },
   { name: "the Genesis Plane", flavor: "The first block hangs frozen above an altar of pure intent. Offer the JAM (O)." },
 ];
-const RELIC_DEPTH: Record<number, string> = { 7: "bell", 9: "candelabrum", 11: "graybook" }; // the three Invocation relics, spread across the back half of the relay descent (all before MAX_DEPTH)
+const RELIC_DEPTH: Record<number, string> = { 14: "bell", 18: "candelabrum", 22: "graybook" }; // the three Invocation relics, spread across the back half of the relay descent (all before MAX_DEPTH)
 // Per-Plane layouts for the ascent (Phase 17): each Plane reads as its own place, the Genesis a ringed sanctum.
 const PLANE_KINDS: LevelKind[] = ["bigroom", "cave", "labyrinth", "concentric"];
 // Conducts (Phase 13a) — self-imposed vows, kept until an action breaks them.
@@ -134,7 +134,7 @@ export class Game {
   acting!: Player;              // the player whose input is currently being processed
   coPlayer: Player | null = null; // host-side: the guest's avatar (null in solo)
   netRole: "solo" | "host" | "guest" = "solo";
-  coopMode: CoopMode = "coop";
+  coopMode: CoopMode = "coop-ff";
   private coop = false;        // this game session has two players
   private peer: Peer | null = null;
   private downed = new Set<Player>(); // players who have fallen this run
@@ -205,7 +205,7 @@ export class Game {
     this.saveActive(); // register depth 1 in the level store
     this.log.add(ROT.RNG.getItem(greetings())!, "sys", "both"); // the shared intro reaches both adventurers
     for (const line of grayPaper()) this.log.add(line, "dim", "both");
-    if (this.coop) this.log.add(`Co-op (${this.coopMode}) — Host and Guest share this dungeon. Find the JAM together.`, "sys", "both");
+    if (this.coop) this.log.add("Co-op — Host and Guest share this dungeon. Slip past each other; Kick (K) to fight; mind your line of fire. Find the JAM together.", "sys", "both");
     else this.log.add("Your nominator (d) pads at your heels — it backs you, and bites for you.", "dim");
     this.log.add(`Keys: move · , pick up · o open chest · @ sheet · p buy · F forge · P pray · O offer · q faucet · s search/sit · z zap · Z cast · t throw · a apply · E engrave${this.coop ? ' · " chat (or the box below)' : ""} · < > stairs · i/w/W/q/r/e/d items.`, "dim", "both");
     this.draw();
@@ -814,8 +814,8 @@ export class Game {
     }
     if (this.level.kind === "bigroom") this.log.add("You descend into THE MEMPOOL — a vast open churn of pending chaos. Loot, and a swarm.", "bad");
     else if (this.level.kind === "maze") this.log.add(`You descend into the maze of ${realmName(me.depth)} — narrow, lightless, and patient.`, "bad");
-    else this.log.add(`You descend to depth ${me.depth} — ${realmName(me.depth)}.`, me.depth >= 9 ? "bad" : "sys");
-    if (me.depth >= 9 && me.depth < MAX_DEPTH) this.log.add("Chaos thickens. Expect Kusama.", "bad");
+    else this.log.add(`You descend to depth ${me.depth} — ${realmName(me.depth)}.`, me.depth >= 18 ? "bad" : "sys");
+    if (me.depth >= 18 && me.depth < MAX_DEPTH) this.log.add("Chaos thickens. Expect Kusama.", "bad");
     if (me.depth === MAX_DEPTH && !this.gehennomOpen) this.log.add("The foot of the relay. The vibrating square (≈) hums — perform the Invocation (I) with all three relics.", "bad");
     else if (me.depth === MAX_DEPTH) this.log.add("The foot of the relay — the gate to the Dark Forest stands open below. (>)", "bad");
     else if (me.depth > MAX_DEPTH && me.depth < GEHENNOM_BOTTOM) this.log.add("You sink into the Dark Forest — Gehennom. Censorship weeps from the walls.", "bad");
@@ -1272,18 +1272,15 @@ export class Game {
 
   /** Which level layout a depth uses — the descent rotates through layout zones for variety. */
   private levelKindFor(depth: number): LevelKind {
-    if (depth === MEMPOOL_DEPTH) return "bigroom";                  // the Mempool (d8)
-    if (depth === GEHENNOM_BOTTOM) return "concentric";             // Moloch's ringed arena (d20)
-    if (depth > MAX_DEPTH && depth < GEHENNOM_BOTTOM) return depth === 16 ? "fortress" : "maze"; // the Council Fort mid-Gehennom (d16), else mazes
-    switch (depth) {                                                // the relay descent (d1–12)
-      case 3: return "grid";        // a rollup metropolis
-      case 4: return "cave";        // organic caverns (the Mines branch off here)
-      case 6: return "labyrinth";   // a winding labyrinth
-      case 7: return "cave";
-      case 9: return "swamp";       // the Liquidity Pools — open water + islands
-      case 10: return "grid";
-      case 11: return "labyrinth";  // the Kusama deeps
-      default: return "normal";     // d1, 2, 5, 12 (foot of the relay) + the Sanctum (d20)
+    if (depth === MEMPOOL_DEPTH) return "bigroom";                  // the Mempool (d13)
+    if (depth === GEHENNOM_BOTTOM) return "concentric";             // Moloch's ringed arena (d48)
+    if (depth > MAX_DEPTH && depth < GEHENNOM_BOTTOM) return depth === 36 ? "fortress" : "maze"; // the Council Fort mid-Gehennom (d36), else mazes
+    switch (depth) {                                                // the relay descent (d1–25)
+      case 4: case 17: return "grid";        // rollup metropolises
+      case 6: case 10: case 21: return "cave"; // organic caverns (the Mines branch off d5)
+      case 8: case 19: case 23: return "labyrinth"; // winding labyrinths (the Kusama deeps)
+      case 15: return "swamp";               // the Liquidity Pools — open water + islands
+      default: return "normal";              // the rest, incl. d25 (foot of the relay)
     }
   }
 
@@ -2170,9 +2167,7 @@ export class Game {
     this.over = true;
     this.engine.lock(); // halt the scheduler — otherwise it spins on the (promise-less) monsters
     const w = winner ?? this.player;
-    if (this.coop && this.coopMode === "race") {
-      this.log.add(`✦ ${cap(w.name)} seizes the JAM and ASCENDS — ${cap(w.name)} wins the race! ✦`, "good");
-    } else if (this.coop) {
+    if (this.coop) {
       this.log.add(`✦ ${cap(w.name)} carries the JAM into the light — the party ASCENDS together. You win! ✦`, "good");
     } else {
       this.log.add("✦ You climb into the light, the JAM blazing in your grasp. ✦", "good");
@@ -3656,7 +3651,7 @@ export class Game {
     const poolDepth = Math.max(1, this.player.depth + Math.round((diff - 1) * 4));
     // Phase 18: fewer-but-tougher — the per-depth coefficient is gentler (1.5→1.2) and the cap
     // lower (44→40) now that monster HP/damage scale with depth, so deep floors press without grinding.
-    const count = Math.min(40, Math.round((4 + this.player.depth * 1.2) * diff) + (this.player.depth >= 9 ? 4 : 0) + (this.level.kind === "bigroom" ? 12 : 0));
+    const count = Math.min(40, Math.round((4 + this.player.depth * 1.2) * diff) + (this.player.depth >= 18 ? 4 : 0) + (this.level.kind === "bigroom" ? 12 : 0));
     for (let i = 0; i < count; i++) {
       const def = this.pickMonster(poolDepth);
       let pos = this.level.randomFloor();
@@ -3850,7 +3845,7 @@ export class Game {
       case "x": { const c = ROT.RNG.getItem(CHAINS)!; if (!this.level.portalAt(p.x, p.y)) this.level.portals.push({ x: p.x, y: p.y, chain: c }); this.level.tiles[p.y][p.x] = "portal"; this.recomputeFOV(); this.draw(); this.log.add(`[DEBUG] XCM portal to ${c.name} under you — press > to enter.`, "sys"); break; }
       case "Q": { if (!this.level.portalAt(p.x, p.y)) this.level.portals.push({ x: p.x, y: p.y, chain: CHAINS[0], quest: true }); this.level.tiles[p.y][p.x] = "portal"; this.recomputeFOV(); this.draw(); this.log.add("[DEBUG] quest portal under you — press > to enter.", "sys"); break; }
       case "g": this.gehennomOpen = true; this.debugWarp(MAX_DEPTH + 1); this.log.add(`[DEBUG] Gehennom opened, warped to depth ${MAX_DEPTH + 1}.`, "sys"); break;
-      case "F": this.gehennomOpen = true; this.debugWarp(16); this.log.add("[DEBUG] warped to the Council Fort (d16).", "sys"); break;
+      case "F": this.gehennomOpen = true; this.debugWarp(36); this.log.add("[DEBUG] warped to the Council Fort (d36).", "sys"); break;
       case "J": this.gehennomOpen = true; this.debugWarp(GEHENNOM_BOTTOM); this.log.add("[DEBUG] warped to the JAM floor (Moloch).", "sys"); break;
       case "P": this.player.hasJam = true; this.enterPlane(1); this.log.add("[DEBUG] → the Planes (JAM granted; < to climb).", "sys"); break;
       case "r": this.level.revealAll(); this.recomputeFOV(); this.draw(); this.log.add("[DEBUG] level revealed.", "sys"); break;

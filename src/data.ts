@@ -39,7 +39,7 @@ export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: strin
   pit:        { ch: "^", fg: "#6a78b0",     fgDim: "#33415e" }, // a chasm (Consensus Vault) — impassable; shove a boulder in to fill it
 };
 
-export const MAX_DEPTH = 12; // the foot of the relay — the vibrating square; the Invocation opens Gehennom below
+export const MAX_DEPTH = 25; // the foot of the relay — the vibrating square; the Invocation opens Gehennom below (NetHack-scale ~25-floor main descent)
 
 // ── Phase 6: the character sheet ─────────────────────────────────────────────
 /** The six attributes, Polkadot-flavored. Stored 3–18; modifier is D&D-style. */
@@ -91,19 +91,19 @@ export function ethosName(e: string): string {
 export interface Quest { homeland: string; fhomeland: string; portalDepth: number; artifactId: string; nemesis: MonsterDef; }
 export const QUESTS: Record<string, Quest> = {
   validator: {
-    homeland: "the Validator's Vault", fhomeland: "the Knight's Keep", portalDepth: 6, artifactId: "art_sceptre",
+    homeland: "the Validator's Vault", fhomeland: "the Knight's Keep", portalDepth: 14, artifactId: "art_sceptre",
     nemesis: { name: "the Equivocator", fname: "the Doppel-King", ch: "E", fg: "#ff6060", hp: 42, dmg: [5, 10], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, splits: true },
   },
   nominator: {
-    homeland: "the Bonding Hall", fhomeland: "the Cleric's Sanctuary", portalDepth: 6, artifactId: "art_aegis",
+    homeland: "the Bonding Hall", fhomeland: "the Cleric's Sanctuary", portalDepth: 14, artifactId: "art_aegis",
     nemesis: { name: "the Oversubscriber", fname: "the Glutton Lord", ch: "N", fg: "#e0a040", hp: 48, dmg: [5, 9], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, summons: true },
   },
   cypherpunk: {
-    homeland: "the Panopticon", fhomeland: "the Rogue's Warren", portalDepth: 6, artifactId: "art_cipher",
+    homeland: "the Panopticon", fhomeland: "the Rogue's Warren", portalDepth: 14, artifactId: "art_cipher",
     nemesis: { name: "the Surveillor", fname: "the Eye Tyrant", ch: "U", fg: "#c060e0", hp: 40, dmg: [4, 8], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, ranged: true },
   },
   builder: {
-    homeland: "the Rent Foundry", fhomeland: "the Wizard's Tower", portalDepth: 6, artifactId: "art_compiler",
+    homeland: "the Rent Foundry", fhomeland: "the Wizard's Tower", portalDepth: 14, artifactId: "art_compiler",
     nemesis: { name: "the Rent Extractor", fname: "the Tithe-Reaver", ch: "R", fg: "#e07030", hp: 44, dmg: [5, 9], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, steals: true },
   },
 };
@@ -171,17 +171,17 @@ export interface BranchDef extends ChainDef {
 export const BRANCHES: BranchDef[] = [
   {
     id: "mines", name: "the Storage Caverns", fname: "the Gnomish Mines", branch: true, difficulty: 1.15, loot: 1.6, color: "#c9a04a",
-    layout: "cave", entryDepth: 3, floors: 3, prizeId: "hodlstone", end: "the Storage Caverns' End", fend: "the Mines' End",
+    layout: "cave", entryDepth: 5, floors: 3, prizeId: "hodlstone", end: "the Storage Caverns' End", fend: "the Mines' End",
   }, // a DA/storage parachain rendered as treasure caverns; its End yields a luckstone-grade HODL stone
   {
     id: "vault", name: "the Consensus Vault", fname: "Sokoban", branch: true, sokoban: true, difficulty: 0.5, loot: 0.5,
-    color: "#7ad0c0", layout: "normal", entryDepth: 4, floors: 1, prizeId: "vault", end: "the Vault's Crown", fend: "Sokoban's Prize",
+    color: "#7ad0c0", layout: "normal", entryDepth: 9, floors: 1, prizeId: "vault", end: "the Vault's Crown", fend: "Sokoban's Prize",
     entryFlavor: "You squeeze up into the Consensus Vault — a sealed puzzle of blocks and chasms. Shove the blocks into the gaps; claim the prize at the top.",
     fentryFlavor: "You squeeze up into Sokoban — a sealed puzzle of boulders and chasms. Shove the boulders into the pits; claim the prize at the top.",
   }, // a Sokoban-style boulder puzzle; clear it for a guaranteed multisig vault (bag of holding)
   {
     id: "tower", name: "the Validator's Tower", fname: "Vlad's Tower", branch: true, upward: true,
-    difficulty: 1.4, loot: 1.4, color: "#c04040", layout: "fortress", entryDepth: 7, floors: 3,
+    difficulty: 1.4, loot: 1.4, color: "#c04040", layout: "fortress", entryDepth: 16, floors: 3,
     prizeId: "plate", prizeEnchant: 2, end: "the Tower's Crown", fend: "the Tower's Summit",
     entryFlavor: "You climb the spiral stair into the Validator's Tower — a slashing lord holds its summit.",
     fentryFlavor: "You climb the winding stair into Vlad's Tower — a dread lord holds its summit.",
@@ -195,11 +195,11 @@ export function branchEntryFlavor(b: BranchDef): string | undefined { return get
 
 /** Realms deepen and grow chaotic — a nod to Polkadot → Kusama. */
 export function realmName(depth: number): string {
-  if (depth >= 20) return fp("Moloch's Sanctum", "Moloch's Sanctum");           // GEHENNOM_BOTTOM
-  if (depth >= 13) return fp("Gehennom, the Dark Forest", "Gehennom, the Dark Forest");  // below the foot of the relay
-  if (depth >= 12) return fp("the Castle Gate", "the Foot of the Relay");       // MAX_DEPTH — the vibrating square
-  if (depth >= 9) return fp("the Deep Caverns", "the Kusama Deeps");
-  if (depth >= 5) return fp("the Dungeon Reaches", "the Parachain Reaches");
+  if (depth >= 48) return fp("Moloch's Sanctum", "Moloch's Sanctum");           // GEHENNOM_BOTTOM
+  if (depth >= 26) return fp("Gehennom, the Dark Forest", "Gehennom, the Dark Forest");  // below the foot of the relay
+  if (depth >= 25) return fp("the Castle Gate", "the Foot of the Relay");       // MAX_DEPTH — the vibrating square
+  if (depth >= 18) return fp("the Deep Caverns", "the Kusama Deeps");
+  if (depth >= 9) return fp("the Dungeon Reaches", "the Parachain Reaches");
   return fp("the Upper Dungeon", "the Legacy Stack");
 }
 
@@ -371,8 +371,8 @@ export const MOLOCH: MonsterDef = {
 
 /** Realm mini-bosses — one guards a specific depth and drops a prize when slain. */
 export const MINIBOSSES: Record<number, MonsterDef> = {
-  3: { name: "the Forkmaster", fname: "the Mirror Fiend", ch: "F", fg: "#ff80ff", hp: 30, dmg: [4, 7], ai: "chase", minDepth: 99, weight: 0, boss: true, splits: true },
-  6: { name: "the Sudo Key",   fname: "the Iron Warden",  ch: "K", fg: "#ffd040", hp: 44, dmg: [5, 9], ai: "chase", minDepth: 99, weight: 0, boss: true, speed: 90 },
+  8:  { name: "the Forkmaster", fname: "the Mirror Fiend", ch: "F", fg: "#ff80ff", hp: 30, dmg: [4, 7], ai: "chase", minDepth: 99, weight: 0, boss: true, splits: true },
+  18: { name: "the Sudo Key",   fname: "the Iron Warden",  ch: "K", fg: "#ffd040", hp: 44, dmg: [5, 9], ai: "chase", minDepth: 99, weight: 0, boss: true, speed: 90 },
 };
 
 const DEATHS_F = [

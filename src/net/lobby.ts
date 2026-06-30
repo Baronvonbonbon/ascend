@@ -5,19 +5,18 @@
 import { hostOffer, guestAnswer, Peer } from "./peer";
 import type { Game } from "../game";
 
-export type CoopMode = "solo" | "coop" | "coop-ff" | "race";
+export type CoopMode = "solo" | "coop-ff";
 
 export function initLobby(game: Game): void {
   const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T | null;
   const lobby = $("lobby");
   const status = $("lobby-status");
-  const modeSel = $<HTMLSelectElement>("lobby-mode");
   const hostPane = $("lobby-host-pane");
   const joinPane = $("lobby-join-pane");
-  if (!lobby || !modeSel) return;
+  if (!lobby) return;
 
   const say = (m: string) => { if (status) status.textContent = m; };
-  const mode = (): CoopMode => (modeSel.value as CoopMode) || "coop";
+  const mode = (): CoopMode => "coop-ff"; // the only co-op mode: friendly-fire (slip past on bump; harm by choice)
 
   const connected = (peer: Peer, role: "host" | "guest", m: CoopMode) => {
     lobby.hidden = true;
@@ -57,9 +56,6 @@ export function initLobby(game: Game): void {
     if (joinPane) joinPane.hidden = false;
     if (hostPane) hostPane.hidden = true;
     if (hostBtn) hostBtn.hidden = true;       // a joiner only sees join controls
-    modeSel.hidden = true;                     // the host decides the mode
-    const modeLabel = document.getElementById("lobby-mode-label");
-    if (modeLabel) modeLabel.hidden = true;
     say("Paste the host's offer code, then Generate answer.");
   });
 
