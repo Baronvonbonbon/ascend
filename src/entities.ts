@@ -836,6 +836,7 @@ export class Monster extends Entity {
   blindTurns = 0; // a thrown potion of obfuscation blinds it — it can't chase
   cancelled = false; // a wand of nullification strips its special powers
   silenced = 0;   // turns of magical silence — can't summon or fire ranged spells
+  museLeft = 0;   // healing draughts it still carries (muse.c) — gulped when badly hurt
   splitsLeft = 0; // a sybil's remaining replications — bounds the swarm (children inherit one fewer)
   stolen: Item | null = null; // a thief (rug puller) carries what it snatched; drops it on death
   stoleGold = 0;              // an airdrop farmer's snatched gold — disgorged when it's slain
@@ -873,6 +874,7 @@ export class Monster extends Entity {
     }
     if (def.keeper || def.priest) this.peaceful = true; // a keeper minds its stall, a priest its altar — until provoked
     if (def.splits) this.splitsLeft = 2; // a fresh sybil can replicate at most twice
+    if (def.muse) this.museLeft = 2;     // it carries a couple of healing draughts
   }
 
   getSpeed(): number {
@@ -914,6 +916,15 @@ export class Monster extends Entity {
 
     // A coward turns tail once badly hurt.
     if (this.def.cowardly && this.hp < this.maxHp * 0.3) { this.fleeStep(p); return; }
+
+    // muse.c: a tough foe gulps a healing draught when badly hurt — a limited supply.
+    if (!this.cancelled && this.def.muse && this.museLeft > 0 && this.hp < this.maxHp * 0.35 && ROT.RNG.getUniform() < 0.45) {
+      this.museLeft--;
+      const h = Math.round(this.maxHp * (0.3 + ROT.RNG.getUniform() * 0.25));
+      this.hp = Math.min(this.maxHp, this.hp + h);
+      this.game.log.add(`${this.name.charAt(0).toUpperCase() + this.name.slice(1)} gulps a draught and steadies — +${h}.`, "bad", p);
+      return;
+    }
 
     // A medic mends a wounded ally within reach instead of fighting.
     if (!this.cancelled && this.def.heals) {
