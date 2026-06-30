@@ -122,6 +122,14 @@ export const SPELLS: Spell[] = [
   { id: "sense", name: "sense minds",   fname: "detect monsters",  cost: 5, dir: false, school: "divination" },
   { id: "tele",  name: "XCM jump",      fname: "teleport",         cost: 8, dir: false, school: "escape" },
   { id: "haste", name: "overclock",     fname: "haste self",       cost: 7, dir: false, school: "enchantment" },
+  { id: "fireball", name: "immolation",  fname: "fireball",          cost: 9, dir: true,  school: "attack" },
+  { id: "cure",  name: "cleanse",        fname: "cure sickness",     cost: 6, dir: false, school: "clerical" },
+  { id: "detect", name: "ledger scan",   fname: "detect treasure",   cost: 6, dir: false, school: "divination" },
+  { id: "dig",   name: "excavate",       fname: "dig",               cost: 7, dir: true,  school: "escape" },
+  { id: "slow",  name: "throttle",       fname: "slow monster",      cost: 5, dir: true,  school: "enchantment" },
+  { id: "sleep", name: "stasis field",   fname: "sleep",             cost: 6, dir: true,  school: "enchantment" },
+  { id: "turn",  name: "slash the unfinalized", fname: "turn undead", cost: 7, dir: false, school: "clerical" },
+  { id: "uncurse", name: "formal verification", fname: "remove curse", cost: 8, dir: false, school: "clerical" },
 ];
 export function spellById(id: string): Spell | undefined { return SPELLS.find((s) => s.id === id); }
 /** A spell's display name, flavored. */

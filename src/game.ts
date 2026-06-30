@@ -2829,9 +2829,47 @@ export class Game {
       case "sense": { p.senseTurns = Math.max(p.senseTurns, 12); this.log.add(`${this.sub(p)} ${this.verbS(p, "sense")} the minds around ${p.name === "you" ? "you" : "them"}.`, "sys"); break; }
       case "tele": { let pos = this.level.randomFloor(), t = 0; while (t < 40 && (this.monsterAt(pos.x, pos.y) || this.level.tileAt(pos.x, pos.y) === "stairsDown")) { pos = this.level.randomFloor(); t++; } p.x = pos.x; p.y = pos.y; this.recomputeFOV(); this.log.add(`${this.sub(p)} XCM-${this.verbS(p, "jump")} across the level.`, "sys"); break; }
       case "haste": { p.hasteTurns = Math.max(p.hasteTurns, 20); this.scheduler.remove(p); this.scheduler.add(p, true); this.log.add(`${this.sub(p)} ${this.verbS(p, "overclock")}! (haste)`, "good"); break; }
+      case "fireball": {
+        this.castRay(p.x, p.y, dx, dy, 8, (e) => {
+          const d = ROT.RNG.getUniformInt(7, 14); e.hp -= d;
+          this.log.add(e instanceof Player ? `The fireball scorches ${e.name} for ${d}!` : `The fireball engulfs ${e.name} for ${d}.`, e instanceof Player ? "bad" : "good");
+          if (e.hp <= 0) { if (e instanceof Monster) this.gainXp(p, e.maxHp); this.kill(e); }
+        });
+        break;
+      }
+      case "cure": this.applyEffect("cure", "blessed"); break;
+      case "detect": this.applyEffect("detect_obj"); break;
+      case "uncurse": this.applyEffect("uncurse"); break;
+      case "dig": {
+        let x = p.x, y = p.y, dug = 0;
+        for (let step = 0; step < 8 && dug < 4; step++) { x += dx; y += dy; if (x < 1 || y < 1 || x >= W - 1 || y >= MAP_H - 1) break; if (this.level.tileAt(x, y) === "wall") { this.level.tiles[y][x] = "floor"; dug++; } }
+        this.log.add(dug ? `Raw force bores through ${dug} wall${dug > 1 ? "s" : ""}.` : "The dig spell finds only open air.", dug ? "good" : "dim");
+        if (dug) this.recomputeFOV();
+        break;
+      }
+      case "slow": { const hit = this.firstMonsterInDir(p, dx, dy); if (hit) { hit.speedMod = 0.5; this.scheduler.remove(hit); this.scheduler.add(hit, true); this.log.add(`${cap(hit.name)} slows to a crawl.`, "good"); } else this.log.add("The throttle finds nothing.", "dim"); break; }
+      case "sleep": { const hit = this.firstMonsterInDir(p, dx, dy); if (hit) { hit.sleepTurns = ROT.RNG.getUniformInt(5, 10); this.log.add(`${cap(hit.name)} freezes in stasis.`, "good"); } else this.log.add("The stasis field grips nothing.", "dim"); break; }
+      case "turn": {
+        let n = 0;
+        for (const m of [...this.monsters]) {
+          if (!m.alive || m.peaceful || Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) > 4) continue;
+          const demonish = m.def.fearless || m.def.summons || /demon|fiend|imp|wraith|lich|daemon|undead|kraken/i.test(m.def.name);
+          const d = ROT.RNG.getUniformInt(4, 9) + (demonish ? 6 : 0); m.hp -= d; n++;
+          if (m.hp <= 0) { this.gainXp(p, m.maxHp); this.kill(m); }
+        }
+        this.log.add(n ? `A wave of finality scours ${n} nearby foe${n > 1 ? "s" : ""} — the unfinalized recoil.` : "You slash at the unfinalized — but none are near.", n ? "good" : "dim");
+        break;
+      }
     }
     this.draw();
     return true;
+  }
+
+  /** Scan a straight line from the caster and return the first monster struck (for directional spells). */
+  private firstMonsterInDir(p: Player, dx: number, dy: number): Monster | undefined {
+    let x = p.x, y = p.y;
+    for (let step = 0; step < 10; step++) { x += dx; y += dy; if (!this.level.isPassable(x, y) || this.level.boulderAt(x, y)) break; const m = this.monsterAt(x, y); if (m) return m; }
+    return undefined;
   }
 
   // ── polymorph self / "fork" (Phase 8b) ──────────────────────────────────────

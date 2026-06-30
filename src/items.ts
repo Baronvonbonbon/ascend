@@ -149,6 +149,14 @@ export const ITEMS: ItemType[] = [
   { id: "book_sense", kind: "spellbook", name: "a runtime of sense minds",   fname: "a spellbook of detect monsters", ch: "+", fg: "#d0c0e0", teaches: "sense", weight: 2 },
   { id: "book_tele",  kind: "spellbook", name: "a runtime of XCM jump",      fname: "a spellbook of teleport",       ch: "+", fg: "#c0c0e0", teaches: "tele",  weight: 1 },
   { id: "book_haste", kind: "spellbook", name: "a runtime of overclock",     fname: "a spellbook of haste self",     ch: "+", fg: "#e0d0a0", teaches: "haste", weight: 1 },
+  { id: "book_fire",  kind: "spellbook", name: "a runtime of immolation",    fname: "a spellbook of fireball",       ch: "+", fg: "#e07040", teaches: "fireball", weight: 1 },
+  { id: "book_cure",  kind: "spellbook", name: "a runtime of cleanse",       fname: "a spellbook of cure sickness",  ch: "+", fg: "#a0e0e0", teaches: "cure",    weight: 2 },
+  { id: "book_detect", kind: "spellbook", name: "a runtime of ledger scan",  fname: "a spellbook of detect treasure", ch: "+", fg: "#e0d070", teaches: "detect", weight: 2 },
+  { id: "book_dig",   kind: "spellbook", name: "a runtime of excavate",      fname: "a spellbook of dig",            ch: "+", fg: "#c0a060", teaches: "dig",     weight: 2 },
+  { id: "book_slow",  kind: "spellbook", name: "a runtime of throttle",      fname: "a spellbook of slow monster",   ch: "+", fg: "#80a0d0", teaches: "slow",    weight: 2 },
+  { id: "book_sleep", kind: "spellbook", name: "a runtime of stasis field",  fname: "a spellbook of sleep",          ch: "+", fg: "#90a0d0", teaches: "sleep",   weight: 2 },
+  { id: "book_turn",  kind: "spellbook", name: "a runtime of finality-slashing", fname: "a spellbook of turn undead", ch: "+", fg: "#e0e0c0", teaches: "turn",    weight: 1 },
+  { id: "book_uncurse", kind: "spellbook", name: "a runtime of formal verification", fname: "a spellbook of remove curse", ch: "+", fg: "#d0f0c0", teaches: "uncurse", weight: 1 },
 ];
 
 /** Scrolls a contract deployer (magic marker) can inscribe, in menu order. */
