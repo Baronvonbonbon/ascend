@@ -953,6 +953,14 @@ export class Monster extends Entity {
       }
       // nothing to take — fall through and just attack
     }
+    // Seduce: a charmer transfixes you (a lost turn) and slips away with whatever it can lift.
+    if (!this.cancelled && this.def.seduces && dist === 1 && ROT.RNG.getUniform() < 0.6) {
+      const who = this.name.charAt(0).toUpperCase() + this.name.slice(1);
+      if (p.paralyzed === 0) { p.paralyzed = 1; this.game.log.add(`${who} catches your eye — you stand transfixed!`, "bad", p); }
+      const loot = this.game.stealItem(p);
+      if (loot) { this.stolen = loot; this.game.log.add(`${who} slips ${this.game.ident.name(loot.type)} away as you swoon, and is gone.`, "bad", p); this.blinkAway(p); }
+      return;
+    }
     // The airdrop farmer: adjacent, it snatches a fistful of gold and blinks away.
     if (!this.cancelled && this.def.stealsGold && dist === 1 && p.gold > 0) {
       const took = this.game.stealGold(p);
