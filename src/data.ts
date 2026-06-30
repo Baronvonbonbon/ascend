@@ -226,6 +226,7 @@ export interface MonsterDef {
   stealsLuck?: boolean;  // a doubt gremlin — leeches your Fortune (Luck) on a hit
   paralyzes?: boolean;   // a watcher eye (floating eye) — passive, but melee it and its gaze freezes you
   engulfs?: boolean;     // a trapper (liquidity trap) — a hit swallows you whole; struggle out or cut free
+  silences?: boolean;    // a gag wraith — a hit smothers you in silence (no casting; in co-op, no chat)
   mimic?: boolean;       // a honeypot — sits disguised as loot, strikes when touched
   fearless?: boolean;    // ignores warding engravings (bosses fear no Gray Paper)
   keeper?: boolean;      // a shopkeeper — peaceful until you shoplift, then merciless
@@ -251,6 +252,7 @@ export const MONSTERS: MonsterDef[] = [
   { name: "an oracle",         fname: "a dark seer",     ch: "o", fg: "#e0c040", hp: 9,  dmg: [3, 6], ai: "chase",  minDepth: 5, weight: 2, ranged: true },
   { name: "a liquidity trap",  fname: "a trapper",       ch: "t", fg: "#6ec0a0", hp: 20, dmg: [3, 6], ai: "chase",  minDepth: 6, weight: 2, speed: 80, engulfs: true },
   { name: "a 51% attacker",    fname: "a berserker",     ch: "A", fg: "#e05050", hp: 16, dmg: [4, 8], ai: "chase",  minDepth: 6, weight: 2, speed: 110, inflict: "confuse" },
+  { name: "a gag enforcer",    fname: "a silence wraith", ch: "q", fg: "#8090a0", hp: 18, dmg: [2, 4], ai: "chase",  minDepth: 7, weight: 2, speed: 95, silences: true },
   { name: "a MEV bot",         fname: "a giant bat",     ch: "b", fg: "#80c060", hp: 6,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 3, speed: 135 },
   { name: "a slashing daemon", fname: "a giant serpent", ch: "S", fg: "#e06060", hp: 14, dmg: [4, 8], ai: "chase",  minDepth: 5, weight: 2 },
   { name: "a sudo conjurer",   fname: "a summoner cultist", ch: "&", fg: "#c080e0", hp: 16, dmg: [2, 4], ai: "chase",  minDepth: 6, weight: 2, summons: true },

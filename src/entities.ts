@@ -71,6 +71,7 @@ export class Player extends Entity {
   illness = 0;         // turns until food poisoning kills you — cure fast
   blind = 0;           // turns of blindness — FOV shrinks to your fingertips
   paralyzed = 0;       // turns frozen by a gaze (floating eye) — you auto-pass, helpless
+  silenced = 0;        // turns of magical silence — can't cast extrinsics; in co-op, can't be heard (no chat)
   intrinsics = new Set<string>(); // poisonResist, petrifyResist, fast (from eating corpses)
   skillXp: Record<string, number> = {};   // landed hits per weapon-skill class (#enhance)
   skillRank: Record<string, number> = {};  // 0 Unskilled · 1 Basic · 2 Skilled · 3 Expert
@@ -239,6 +240,7 @@ export class Player extends Entity {
       if (this.hp <= 0) { this.game.log.add(`The poison takes ${this.name}.`, "bad"); this.game.killPlayer(this); }
     }
     if (this.confused > 0 && --this.confused === 0) this.game.log.add("Your head clears.", "dim");
+    if (this.silenced > 0 && --this.silenced === 0) this.game.log.add(`${this.name === "you" ? "Your voice returns" : this.name + "'s voice returns"} — the silence lifts.`, "good");
     if (this.blind > 0 && --this.blind === 0) { this.game.log.add(`${this.name === "you" ? "Your sight returns" : this.name + "'s sight returns"}.`, "good"); this.game.recomputeFOV(); }
     // Petrification & illness are countdowns you must out-race (prayer / a cure).
     if (this.stoning > 0 && --this.stoning === 0) {
@@ -822,6 +824,7 @@ export class Monster extends Entity {
   sleepTurns = 0; // a wand of stasis freezes it for a while
   blindTurns = 0; // a thrown potion of obfuscation blinds it — it can't chase
   cancelled = false; // a wand of nullification strips its special powers
+  silenced = 0;   // turns of magical silence — can't summon or fire ranged spells
   splitsLeft = 0; // a sybil's remaining replications — bounds the swarm (children inherit one fewer)
   stolen: Item | null = null; // a thief (rug puller) carries what it snatched; drops it on death
   stoleGold = 0;              // an airdrop farmer's snatched gold — disgorged when it's slain
@@ -869,6 +872,7 @@ export class Monster extends Entity {
     this.game.setActive(this.floorKey); // act in this monster's floor context (co-op: floors run independently)
     if (!this.alive) return;
     if (this.heardSound && --this.heardSound.ttl <= 0) this.heardSound = null; // a heard call fades over time
+    if (this.silenced > 0) this.silenced--; // magical silence wears off
     const p = this.game.nearestPlayer(this.x, this.y); // target the closer of the party
     if (!p.alive) return;
 
@@ -920,8 +924,8 @@ export class Monster extends Entity {
 
     // The Sybil attack: a sybil with budget left occasionally replicates (bounded). Nullified ones can't.
     if (!this.cancelled && this.def.splits && this.splitsLeft > 0 && ROT.RNG.getUniform() < 0.05 && this.game.spawnSybilNear(this)) return;
-    // A conjurer summons reinforcements.
-    if (!this.cancelled && this.def.summons && this.game.level.isVisible(this.x, this.y) && ROT.RNG.getUniform() < 0.1 && this.game.summonNear(this)) return;
+    // A conjurer summons reinforcements (a verbal casting — magical silence stops it).
+    if (!this.cancelled && this.silenced === 0 && this.def.summons && this.game.level.isVisible(this.x, this.y) && ROT.RNG.getUniform() < 0.1 && this.game.summonNear(this)) return;
     // Breeders multiply when a mate of their kind is adjacent.
     if (!this.cancelled && this.def.breeds && ROT.RNG.getUniform() < 0.06) {
       const mate = this.game.monsters.find((o) => o !== this && o.alive && o.def === this.def && Math.max(Math.abs(o.x - this.x), Math.abs(o.y - this.y)) === 1);
@@ -963,8 +967,8 @@ export class Monster extends Entity {
     const pet = this.game.pet;
     if (pet && pet.alive && Math.max(Math.abs(this.x - pet.x), Math.abs(this.y - pet.y)) === 1) { this.game.attack(this, pet); return; }
 
-    // Ranged foes (oracles) zap the player from a distance with line-of-sight.
-    if (!this.cancelled && this.def.ranged && !p.stealth && dist >= 2 && dist <= 6 && this.game.level.isVisible(this.x, this.y) && this.game.hasLineOfSight(this.x, this.y, p.x, p.y)) {
+    // Ranged foes (oracles) zap the player from a distance with line-of-sight — a cast, stopped by silence.
+    if (!this.cancelled && this.silenced === 0 && this.def.ranged && !p.stealth && dist >= 2 && dist <= 6 && this.game.level.isVisible(this.x, this.y) && this.game.hasLineOfSight(this.x, this.y, p.x, p.y)) {
       this.game.rangedAttack(this);
       return;
     }

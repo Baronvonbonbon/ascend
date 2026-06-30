@@ -377,6 +377,7 @@ export class Game {
     if (p.poison > 0) fx.push(`poisoned ${p.poison}`);
     if (p.confused > 0) fx.push(`confused ${p.confused}`);
     if (p.blind > 0) fx.push(`blind ${p.blind}`);
+    if (p.silenced > 0) fx.push(`silenced ${p.silenced}`);
     if (p.stoning > 0) fx.push(`STONING ${p.stoning}`);
     if (p.illness > 0) fx.push(`ill ${p.illness}`);
     if (p.hasteTurns > 0) fx.push(`hasted ${p.hasteTurns}`);
@@ -582,6 +583,7 @@ export class Game {
   submitChat(text: string, power: "whisper" | "say" | "shout" = "say"): void {
     const msg = text.trim().slice(0, 60);
     if (!msg || !this.coop || this.netRole === "solo" || this.over || !this.localPlayer.alive) return;
+    if (this.localPlayer.silenced > 0) { this.showChatBanner("(silenced — you can't make a sound)", true); return; }
     if (this.localPlayer.signalledThisTurn) { this.showChatBanner("(one message per turn — make a move first)", true); return; }
     this.localPlayer.signalledThisTurn = true;
     this.showChatBanner(`You: ${msg}`, true); // banner only — chat never enters the event log
@@ -1721,6 +1723,7 @@ export class Game {
       if (m.def.corpseEffect === "petrify") tags.push("petrifying");
       if (m.def.drains) tags.push("life-draining");
       if (m.def.engulfs) tags.push("engulfing");
+      if (m.def.silences) tags.push("silencing");
       if (m.sleepTurns > 0) tags.push("asleep");
       if (m.cancelled) tags.push("nullified");
       this.log.add(`You see ${m.name} — ${band} (${tags.join(", ")}).`, "sys");
@@ -1824,7 +1827,7 @@ export class Game {
     p.prayerCooldown = 130;
     p.hp = p.maxHp;
     p.nutrition = Math.max(p.nutrition, 600);
-    p.poison = 0; p.confused = 0;
+    p.poison = 0; p.confused = 0; p.silenced = 0;
     if (p.stoning > 0 || p.illness > 0) { p.stoning = 0; p.illness = 0; this.log.add("The petrifying chill / the bad block lifts.", "good"); }
     if (p.blind > 0) { p.blind = 0; this.recomputeFOV(); }
     if (p.luck < 0) { p.luck = 0; this.log.add("Gavin steadies your fortune.", "good"); }
@@ -2091,6 +2094,10 @@ export class Game {
       if (a.def.engulfs && d.hp > 0 && !d.engulfedBy) {
         d.engulfedBy = a;
         this.log.add(`${cap(a.name)} engulfs ${d.name} — swallowed whole! (move in any direction to struggle free)`, "bad", who);
+      }
+      if (!a.cancelled && a.def.silences && d.hp > 0 && d.silenced === 0 && ROT.RNG.getUniform() < 0.4) {
+        d.silenced = ROT.RNG.getUniformInt(6, 11);
+        this.log.add(`${cap(a.name)} smothers ${d.name} in silence — your voice is gone!`, "bad", who);
       }
     }
     else if (a instanceof Player && d instanceof Player) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg} — friendly fire!`, "bad", who);
@@ -2556,11 +2563,14 @@ export class Game {
         hit.splitsLeft = nd.splits ? 2 : 0; hit.cancelled = false; hit.sleepTurns = 0; hit.speedMod = 1;
         this.scheduler.remove(hit); this.scheduler.add(hit, true);
         this.log.add(`${cap(old)} is forked into ${nd.name}!`, "sys");
+      } else if (item.type.id === "wand_silence") {
+        hit.silenced = ROT.RNG.getUniformInt(8, 14);
+        this.log.add(`${cap(hit.name)} is wrapped in silence — its voice fails.`, "good");
       } else if (item.type.id === "wand_cancel") {
         hit.cancelled = true;
         this.log.add(`${cap(hit.name)} is nullified — its powers fail.`, "good");
       } else if (item.type.id === "wand_probe") {
-        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.stealsGold && "gold thief", hit.def.stealsLuck && "Fortune leech", hit.def.drains && "life-draining", hit.def.engulfs && "engulfing", hit.def.paralyzes && "paralyzing gaze", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.cancelled && "nullified"].filter(Boolean).join(", ");
+        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.stealsGold && "gold thief", hit.def.stealsLuck && "Fortune leech", hit.def.drains && "life-draining", hit.def.engulfs && "engulfing", hit.def.silences && "silencing", hit.def.paralyzes && "paralyzing gaze", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.cancelled && "nullified"].filter(Boolean).join(", ");
         this.log.add(`State-read ${hit.name}: ${hit.hp}/${hit.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       }
     }
@@ -2622,6 +2632,7 @@ export class Game {
     const p = this.acting;
     const s = spellById(id);
     if (!s || !p.spells.has(id)) { this.log.add("You don't know that extrinsic.", "dim"); return false; }
+    if (p.silenced > 0) { this.log.add(`${this.sub(p)} ${this.verbS(p, "mouth")} the extrinsic, but no sound comes — silenced!`, "bad"); return false; }
     if (p.energy < s.cost) { this.log.add(`Not enough energy — ${s.name} needs ${s.cost}.`, "bad"); return false; }
     p.energy -= s.cost;
     if (ROT.RNG.getUniform() > this.castChance(p, s.cost)) {
@@ -2672,10 +2683,10 @@ export class Game {
   // ── tools (the `apply` command, Phase 7c) ────────────────────────────────────
   /** Sound an auditor's horn (unicorn horn): clear afflictions + a little mend. Returns false if there's nothing to fix. */
   applyHorn(p: Player): boolean {
-    if (p.poison === 0 && p.confused === 0 && p.stoning === 0 && p.illness === 0 && p.blind === 0 && p.paralyzed === 0 && p.hp >= p.maxHp) {
+    if (p.poison === 0 && p.confused === 0 && p.stoning === 0 && p.illness === 0 && p.blind === 0 && p.paralyzed === 0 && p.silenced === 0 && p.hp >= p.maxHp) {
       this.log.add("The auditor's horn finds nothing amiss.", "dim"); return false;
     }
-    p.poison = 0; p.confused = 0; p.stoning = 0; p.illness = 0; p.blind = 0; p.paralyzed = 0;
+    p.poison = 0; p.confused = 0; p.stoning = 0; p.illness = 0; p.blind = 0; p.paralyzed = 0; p.silenced = 0;
     p.hp = Math.min(p.maxHp, p.hp + ROT.RNG.getUniformInt(2, 6));
     this.recomputeFOV();
     this.log.add(`${this.sub(p)} ${this.verbS(p, "sound")} the auditor's horn — afflictions clear.`, "good");
@@ -2713,7 +2724,7 @@ export class Game {
     if (item.type.id === "scope") {
       const m = this.monsterAt(p.x + dx, p.y + dy);
       if (!m) { this.log.add("You press the state reader to empty air.", "dim"); return false; }
-      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.stealsGold && "gold thief", m.def.stealsLuck && "Fortune leech", m.def.drains && "life-draining", m.def.engulfs && "engulfing", m.def.paralyzes && "paralyzing gaze", m.def.splits && "splits", m.def.corrodes && "corrodes", m.cancelled && "nullified", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
+      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.stealsGold && "gold thief", m.def.stealsLuck && "Fortune leech", m.def.drains && "life-draining", m.def.engulfs && "engulfing", m.def.silences && "silencing", m.def.paralyzes && "paralyzing gaze", m.def.splits && "splits", m.def.corrodes && "corrodes", m.cancelled && "nullified", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
       this.log.add(`State-read ${m.name}: ${m.hp}/${m.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       return true;
     }
@@ -2988,8 +2999,8 @@ export class Game {
         break;
       }
       case "cure": {
-        if (p.poison > 0 || p.confused > 0 || p.stoning > 0 || p.illness > 0 || p.blind > 0) {
-          p.poison = 0; p.confused = 0; p.stoning = 0; p.illness = 0; p.blind = 0;
+        if (p.poison > 0 || p.confused > 0 || p.stoning > 0 || p.illness > 0 || p.blind > 0 || p.silenced > 0) {
+          p.poison = 0; p.confused = 0; p.stoning = 0; p.illness = 0; p.blind = 0; p.silenced = 0;
           this.log.add("A cleansing light — your afflictions lift.", "good"); this.recomputeFOV();
         } else this.log.add("You feel briefly cleansed.", "dim");
         break;
@@ -3384,7 +3395,7 @@ export class Game {
 
   private debugHeal(p: Player): void {
     p.hp = p.maxHp; p.energy = p.maxEnergy;
-    p.poison = 0; p.confused = 0; p.stoning = 0; p.illness = 0; p.blind = 0;
+    p.poison = 0; p.confused = 0; p.stoning = 0; p.illness = 0; p.blind = 0; p.silenced = 0; p.paralyzed = 0;
     p.nutrition = Math.max(p.nutrition, 900);
   }
 
@@ -3568,6 +3579,7 @@ export class Game {
       (p.stoning > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Ston${p.stoning}` : "") +
       (p.illness > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Ill${p.illness}` : "") +
       (p.blind > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Blind` : "") +
+      (p.silenced > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Silent` : "") +
       (p.intrinsics.has("fast") ? `%c{${COLORS.dim}}  %c{${COLORS.good}}Fast` : "") +
       (p.hasJam ? `%c{${COLORS.dim}}  %c{${COLORS.gold}}✦JAM — ASCEND (<)` : this.jamStolen ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}JAM STOLEN — slay the Censor!` : `%c{${COLORS.dim}}  ${this.gehennomOpen ? `JAM: depth ${GEHENNOM_BOTTOM}` : `Invoke @ depth ${MAX_DEPTH}`}`)
     );

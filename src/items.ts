@@ -103,6 +103,7 @@ export const ITEMS: ItemType[] = [
   { id: "wand_sleep",  kind: "wand", name: "a wand of stasis",       fname: "a wand of sleep",         ch: "/", fg: "#90a0d0", weight: 2 },
   { id: "wand_poly",   kind: "wand", name: "a wand of forking",      fname: "a wand of polymorph",     ch: "/", fg: "#d070d0", weight: 1 },
   { id: "wand_cancel", kind: "wand", name: "a wand of nullification",fname: "a wand of cancellation",  ch: "/", fg: "#a0a0a0", weight: 1 },
+  { id: "wand_silence",kind: "wand", name: "a wand of gag order",    fname: "a wand of silence",       ch: "/", fg: "#7a8a90", weight: 2 }, // silences a foe — no casting/summoning
   { id: "wand_probe",  kind: "wand", name: "a wand of state-read",   fname: "a wand of probing",       ch: "/", fg: "#80c0a0", weight: 2 },
   // ── tools ── ( (applied with a)
   { id: "pickaxe", kind: "tool", name: "an excavator",        fname: "a pick-axe",          ch: "(", fg: "#c0a060", weight: 3 }, // reusable dig
