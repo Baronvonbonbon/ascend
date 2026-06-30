@@ -1292,9 +1292,10 @@ export class Game {
       const cells = this.roomCells(c.x, c.y);
       const open = cells.filter((p) => this.level.tileAt(p.x, p.y) === "floor" && !this.monsterAt(p.x, p.y) && !this.level.itemAt(p.x, p.y) && !this.playerAt(p.x, p.y));
       if (cells.length < 6 || open.length < 4) continue;
-      const kind = ROT.RNG.getItem(["temple", "zoo", "vault"])!;
+      const kind = ROT.RNG.getItem(["temple", "zoo", "vault", "morgue"])!;
       if (kind === "temple") this.makeTemple(c, open);
       else if (kind === "zoo") this.makeZoo(open);
+      else if (kind === "morgue") this.makeMorgue(open);
       else this.makeVault(c, open);
       return;
     }
@@ -1306,6 +1307,23 @@ export class Game {
     const guard = open.find((p) => !(p.x === center.x && p.y === center.y)) ?? open[0];
     if (guard) { const m = new Monster(this, PRIEST, guard.x, guard.y); m.peaceful = true; this.monsters.push(m); }
     this.log.add("A hush settles over this floor — a shrine to Gavin, its altar (_) tended by a priest. (P to pray, O to offer)", "good");
+  }
+
+  /** A morgue: rotting corpses of dead chains, stalked by wraiths and the deep undead. */
+  private makeMorgue(open: { x: number; y: number }[]): void {
+    const wraith = MONSTERS.find((m) => m.ch === "w");
+    let dead = 0;
+    for (const p of open) {
+      const r = ROT.RNG.getUniform();
+      if (r < 0.45 && !this.level.itemAt(p.x, p.y)) {
+        this.level.items.push({ x: p.x, y: p.y, type: CORPSE, corpse: { def: this.pickMonster(this.player.depth), born: this.turn - 200 } }); // old, rotten remains
+        dead++;
+      } else if (r < 0.68) {
+        const def = wraith && ROT.RNG.getUniform() < 0.5 ? wraith : this.pickMonster(this.player.depth);
+        this.monsters.push(new Monster(this, def, p.x, p.y)); // gen-time spawn — scheduleParty schedules it
+      }
+    }
+    if (dead) this.log.add("A reek of decay seeps through the wall — a morgue of dead chains, its rotting corpses (%) stalked by wraiths.", "bad");
   }
 
   /** A zoo: a room packed with monsters guarding scattered loot (an airdrop trap room). */
