@@ -348,6 +348,7 @@ export class Game {
   /** A mind flayer saps a random attribute (min 3). Tracked so prayer can restore exactly what was lost. */
   drainStat(p: Player, byName: string): void {
     if (!p.alive) return;
+    if (p.sustainAbility) { this.log.add(`${cap(byName)} reaches for your faculties — but they hold firm.`, "dim", p); return; }
     const drainable = ATTRS.filter((a) => p[a] > 3);
     if (drainable.length === 0) return;
     const a = ROT.RNG.getItem(drainable)!;
@@ -1659,6 +1660,16 @@ export class Game {
     return ({ gas: "gas-fee trap", slash: "slashing trap", reorg: "reorg trap", fork: "fork trap", trapdoor: "trapdoor" } as Record<TrapKind, string>)[k];
   }
 
+  /** A ring of searching: each turn, a chance to reveal an adjacent hidden trap or door. */
+  autoSearchAround(p: Player): void {
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const x = p.x + dx, y = p.y + dy;
+      const trap = this.level.trapAt(x, y);
+      if (trap && !trap.revealed && ROT.RNG.getUniform() < 0.3) { trap.revealed = true; this.log.add(`Your ring senses a hidden ${this.trapName(trap.kind)}.`, "sys", p); }
+      if (this.level.tileAt(x, y) === "doorHidden" && ROT.RNG.getUniform() < 0.3) { this.level.tiles[y][x] = "doorClosed"; this.log.add("Your ring senses a hidden door.", "sys", p); this.recomputeFOV(); }
+    }
+  }
+
   /** Search the surrounding tiles: Insight (WIS) reveals hidden traps & doors; then carefully
    *  disarm (DEX) any revealed trap beside you — your way past a path-blocking reorg trap. */
   search(p: Player): boolean {
@@ -2234,7 +2245,7 @@ export class Game {
     if (a instanceof Player) { const e = this.level.engravingAt(a.x, a.y); if (e) e.life -= 3; }
     const [lo, hi] = a.attackDmg;
     let dmg = ROT.RNG.getUniformInt(lo, hi);
-    if (a instanceof Player) dmg = Math.max(1, dmg + abilityMod(a.str) + this.skillDmgBonus(a)); // Stake-weight + trained skill drive the blow
+    if (a instanceof Player) dmg = Math.max(1, dmg + abilityMod(a.str) + this.skillDmgBonus(a) + a.ringDmg); // Stake-weight + trained skill + a ring of damage drive the blow
     d.hp -= dmg;
     if (a instanceof Player && d instanceof Monster) this.noteSkillHit(a); // a landed blow trains the weapon's skill
     // A rust/corrosion striker (rust bug) eats away a random worn piece on a hit.
@@ -2284,7 +2295,7 @@ export class Game {
       } else this.log.add("Your off-hand swing goes wide.", "dim", who);
     }
     // A watcher eye's gaze: melee it and — if it survives the blow — its stare freezes you in place.
-    if (a instanceof Player && d instanceof Monster && d.alive && d.def.paralyzes && a.paralyzed === 0) {
+    if (a instanceof Player && d instanceof Monster && d.alive && d.def.paralyzes && a.paralyzed === 0 && !a.freeAction) {
       a.paralyzed = ROT.RNG.getUniformInt(3, 6);
       this.log.add(`${cap(d.name)} fixes ${a.name} with its gaze — frozen, helpless!`, "bad", a);
     }
@@ -2298,7 +2309,7 @@ export class Game {
     if (roll === 20) return true;
     if (roll === 1) return false;
     let acc = 0, eva = 0;
-    if (a instanceof Player) acc = a.level + abilityMod(a.dex) + (a.weapon?.enchant ?? 0) + this.skillAccBonus(a) - (a.blind > 0 ? 3 : 0) + Math.round(this.luckOf(a) / 3); // weapon mastery + Fortune sway the roll; blind swings miss
+    if (a instanceof Player) acc = a.level + abilityMod(a.dex) + (a.weapon?.enchant ?? 0) + this.skillAccBonus(a) + a.ringAcc - (a.blind > 0 ? 3 : 0) + Math.round(this.luckOf(a) / 3); // weapon mastery + a ring of accuracy + Fortune sway the roll; blind swings miss
 
     else if (a instanceof Monster) acc = 2 + Math.floor(a.maxHp / 8);
     if (d instanceof Player) eva = abilityMod(d.dex) + Math.floor(d.level / 3) + Math.floor(d.ac / 2) + Math.round(this.luckOf(d) / 3); // armor is dodge now; Fortune helps you slip
@@ -2365,7 +2376,7 @@ export class Game {
   private verbS(p: Player, base: string): string { return p.name === "you" ? base : base + "s"; }
 
   applyStatus(target: Player, kind: "poison" | "confuse"): void {
-    if (kind === "poison" && target.intrinsics.has("poisonResist")) { this.log.add(`${target.name === "you" ? "You resist" : target.name + " resists"} the toxin.`, "dim", target); return; }
+    if (kind === "poison" && (target.intrinsics.has("poisonResist") || target.ringPoisonRes)) { this.log.add(`${target.name === "you" ? "You resist" : target.name + " resists"} the toxin.`, "dim", target); return; }
     if (kind === "poison") { target.poison = Math.max(target.poison, 6); this.log.add(`${target.name === "you" ? "You are" : target.name + " is"} poisoned!`, "bad", target); }
     else { target.confused = Math.max(target.confused, 5); this.log.add(`${target.name === "you" ? "Your head spins" : target.name + "'s head spins"} — confused!`, "bad", target); }
   }
@@ -3037,7 +3048,7 @@ export class Game {
       p.stoning = 5;
       this.log.add(`${this.sub(p)} ${this.verbS(p, "start")} to freeze solid — find a cure, fast! (pray, or a cleanse)`, "bad");
     } else if (def.corpseEffect === "poisonous") {
-      if (p.intrinsics.has("poisonResist")) this.log.add("Toxic — but you shrug it off.", "dim");
+      if ((p.intrinsics.has("poisonResist") || p.ringPoisonRes)) this.log.add("Toxic — but you shrug it off.", "dim");
       else { this.applyStatus(p, "poison"); if (ROT.RNG.getUniform() < 0.33) { p.intrinsics.add("poisonResist"); this.log.add("Your gut hardens — poison resistance!", "good"); } }
     } else if (def.corpseEffect === "speed") {
       if (!p.intrinsics.has("fast") && ROT.RNG.getUniform() < 0.4) { p.intrinsics.add("fast"); this.log.add("You feel quick! (intrinsic speed)", "good"); }
@@ -3047,7 +3058,7 @@ export class Game {
       this.gainXp(p, Math.max(10, this.xpForLevel(p.level + 1) - p.xp + 1), false); // the wight's hoarded vitality flows back
       this.log.add("Stolen vitality floods back into you — you feel experienced!", "good");
       if (!p.intrinsics.has("drainResist") && ROT.RNG.getUniform() < 0.33) { p.intrinsics.add("drainResist"); this.log.add("Your spirit anchors — draining can't take hold. (drain resistance)", "good"); }
-    } else if (rotten && !p.intrinsics.has("poisonResist") && ROT.RNG.getUniform() < 0.5) {
+    } else if (rotten && !(p.intrinsics.has("poisonResist") || p.ringPoisonRes) && ROT.RNG.getUniform() < 0.5) {
       p.illness = 8;
       this.log.add("That was rotten — a bad block churns in you. (cure it before it's fatal)", "bad");
     } else if (ROT.RNG.getUniform() < 0.06) {
@@ -3777,9 +3788,11 @@ export class Game {
     for (const b of lvl.boulders) if (vis(b.x, b.y)) cells.push([b.x, b.y, "0", "#9a8a6a"]);
     // Sense minds: only THIS viewer's blindness-telepathy or sense-minds spell reveals out-of-sight foes.
     const sensed = !!me && ((me.blind > 0 && me.intrinsics.has("telepathy")) || me.senseTurns > 0);
+    const warn = !!me && me.warning; // a ring of warning shows nearby foes through walls
     for (const m of mons) {
-      if (!m.alive || !(vis(m.x, m.y) || sensed)) continue;
-      const dormant = m.def.mimic && !m.revealed;
+      const near = warn && Math.max(Math.abs(m.x - me!.x), Math.abs(m.y - me!.y)) <= 5;
+      if (!m.alive || !(vis(m.x, m.y) || sensed || near)) continue;
+      const dormant = m.def.mimic && !m.revealed && !near; // warning reveals a mimic for what it is
       cells.push([m.x, m.y, dormant ? m.disguiseCh : m.ch, dormant ? m.disguiseFg : m.fg]);
     }
     if (this.pet && this.pet.alive && this.pet.floorKey === onFloor && vis(this.pet.x, this.pet.y)) cells.push([this.pet.x, this.pet.y, this.pet.ch, this.pet.fg]);

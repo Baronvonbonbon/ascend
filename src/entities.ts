@@ -65,6 +65,15 @@ export class Player extends Entity {
   engulfedBy: Monster | null = null; // swallowed by a trapper — must struggle/cut free before moving
   stealth = false;     // ring of privacy — monsters can't track you
   regenFast = false;   // ring of regeneration
+  freeAction = false;  // ring of free action — immune to paralysis
+  sustainAbility = false; // ring of sustain ability — attributes can't be drained
+  slowDigest = false;  // ring of slow digestion — hunger ticks half as fast
+  digestPhase = 0;     // toggles each turn so slow digestion skips deterministically (co-op safe)
+  ringAcc = 0;         // ring of increase accuracy — to-hit bonus (cursed: penalty)
+  ringDmg = 0;         // ring of increase damage — melee damage bonus (cursed: penalty)
+  ringPoisonRes = false; // ring of poison resistance — immune to poison while worn
+  warning = false;     // ring of warning — sense nearby foes through walls
+  autoSearch = false;  // ring of searching — passively reveals adjacent hidden traps & doors
   poison = 0;          // turns of damage-over-time remaining
   confused = 0;        // turns of staggering movement remaining
   stoning = 0;         // turns until you freeze solid (petrification) — cure fast
@@ -133,6 +142,14 @@ export class Player extends Entity {
       case "ring_regen": this.regenFast = on && !cursed; break; // cursed: no regen
       case "ring_priv": this.stealth = on && !cursed; break;    // cursed: cloak fails
       case "art_cipher": this.stealth = on && !cursed; break;   // the Null Cipher — perfect privacy
+      case "ring_free": this.freeAction = on && !cursed; break;
+      case "ring_sustain": this.sustainAbility = on && !cursed; break;
+      case "ring_digest": this.slowDigest = on && !cursed; break;
+      case "ring_acc": this.ringAcc = on ? (cursed ? -2 : 2) : 0; break;     // cursed accuracy fights you
+      case "ring_dmg": this.ringDmg = on ? (cursed ? -2 : 2) : 0; break;     // cursed damage saps your blows
+      case "ring_poison": this.ringPoisonRes = on && !cursed; break;
+      case "ring_warn": this.warning = on && !cursed; break;
+      case "ring_search": this.autoSearch = on && !cursed; break;
     }
   }
   private pending: Verb | null = null;
@@ -259,6 +276,7 @@ export class Player extends Entity {
     this.game.tickLycanthropy(this); // infected? a chance to involuntarily shift into the were-beast
     this.game.checkVault();          // teleported into the Treasury? summon the Council Guard escort
     this.game.checkShopBill(this);   // left the shop carrying unpaid wares? settle the bill (or be named a thief)
+    if (this.autoSearch) this.game.autoSearchAround(this); // ring of searching — reveal adjacent hidden things
     if (this.senseTurns > 0) this.senseTurns--;
     if (this.hasteTurns > 0 && --this.hasteTurns === 0) this.game.log.add(`${this.name === "you" ? "You slow" : this.name + " slows"} back to normal.`, "dim");
     // Natural regeneration (faster with a ring of regeneration; not while starving/poisoned).
@@ -274,6 +292,7 @@ export class Player extends Entity {
   }
 
   private tickHunger(): void {
+    if (this.slowDigest) { this.digestPhase ^= 1; if (this.digestPhase) return; } // cold storage: skip every other tick
     this.nutrition -= 1;
     if (this.nutrition === 150) this.game.log.add("You are getting hungry.", "bad");
     else if (this.nutrition === 50) this.game.log.add("You are weak with hunger.", "bad");
@@ -976,7 +995,7 @@ export class Monster extends Entity {
     // Seduce: a charmer transfixes you (a lost turn) and slips away with whatever it can lift.
     if (!this.cancelled && this.def.seduces && dist === 1 && ROT.RNG.getUniform() < 0.6) {
       const who = this.name.charAt(0).toUpperCase() + this.name.slice(1);
-      if (p.paralyzed === 0) { p.paralyzed = 1; this.game.log.add(`${who} catches your eye — you stand transfixed!`, "bad", p); }
+      if (p.paralyzed === 0 && !p.freeAction) { p.paralyzed = 1; this.game.log.add(`${who} catches your eye — you stand transfixed!`, "bad", p); }
       const loot = this.game.stealItem(p);
       if (loot) { this.stolen = loot; this.game.log.add(`${who} slips ${this.game.ident.name(loot.type)} away as you swoon, and is gone.`, "bad", p); this.blinkAway(p); }
       return;

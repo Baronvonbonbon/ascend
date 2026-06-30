@@ -95,6 +95,14 @@ export const ITEMS: ItemType[] = [
   { id: "ring_res",   kind: "ring", name: "a ring of resilience",    fname: "a ring of protection",   ch: "=", fg: "#c0a0e0", weight: 2 },
   { id: "ring_regen", kind: "ring", name: "a ring of regeneration",  fname: "a ring of regeneration", ch: "=", fg: "#a0e0a0", weight: 2 },
   { id: "ring_priv",  kind: "ring", name: "a ring of privacy",       fname: "a ring of invisibility", ch: "=", fg: "#a0c0e0", weight: 2 },
+  { id: "ring_free",  kind: "ring", name: "a ring of liveness",       fname: "a ring of free action",  ch: "=", fg: "#e0e080", weight: 1 }, // immune to paralysis
+  { id: "ring_sustain", kind: "ring", name: "a ring of stable stake", fname: "a ring of sustain ability", ch: "=", fg: "#90c0a0", weight: 1 }, // attributes can't be drained
+  { id: "ring_digest", kind: "ring", name: "a ring of cold storage",  fname: "a ring of slow digestion", ch: "=", fg: "#c0d0e0", weight: 1 }, // hunger ticks half as fast
+  { id: "ring_acc",   kind: "ring", name: "a ring of low latency",    fname: "a ring of increase accuracy", ch: "=", fg: "#e0c060", weight: 2 }, // +2 to-hit (cursed −2)
+  { id: "ring_dmg",   kind: "ring", name: "a ring of high throughput", fname: "a ring of increase damage", ch: "=", fg: "#e08060", weight: 2 }, // +2 damage (cursed −2)
+  { id: "ring_poison", kind: "ring", name: "a ring of antivirus",     fname: "a ring of poison resistance", ch: "=", fg: "#90e070", weight: 2 }, // immune to poison
+  { id: "ring_warn",  kind: "ring", name: "a ring of alerts",         fname: "a ring of warning",      ch: "=", fg: "#e07070", weight: 2 }, // sense nearby foes through walls
+  { id: "ring_search", kind: "ring", name: "a ring of indexing",      fname: "a ring of searching",    ch: "=", fg: "#c0a0e0", weight: 2 }, // auto-finds hidden traps & doors
   // ── wands ── / (directional, charged; zap with z)
   { id: "wand_bolt",   kind: "wand", name: "a wand of finality",     fname: "a wand of striking",      ch: "/", fg: "#90d0e0", weight: 2 },
   { id: "wand_banish", kind: "wand", name: "a wand of banishment",   fname: "a wand of banishment",    ch: "/", fg: "#d090d0", weight: 2 },
