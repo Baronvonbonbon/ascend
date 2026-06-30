@@ -24,9 +24,11 @@ status, and plan the missing parts in the Polkadot/web3 idiom.
 > the Consensus Vault/Sokoban** (Phase 16), a **fortress + concentric generators +
 > per-Plane layouts** (Phase 17), and a **d1–20 balance pass** (Phase 18). Co-op is
 > now **peer-authoritative deterministic lockstep** with independent floors, per-player
-> logs, signal chat, and an action queue (see §4). The remaining ❌/🟡 below are the
-> genuinely-unbuilt parts (Vlad's Tower, vault+guard economy, light/darkness model,
-> richer spell/ring/wand/monster breadth, the oracle level, sinks).
+> logs, signal chat, and an action queue (see §4). Since then the **full special-attack
+> matrix**, the **light/darkness model**, the **Treasury vault + Council Guard**, **gems/tokens**,
+> **the Validator's Tower**, and much more have landed. The remaining ❌/🟡 below are the
+> genuinely-unbuilt parts (richer spell/ring/wand breadth, the oracle level, the shop bill-ledger,
+> fuller monster item-use, more special rooms).
 
 ---
 
@@ -44,7 +46,7 @@ Every adaptation routes through this table so the theming stays coherent.
 | Oracle (level) | **the Oracle** parachain — pay PAS for a major/minor consultation | 🟡 (oracle is a *monster* + `#chat` prophecy; no oracle level) |
 | The Quest (per-role) | role **Quest** — homeland, portal, nemesis, your artifact | ✅ (Phase 13c — per-archetype) |
 | Fort Ludios | **Fort Treasury** (fortress + concentric generators) | 🟡 (Phase 17 fortress layout; no vault economy/guards) |
-| Vlad's Tower | **the Validator's Tower** (Vlad → a slashing lord) | ❌ |
+| Vlad's Tower | **the Validator's Tower** (Vlad → the Slashing Lord) | ✅ (Phase 16e — a 3-floor fortress branch + boss + prize) |
 | Wizard of Yendor | **THE CENSOR** (recurring antagonist, resurrects, steals the JAM) | ✅ (Phase 12d — resurrection + hunt + JAM steal) |
 | Gehennom | **the Dark Forest** (centralized hells; a perfect maze, demon lords) | ✅ (Phase 12a/12e) |
 | Elemental Planes | **the Relay Planes** (Consensus / Finality / Light Clients) | ✅ (Phase 12b; per-Plane layouts Phase 17) |
@@ -94,7 +96,7 @@ Every adaptation routes through this table so the theming stays coherent.
 - **`insight.c`** (enlightenment/conduct dump) → **❌**. **Plan:** an "audit report" (`#audit`) listing your attributes, intrinsics, vows, and on-chain stats.
 
 ### B. Dungeon structure
-- **`dungeon.c`, `mklev.c`, `mkroom.c`, `mkmap.c`, `mkmaze.c`, `extralev.c`, `sp_lev.c`/`nhlua.c`** — multi-branch dungeon graph, room/corridor gen, mazes, themed rooms, Lua-scripted **special levels**. → **🟡 (Phases 9/12/14/16/17).** Shipped: a **real branch graph** with the **Mines** (cave branch, Phase 16a) + the **Consensus Vault** (Sokoban prefab, Phase 16b), the **Quest** homeland (Phase 13c), the **Gehennom maze** (EllerMaze, Phase 12e), the **Planes** (per-Plane layouts, Phase 17), the **Mempool** big room (Phase 9d), a **fortress** + concentric generators (Phase 17), and layout kinds cave/labyrinth/grid (Phase 14a). Still ❌: Vlad's Tower, morgue/barracks/swamp special rooms, full hand-built special-level scripting.
+- **`dungeon.c`, `mklev.c`, `mkroom.c`, `mkmap.c`, `mkmaze.c`, `extralev.c`, `sp_lev.c`/`nhlua.c`** — multi-branch dungeon graph, room/corridor gen, mazes, themed rooms, Lua-scripted **special levels**. → **🟡 (Phases 9/12/14/16/17).** Shipped: a **real branch graph** with the **Mines** (cave branch, Phase 16a) + the **Consensus Vault** (Sokoban prefab, Phase 16b), the **Quest** homeland (Phase 13c), the **Gehennom maze** (EllerMaze, Phase 12e), the **Planes** (per-Plane layouts, Phase 17), the **Mempool** big room (Phase 9d), a **fortress** + concentric generators (Phase 17), layout kinds cave/labyrinth/grid (Phase 14a), and **the Validator's Tower** (Vlad's Tower — a 3-floor **fortress** branch you climb off depth 7, the **Slashing Lord** warding a +2 blessed prize at the Crown, Phase 16e). Still ❌: morgue/barracks/swamp special rooms, full hand-built special-level scripting.
 - **`mkroom.c` special rooms** — shop, temple, throne room, zoo, morgue, beehive, barracks, swamp, leprechaun hall, anthole, cockatrice nest. → **🟡.** Shipped: **shops** (the Marketmaker), a **temple** (an altar tended by a peaceful Gavin **priest**), a **zoo** (a packed menagerie guarding loot), a **treasury vault** (a dense loot room with a locked chest at its heart), and a **morgue** (rotting corpses of dead chains stalked by wraiths) — placed via `placeSpecialRoom`. Still ❌: barracks, swamp/beehive/anthole, leprechaun hall.
 - **`fountain.c`** (fountains & sinks; quaff/dip/wish-from-water-demon/Excalibur) → **✅ faucets (Phase 9a); sinks still ❌.** **faucets** (`{`) — `#quaff` for a random effect (heal, summon a "fountain bot", curse, gem, or — rarely — a *testnet wish*), `#dip` a weapon to draw the lawful artifact. Sinks = "burn sinks" (ring identification by dropping).
 - **`dbridge.c`** drawbridges → **❌** → "consensus bridges" raised/lowered by levers; crush on close.

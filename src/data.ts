@@ -156,6 +156,9 @@ export interface BranchDef extends ChainDef {
   entryFlavor?: string; // override the entry message (e.g. the Vault "climbs up")
   fentryFlavor?: string; // fantasy entry message
   sokoban?: boolean;  // hand-built boulder-puzzle floors (the Consensus Vault) instead of procedural
+  upward?: boolean;   // a tower you climb (the Validator's Tower) — flips "deeper/up" wording
+  bossDef?: MonsterDef; // a unique boss wards the End floor's prize (else a plain guardian)
+  prizeEnchant?: number; // enchant the guaranteed End prize (a tower climax earns more than +0)
 }
 export const BRANCHES: BranchDef[] = [
   {
@@ -168,6 +171,14 @@ export const BRANCHES: BranchDef[] = [
     entryFlavor: "You squeeze up into the Consensus Vault — a sealed puzzle of blocks and chasms. Shove the blocks into the gaps; claim the prize at the top.",
     fentryFlavor: "You squeeze up into Sokoban — a sealed puzzle of boulders and chasms. Shove the boulders into the pits; claim the prize at the top.",
   }, // a Sokoban-style boulder puzzle; clear it for a guaranteed multisig vault (bag of holding)
+  {
+    id: "tower", name: "the Validator's Tower", fname: "Vlad's Tower", branch: true, upward: true,
+    difficulty: 1.4, loot: 1.4, color: "#c04040", layout: "fortress", entryDepth: 7, floors: 3,
+    prizeId: "plate", prizeEnchant: 2, end: "the Tower's Crown", fend: "the Tower's Summit",
+    entryFlavor: "You climb the spiral stair into the Validator's Tower — a slashing lord holds its summit.",
+    fentryFlavor: "You climb the winding stair into Vlad's Tower — a dread lord holds its summit.",
+    bossDef: { name: "the Slashing Lord", fname: "Vlad the Impaler", ch: "L", fg: "#e02020", hp: 72, dmg: [7, 13], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, muse: true },
+  }, // a fortress tower you climb; its Lord wards a +2 blessed plate at the Crown
 ];
 export function branchById(id: string): BranchDef | undefined { return BRANCHES.find((b) => b.id === id); }
 /** A branch's end-floor name + entry flavor, flavored. */

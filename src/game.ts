@@ -876,7 +876,8 @@ export class Game {
       const c = centers.length ? ROT.RNG.getItem(centers)! : this.level.randomFloor();
       this.level.tiles[c.y][c.x] = "branchDown";
       this.level.branchEntries.push({ x: c.x, y: c.y, branchId: b.id });
-      this.log.add(`A craggy side-stair (a copper >) plunges off this floor toward ${b.name} — treasure caverns, with ${itemById(b.prizeId)!.name} at their End.`, "good");
+      const verb = b.upward ? "rises off this floor toward" : "plunges off this floor toward";
+      this.log.add(`A side-stair (a copper >) ${verb} ${b.name} — ${this.ident.name(itemById(b.prizeId)!)} waits at ${branchEnd(b)}.`, "good");
     }
   }
 
@@ -902,8 +903,8 @@ export class Game {
     this.enterBranchFloor(def, this.branchFloor + 1, "down");
     const atEnd = this.branchFloor >= def.floors;
     this.log.add(
-      atEnd ? `You reach ${branchEnd(def)}. ${this.ident.name(itemById(def.prizeId)!)} gleams in the dark — and something guards it.`
-            : `You press deeper into ${chainName(def)} — floor ${this.branchFloor} of ${def.floors}.`,
+      atEnd ? `You reach ${branchEnd(def)}. ${this.ident.name(itemById(def.prizeId)!)} gleams ahead — and something guards it.`
+            : `You ${def.upward ? "climb higher in" : "press deeper into"} ${chainName(def)} — floor ${this.branchFloor} of ${def.floors}.`,
       "bad",
     );
     this.draw();
@@ -914,7 +915,7 @@ export class Game {
     const def = this.branch!;
     if (this.branchFloor > 1) {
       this.enterBranchFloor(def, this.branchFloor - 1, "up");
-      this.log.add(`You climb back up ${chainName(def)} — floor ${this.branchFloor} of ${def.floors}.`, "sys");
+      this.log.add(`You ${def.upward ? "descend" : "climb back up"} ${chainName(def)} — floor ${this.branchFloor} of ${def.floors}.`, "sys");
       this.draw();
       return;
     }
@@ -974,8 +975,8 @@ export class Game {
     const s = this.level.stairs;
     this.level.tiles[s.y][s.x] = "floor"; // the End — nothing deeper
     const prize = itemById(def.prizeId);
-    if (prize && !this.level.itemAt(s.x, s.y)) this.level.items.push({ x: s.x, y: s.y, type: prize, buc: "blessed", bucKnown: true });
-    const guard = MONSTERS.find((m) => m.ch === "O") ?? MONSTERS[MONSTERS.length - 1]; // a whale wards the hoard
+    if (prize && !this.level.itemAt(s.x, s.y)) this.level.items.push({ x: s.x, y: s.y, type: prize, enchant: def.prizeEnchant, buc: "blessed", bucKnown: true });
+    const guard = def.bossDef ?? MONSTERS.find((m) => m.ch === "O") ?? MONSTERS[MONSTERS.length - 1]; // the branch's boss, else a whale
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]] as [number, number][]) {
       const x = s.x + dx, y = s.y + dy;
       if (this.level.isPassable(x, y) && !this.monsterAt(x, y) && !(x === this.acting.x && y === this.acting.y)) {
@@ -1766,7 +1767,7 @@ export class Game {
       "%": "food — or a corpse you can eat (e)", "*": "the JAM, a luckstone, or a gem",
       "$": "a pile of gold — step on it to scoop it up",
     };
-    const mons = [...MONSTERS, SHOPKEEPER, PRIEST, COUNCIL_GUARD, HONEYPOT, CENSOR, MOLOCH, ...Object.values(MINIBOSSES)].find((m) => m.ch === key);
+    const mons = [...MONSTERS, SHOPKEEPER, PRIEST, COUNCIL_GUARD, HONEYPOT, CENSOR, MOLOCH, ...Object.values(MINIBOSSES), ...BRANCHES.flatMap((b) => (b.bossDef ? [b.bossDef] : []))].find((m) => m.ch === key);
     const parts: string[] = [];
     if (mons) parts.push(mons.name);
     if (feat[key]) parts.push(feat[key]);
@@ -3516,6 +3517,7 @@ export class Game {
       case "u": this.log.add("[DEBUG] force ascend.", "sys"); this.ascend(); break;
       case "m": { const b = branchById("mines"); if (b) this.enterBranch(b); break; }
       case "v": { const b = branchById("vault"); if (b) this.enterBranch(b); else this.log.add("[DEBUG] no Vault branch defined.", "dim"); break; }
+      case "t": { const b = branchById("tower"); if (b) this.enterBranch(b); else this.log.add("[DEBUG] no Tower branch defined.", "dim"); break; }
       case "x": { const c = ROT.RNG.getItem(CHAINS)!; if (!this.level.portalAt(p.x, p.y)) this.level.portals.push({ x: p.x, y: p.y, chain: c }); this.level.tiles[p.y][p.x] = "portal"; this.recomputeFOV(); this.draw(); this.log.add(`[DEBUG] XCM portal to ${c.name} under you — press > to enter.`, "sys"); break; }
       case "Q": { if (!this.level.portalAt(p.x, p.y)) this.level.portals.push({ x: p.x, y: p.y, chain: CHAINS[0], quest: true }); this.level.tiles[p.y][p.x] = "portal"; this.recomputeFOV(); this.draw(); this.log.add("[DEBUG] quest portal under you — press > to enter.", "sys"); break; }
       case "g": this.gehennomOpen = true; this.debugWarp(MAX_DEPTH + 1); this.log.add(`[DEBUG] Gehennom opened, warped to depth ${MAX_DEPTH + 1}.`, "sys"); break;
