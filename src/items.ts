@@ -53,7 +53,7 @@ export interface ItemType {
   weight: number;          // spawn weight
 }
 
-export type EffectId = "heal" | "harm" | "strength" | "teleport" | "map" | "identify" | "enchant" | "cure" | "uncurse" | "blind" | "polyself";
+export type EffectId = "heal" | "harm" | "strength" | "teleport" | "map" | "identify" | "enchant" | "cure" | "uncurse" | "blind" | "polyself" | "detect_obj" | "detect_trap";
 
 export const ITEMS: ItemType[] = [
   // ── weapons ── )
@@ -85,6 +85,8 @@ export const ITEMS: ItemType[] = [
   { id: "cure",   kind: "scroll", name: "a scroll of cleansing",    fname: "a scroll of cleansing",     ch: "?", fg: "#c0e0e0", effect: "cure",     weight: 3 },
   { id: "uncurse",kind: "scroll", name: "a scroll of formal verification", fname: "a scroll of remove curse", ch: "?", fg: "#d0f0c0", effect: "uncurse", weight: 3 },
   { id: "fork",   kind: "scroll", name: "a scroll of hard fork",      fname: "a scroll of polymorph",   ch: "?", fg: "#e090e0", effect: "polyself", weight: 2 },
+  { id: "dobj",   kind: "scroll", name: "a scroll of ledger audit",   fname: "a scroll of treasure detection", ch: "?", fg: "#e8d070", effect: "detect_obj",  weight: 3 },
+  { id: "dtrap",  kind: "scroll", name: "a scroll of exploit scan",   fname: "a scroll of trap detection",     ch: "?", fg: "#d09060", effect: "detect_trap", weight: 3 },
   // ── amulets ── " (passive while worn; put on with W, take off with T)
   { id: "amulet_life",    kind: "amulet", name: "a recovery seed",   fname: "an amulet of life saving", ch: "\"", fg: "#f0d060", weight: 1 }, // crumbles to save you from one lethal blow
   { id: "amulet_reflect", kind: "amulet", name: "a consensus mirror", fname: "an amulet of reflection",  ch: "\"", fg: "#b0e0e0", weight: 1 }, // rebounds rays/breath back at the source
@@ -129,7 +131,7 @@ export const ITEMS: ItemType[] = [
 ];
 
 /** Scrolls a contract deployer (magic marker) can inscribe, in menu order. */
-export const WRITABLE_SCROLLS = ["tele", "map", "ident", "ench", "cure", "uncurse"];
+export const WRITABLE_SCROLLS = ["tele", "map", "ident", "ench", "cure", "uncurse", "dobj", "dtrap"];
 
 // Unidentified appearances — fantasy + polkadot, same length so an assigned index maps across both.
 const POTION_LOOKS_F = ["a ruby potion", "a murky potion", "a glowing vial", "a smoking flask", "a bubbling phial"];

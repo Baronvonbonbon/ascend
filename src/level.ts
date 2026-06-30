@@ -5,9 +5,9 @@ import type { ItemType } from "./items";
 export type LevelKind = "normal" | "bigroom" | "maze" | "cave" | "labyrinth" | "grid" | "swamp" | "sokoban" | "fortress" | "concentric";
 export interface Portal { x: number; y: number; chain: ChainDef; quest?: boolean; }
 
-export interface FloorItem { x: number; y: number; type: ItemType; price?: number; nft?: boolean; coins?: number; enchant?: number; relic?: boolean; mintOnBuy?: boolean; buc?: import("./items").Buc; bucKnown?: boolean; corpse?: { def: import("./data").MonsterDef; born: number }; chest?: { locked: boolean }; } // price = shop ware (gold, or PAS/wallet if nft); coins = a gold pile; relic/enchant/mintOnBuy = NFT gear; buc = sanctity; corpse = edible remains; chest = container
+export interface FloorItem { x: number; y: number; type: ItemType; price?: number; nft?: boolean; coins?: number; enchant?: number; relic?: boolean; mintOnBuy?: boolean; buc?: import("./items").Buc; bucKnown?: boolean; corpse?: { def: import("./data").MonsterDef; born: number }; chest?: { locked: boolean }; detected?: boolean; } // price = shop ware (gold, or PAS/wallet if nft); coins = a gold pile; relic/enchant/mintOnBuy = NFT gear; buc = sanctity; corpse = edible remains; chest = container; detected = sensed by treasure detection (renders out of FOV)
 export type TrapKind = "gas" | "reorg" | "slash" | "fork";
-export interface Trap { x: number; y: number; kind: TrapKind; revealed: boolean; }
+export interface Trap { x: number; y: number; kind: TrapKind; revealed: boolean; detected?: boolean; } // detected = sensed by trap detection (renders out of FOV)
 /** A sigil scratched in the dust (the Gray Paper) that wards monsters from the tile; it scuffs away. */
 export interface Engraving { x: number; y: number; life: number; }
 

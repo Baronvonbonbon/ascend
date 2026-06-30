@@ -2958,6 +2958,20 @@ export class Game {
         this.level.revealAll();
         this.log.add("A light client reveals the whole level.", "sys"); break;
       }
+      case "detect_obj": {
+        const n = this.level.items.length; // every floor item, gold piles included
+        for (const i of this.level.items) i.detected = true;
+        this.recomputeFOV();
+        this.log.add(n ? `Auditing the ledger — you sense ${n} object${n > 1 ? "s" : ""} scattered across the level.` : "You audit the ledger, but sense no objects here.", n ? "good" : "dim");
+        break;
+      }
+      case "detect_trap": {
+        let n = 0;
+        for (const tr of this.level.traps) { tr.revealed = true; tr.detected = true; n++; }
+        this.recomputeFOV();
+        this.log.add(n ? `An exploit scan — you sense ${n} trap${n > 1 ? "s" : ""} laid across the level.` : "You scan for exploits, but the level is clean of traps.", n ? "good" : "dim");
+        break;
+      }
       case "identify": {
         // Identify reveals an item's true name *and* its sanctity (BUC).
         const target = p.inventory.items.find((it) => !this.ident.isKnown(it.type)) ?? p.inventory.items.find((it) => !it.bucKnown);
@@ -3505,10 +3519,16 @@ export class Game {
       }
     }
     for (const g of lvl.graves) if (vis(g.x, g.y)) cells.push([g.x, g.y, "‡", "#b0a890"]);
-    for (const t of lvl.traps) if (t.revealed && vis(t.x, t.y)) cells.push([t.x, t.y, "^", "#d06060"]);
+    for (const t of lvl.traps) {
+      if (t.revealed && vis(t.x, t.y)) cells.push([t.x, t.y, "^", "#d06060"]);
+      else if (t.detected) cells.push([t.x, t.y, "^", "#7a4040"]); // sensed by trap detection — dim, out of sight
+    }
     for (const pr of lvl.portals) if (vis(pr.x, pr.y)) cells.push([pr.x, pr.y, "Ω", pr.chain.color]);
     for (const e of lvl.engravings) if (vis(e.x, e.y)) cells.push([e.x, e.y, "§", "#b0a060"]);
-    for (const fi of lvl.items) if (vis(fi.x, fi.y)) cells.push([fi.x, fi.y, fi.type.ch, fi.type.fg]);
+    for (const fi of lvl.items) {
+      if (vis(fi.x, fi.y)) cells.push([fi.x, fi.y, fi.type.ch, fi.type.fg]);
+      else if (fi.detected) cells.push([fi.x, fi.y, fi.type.ch, "#6c6a60"]); // sensed by treasure detection — dim
+    }
     for (const b of lvl.boulders) if (vis(b.x, b.y)) cells.push([b.x, b.y, "0", "#9a8a6a"]);
     // Sense minds: only THIS viewer's blindness-telepathy or sense-minds spell reveals out-of-sight foes.
     const sensed = !!me && ((me.blind > 0 && me.intrinsics.has("telepathy")) || me.senseTurns > 0);
