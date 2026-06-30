@@ -5,14 +5,16 @@
 // baseline + live danger/crowd/JAM/boss). When you've been calm for a while it settles
 // back to the bare ambient bed; the groove snaps back when a threat returns.
 //
-// When fully settled (a long calm), a SLOW SPARSE BELL MELODY drawn from the zone's chord
-// drifts over the bed, with limited percussion that swells in and out over ~58s.
-// Distortion (murk + a soured, detuned bed) tracks the VISIBLE THREAT around you
-// (count + proximity, peaking at bosses/swarms) — never depth. A danger-driven TENSION
-// layer picks one of several DANGER THEMES on the rising edge of danger (a boss/swarm
-// forces a heavy theme; the hells may too), then escalates it by threat — trills tighten,
-// bass enters, kicks fill, and heavy themes/high threat add sub-bass presence. Tracks
-// crossfade between areas; stingers (death/ascension) duck everything.
+// When fully settled (a long calm), a relaxed CHILL IDLE GROOVE takes over — a half-time
+// syncopated bass + light percussion with very sparse zone-keyed chimes — and the bed
+// BREATHES: the drone drops low and fully out for ~30s on a slow ~80s cycle (pads keep
+// floating), opening space. Distortion (murk + a soured, detuned bed) tracks the VISIBLE
+// THREAT around you (count + proximity, peaking at bosses/swarms) — never depth. A
+// danger-driven TENSION layer picks one of several DANGER THEMES on the rising edge of
+// danger (a boss/swarm forces a heavy theme; the hells may too), then escalates it by
+// threat — trills tighten, bass enters, kicks fill. HEAVY themes play half-time with a
+// deep kick + heavier sub-bass and spacious trills. Tracks crossfade between areas;
+// stingers (death/ascension) duck everything.
 
 type Wave = OscillatorType;
 
@@ -155,12 +157,13 @@ export class MusicEngine {
   private nextChime = 0;
   private nextDrip = 0;
   private ebbPhase = Math.random() * Math.PI * 2;
-  // ── calm ambient melody + sparse percussion (settled state) ──
-  private nextAmbMel = 0;
-  private ambMelIdx = 0;
-  private nextAmbPerc = 0;
-  private ambPercIdx = 0;
-  private ambPhase = Math.random() * Math.PI * 2; // phase of the ~58s percussion in/out cycle
+  // ── idle chill groove (settled state): relaxed syncopated bass + light perc + sparse chimes ──
+  private nextChillStep = 0;
+  private chillStepIdx = 0;
+  private nextChillBass = 0;
+  private chillBassIdx = 0;
+  private nextChillChime = 0;
+  private droneVoices: { gain: GainNode; base: number }[] = []; // the bed's drones — ducked/breathed during calm
   // ── danger theme (picked on the rising edge of danger, escalated by threat) ──
   private dangerActive = false;
   private dangerTheme: DangerTheme | null = null;
@@ -351,9 +354,10 @@ export class MusicEngine {
     bus.gain.value = 0;
     bus.gain.linearRampToValueAtTime(def.level, now + 2.5);
     const voices: Voice[] = [];
-    // drone (root + a quiet fifth)
-    voices.push(this.makeDrone(def, def.root, 0.10, bus));
-    voices.push(this.makeDrone(def, semi(def.root, 7), 0.05, bus));
+    // drone (root + a quiet fifth) — tracked so the bed can be ducked + "breathed" during calm
+    this.droneVoices = [];
+    const d1 = this.makeDrone(def, def.root, 0.10, bus); voices.push(d1); this.droneVoices.push({ gain: d1.gain, base: 0.10 });
+    const d2 = this.makeDrone(def, semi(def.root, 7), 0.05, bus); voices.push(d2); this.droneVoices.push({ gain: d2.gain, base: 0.05 });
     // pad chord with slow swells
     for (const c of def.chord) voices.push(this.makePad(def, semi(def.root, c) * 2, bus));
     this.active = { def, bus, voices };
@@ -365,7 +369,7 @@ export class MusicEngine {
     this.nextTrill = this.nextTensionStep = this.nextTensionBass = now;
     this.trillIdx = 0; this.tensionStepIdx = this.tensionBassIdx = 0;
     this.nextJam = this.nextChime = this.nextDrip = now + 1;
-    this.nextAmbMel = this.nextAmbPerc = now + 2; this.ambMelIdx = 0;
+    this.nextChillStep = this.nextChillBass = this.nextChillChime = now + 2; this.chillStepIdx = this.chillBassIdx = 0;
     this.dangerActive = false; this.dangerTheme = null;
   }
 
@@ -451,12 +455,18 @@ export class MusicEngine {
     if (t && this.active) {
       for (const v of this.active.voices) v.osc.detune.setTargetAtTime(t.detune + warp * 30, now, 1.2); // beating sours the bed near foes
 
-      // ── calm → ambience: after ~25s with nothing threatening, the groove ebbs out to the bare bed ──
+      // ── the bed breathes: in calm the drone drops to a low level, then fully out for ~30s on a slow
+      //    ~80s cycle, swelling back — opening space (the pads keep floating, so it never goes silent). ──
+      const calmish = this.danger < 0.2 && !c.bossNear && !c.jamNear;
+      const droneMul = calmish ? ((now / 80) % 1 > 0.62 ? 0 : 0.5) : 1; // ~30s "breath" (drone out) per cycle
+      for (const d of this.droneVoices) d.gain.gain.setTargetAtTime(d.base * droneMul, now, 6);
+
+      // ── calm → ambience: after ~25s with nothing threatening, the groove ebbs out to the chill idle groove ──
       const calm = this.danger < 0.06 && c.crowd < 0.05 && !c.bossNear && !c.jamNear && warp < 0.06;
       if (!calm) this.calmSince = now;
-      const settled = now - this.calmSince > 25; // long calm → settle into ambience
+      const settled = now - this.calmSince > 25; // long calm → settle into the idle groove
 
-      // ── groove intensity (per-zone baseline + situation), silenced once we've settled into calm ──
+      // ── groove intensity (per-zone baseline + situation), handed to the chill groove once settled ──
       const baseG = t.groove ?? 0;
       let intensity = 0;
       if (baseG > 0 && !settled) {
@@ -464,15 +474,22 @@ export class MusicEngine {
         intensity = Math.min(1, baseG * (0.55 + 0.45 * this.ebb(now)) + 0.45 * situ);
       }
       const grooveOn = intensity > 0.12;
-
       const stinging = now < this.stingerUntil;
-      // a slow fade when settling into ambience, snappy otherwise
-      this.grooveBus.gain.setTargetAtTime(grooveOn && !stinging ? intensity * 0.5 : 0, now, settled ? 2.6 : 1.0);
-      if (grooveOn && !stinging) this.scheduleGroove(t, now, horizon, intensity);
-      else { this.nextStep = this.nextBass = now; this.stepIdx = this.bassIdx = 0; }
 
-      // low pulse / heartbeat — only when the groove is resting
-      if (t.pulseBpm > 0 && !grooveOn) {
+      if (settled && !stinging) {
+        // ── idle: a relaxed, syncopated chill groove (bass + light perc + sparse chimes) over the breathing bed ──
+        this.grooveBus.gain.setTargetAtTime(0.34, now, 2.6);
+        this.scheduleChillGroove(t, now, horizon);
+        this.nextStep = this.nextBass = now; this.stepIdx = this.bassIdx = 0; // keep the combat groove re-synced for when threat returns
+      } else {
+        this.grooveBus.gain.setTargetAtTime(grooveOn && !stinging ? intensity * 0.5 : 0, now, 1.0);
+        if (grooveOn && !stinging) this.scheduleGroove(t, now, horizon, intensity);
+        else { this.nextStep = this.nextBass = now; this.stepIdx = this.bassIdx = 0; }
+        this.nextChillStep = this.nextChillBass = this.nextChillChime = now; this.chillStepIdx = this.chillBassIdx = 0;
+      }
+
+      // low pulse / heartbeat — only when neither groove is playing (not during the chill idle groove)
+      if (t.pulseBpm > 0 && !grooveOn && !(settled && !stinging)) {
         const beat = 60 / t.pulseBpm;
         while (this.nextPulse < horizon) { this.pulse(t.root * 0.5, this.nextPulse, this.active.bus, 0.18); this.nextPulse += beat; }
       } else this.nextPulse = now;
@@ -481,31 +498,6 @@ export class MusicEngine {
       if (c.jamNear) { while (this.nextJam < horizon) { this.pulse(t.root * 0.5, this.nextJam, this.active.bus, 0.16); this.nextJam += 2.4; } } else this.nextJam = now;
       if (c.altar) { while (this.nextChime < horizon) { this.note(semi(t.root, 12) * 4, this.nextChime, 2.6, this.active.bus, "sine", 0.05, 4000); this.nextChime += 3.5 + Math.random() * 2.5; } } else this.nextChime = now;
       if (c.faucet) { while (this.nextDrip < horizon) { this.drip(this.nextDrip); this.nextDrip += 0.7 + Math.random() * 1.8; } } else this.nextDrip = now;
-
-      // ── calm ambience: once settled, a slow sparse bell melody + percussion that drifts in/out (~58s) ──
-      const ambient = settled && !stinging;
-      if (ambient) {
-        // a soft, slow, sparse melodic line drawn from the zone's own chord tones (with rests)
-        const sc = this.tensionScale(t);
-        while (this.nextAmbMel < horizon) {
-          if (Math.random() < 0.72) this.bellNote(semi(t.root, sc[this.ambMelIdx % sc.length]) * 2, this.nextAmbMel, 3.0, this.active.bus, 0.05);
-          this.ambMelIdx++;
-          this.nextAmbMel += 1.7 + Math.random() * 1.9; // 1.7–3.6s — sparse, unhurried
-        }
-        // limited percussion that swells in and out over ~58s — present only on the upper half of the cycle
-        const pc = 0.5 + 0.5 * Math.sin((now / 58) * Math.PI * 2 + this.ambPhase);
-        if (pc > 0.5) {
-          const amp = (pc - 0.5) * 2; // 0..1 within the active half of the cycle
-          while (this.nextAmbPerc < horizon) {
-            const s = this.ambPercIdx & 7; // a slow 8-step phrase
-            // a sparse, lightly-syncopated soft shaker — denser as the swell peaks, never on every step
-            if (s === 0 || s === 3 || s === 6 || (amp > 0.6 && (s === 4 || s === 7))) this.noiseHit(this.nextAmbPerc, 0.05, this.active.bus, (s === 0 ? 0.022 : 0.014) * amp, "highpass", 6500, 0.6);
-            if (s === 0 && Math.random() < 0.5) this.kick(this.nextAmbPerc, this.active.bus, 0.06 * amp); // an occasional soft heartbeat on the downbeat
-            this.ambPercIdx++;
-            this.nextAmbPerc += 0.46 + Math.random() * 0.08; // ~slow 8ths, slightly humanised
-          }
-        } else this.nextAmbPerc = now;
-      } else { this.nextAmbMel = now; this.nextAmbPerc = now; }
     }
 
     // ── the tension layer: trills + fast beats + a driving bass, scaled by danger ──
@@ -536,7 +528,8 @@ export class MusicEngine {
     const scale = th.zoned ? (th.contour ? th.contour(this.tensionScale(t)) : this.tensionScale(t)) : th.scale!;
 
     // ── melodic trills: the theme's line; subdivision tightens with severity, grace shimmer enters mid ──
-    const gap = sixteenth * (sev > 0.66 ? 1 : sev > 0.33 ? 2 : 4); // 16th / 8th / quarter notes
+    // Heavy themes trill more spaciously (half as often) so the bass + deep drums carry the weight.
+    const gap = sixteenth * (sev > 0.66 ? 1 : sev > 0.33 ? 2 : 4) * (th.heavy ? 2 : 1);
     const peak = 0.03 + sev * 0.04;
     while (this.nextTrill < horizon) {
       const deg = scale[this.trillIdx % scale.length];
@@ -549,25 +542,34 @@ export class MusicEngine {
     // ── combat drums: kick density scales with severity × the theme's fill ──
     while (this.nextTensionStep < horizon) {
       const s = this.tensionStepIdx, when = this.nextTensionStep;
-      const fill = sev * (0.6 + th.kickFill * 0.6);
       const kp = (0.16 + sev * 0.22) * (0.75 + th.kickFill * 0.4); // heavier themes hit harder
-      if (s === 0 || s === 8 || (fill > 0.5 && (s === 4 || s === 12)) || (fill > 0.75 && (s === 6 || s === 14))) this.kick(when, this.tensionBus, kp);
-      if ((s === 4 || s === 12) && sev > 0.4) this.noiseHit(when, 0.12, this.tensionBus, 0.16, "bandpass", 1900, 0.8); // snare backbeat
-      if (s % 2 === 0 || sev > 0.6) this.noiseHit(when, 0.03, this.tensionBus, 0.05 + sev * 0.04, "highpass", 7600, 0.7); // hats
+      if (th.heavy) {
+        // half-time + deep: big spaced kicks on 1 and the &-of-3, a deep tom/snare on 3, sparse hats
+        if (s === 0 || s === 11) this.kick(when, this.tensionBus, kp * 1.25, true);
+        if (s === 8 && sev > 0.4) this.noiseHit(when, 0.18, this.tensionBus, 0.22, "bandpass", 1250, 0.8);
+        if ((s === 4 || s === 12) && sev > 0.66) this.noiseHit(when, 0.03, this.tensionBus, 0.04, "highpass", 6800, 0.7);
+      } else {
+        const fill = sev * (0.6 + th.kickFill * 0.6);
+        if (s === 0 || s === 8 || (fill > 0.5 && (s === 4 || s === 12)) || (fill > 0.75 && (s === 6 || s === 14))) this.kick(when, this.tensionBus, kp);
+        if ((s === 4 || s === 12) && sev > 0.4) this.noiseHit(when, 0.12, this.tensionBus, 0.16, "bandpass", 1900, 0.8); // snare backbeat
+        if (s % 2 === 0 || sev > 0.6) this.noiseHit(when, 0.03, this.tensionBus, 0.05 + sev * 0.04, "highpass", 7600, 0.7); // hats
+      }
       this.tensionStepIdx = (s + 1) % 16;
       this.nextTensionStep += sixteenth;
     }
 
-    // ── driving bass (the theme's figure) once danger is real; high severity / heavy themes add sub-bass presence ──
+    // ── driving bass (the theme's figure) once danger is real; heavy themes play half-time + add sub-bass presence ──
     if (sev > 0.3) {
       const fig = th.bassFig;
+      const bassEvery = th.heavy ? 4 : 2;                      // half-time bass for heavy themes
+      const bassLen = sixteenth * (th.heavy ? 3.6 : 1.8);      // longer, weightier notes when heavy
       while (this.nextTensionBass < horizon) {
         let bf = semi(root, fig[this.tensionBassIdx % fig.length]);
         while (bf < 41) bf *= 2; // lift very-low roots into audible bass range
-        this.bassNote(bf, this.nextTensionBass, sixteenth * 1.8, this.tensionBus, 0.16 + sev * 0.12);
-        if ((th.heavy || sev > 0.66) && bf / 2 >= 27) this.bassNote(bf / 2, this.nextTensionBass, sixteenth * 1.8, this.tensionBus, 0.09 + sev * 0.07); // sub-octave presence
+        this.bassNote(bf, this.nextTensionBass, bassLen, this.tensionBus, (th.heavy ? 0.2 : 0.16) + sev * 0.12);
+        if ((th.heavy || sev > 0.66) && bf / 2 >= 26) this.bassNote(bf / 2, this.nextTensionBass, bassLen, this.tensionBus, (th.heavy ? 0.14 : 0.09) + sev * 0.07); // sub-octave presence
         this.tensionBassIdx++;
-        this.nextTensionBass += sixteenth * 2; // 8th notes
+        this.nextTensionBass += sixteenth * bassEvery;
       }
     } else { this.nextTensionBass = now; this.tensionBassIdx = 0; }
   }
@@ -651,17 +653,53 @@ export class MusicEngine {
     } else { this.nextBass = now; this.bassIdx = 0; }
   }
 
-  /** Kick drum — a sine with a fast pitch drop and a punchy decay. */
-  private kick(when: number, bus: GainNode, peak: number): void {
+  /** The idle/exploration texture: a relaxed half-time syncopated bass + light percussion with very
+   *  sparse zone-keyed chimes — replaces the old idle bell melody. Drums/bass run through the punchy
+   *  groove bus; chimes ring through the area's reverb. */
+  private scheduleChillGroove(t: TrackDef, now: number, horizon: number): void {
+    const step = 60 / (t.bpm ?? 110) / 4; // the zone's 16th grid
+    const bus = this.grooveBus;
+    if (this.nextChillStep < now - 1) { this.nextChillStep = now; this.chillStepIdx = 0; }
+    while (this.nextChillStep < horizon) {
+      const s = this.chillStepIdx, when = this.nextChillStep;
+      // half-time, laid-back kit: kick on beat 1 + the syncopated "&-of-3"; soft rim on 3; swung shaker
+      if (s === 0 || s === 11) this.kick(when, bus, 0.3);
+      if (s === 8) this.noiseHit(when, 0.11, bus, 0.11, "bandpass", 1700, 0.7);
+      if (s === 6 || s === 14) this.noiseHit(when, 0.04, bus, 0.05, "highpass", 7000, 0.7);
+      this.chillStepIdx = (s + 1) % 16;
+      this.nextChillStep += step;
+    }
+    // a sparse, syncopated bassline (degree + step-duration, with rests) in the zone's key — sums to one bar
+    const fig: Note[] = [[0, 3], [REST, 1], [7, 2], [REST, 2], [5, 2], [REST, 1], [0, 3], [REST, 2]];
+    if (this.nextChillBass < now - 1) { this.nextChillBass = now; this.chillBassIdx = 0; }
+    while (this.nextChillBass < horizon) {
+      const [deg, steps] = fig[this.chillBassIdx % fig.length];
+      const dur = steps * step;
+      if (deg !== REST) { let bf = semi(t.root, deg); while (bf < 41) bf *= 2; this.bassNote(bf, this.nextChillBass, dur * 0.85, bus, 0.18); }
+      this.nextChillBass += dur;
+      this.chillBassIdx = (this.chillBassIdx + 1) % fig.length;
+    }
+    // very sparse chimes — zone-keyed bells, occasional, through the area reverb
+    const sc = this.tensionScale(t);
+    while (this.nextChillChime < horizon) {
+      if (Math.random() < 0.4 && this.active) this.bellNote(semi(t.root, sc[Math.floor(Math.random() * sc.length)]) * 2, this.nextChillChime, 3.2, this.active.bus, 0.045);
+      this.nextChillChime += 4 + Math.random() * 5; // every 4–9s, 40% → very sparse
+    }
+  }
+
+  /** Kick drum — a sine with a fast pitch drop and a punchy decay. `deep` = a lower, longer, heavier
+   *  thud for the half-time heavy enemy themes. */
+  private kick(when: number, bus: GainNode, peak: number, deep = false): void {
     const ctx = this.ctx!;
     const osc = ctx.createOscillator(); osc.type = "sine";
-    osc.frequency.setValueAtTime(135, when); osc.frequency.exponentialRampToValueAtTime(46, when + 0.09);
+    const f0 = deep ? 100 : 135, f1 = deep ? 30 : 46, drop = deep ? 0.13 : 0.09, dec = deep ? 0.34 : 0.22;
+    osc.frequency.setValueAtTime(f0, when); osc.frequency.exponentialRampToValueAtTime(f1, when + drop);
     const g = ctx.createGain(); g.gain.setValueAtTime(0, when);
     g.gain.linearRampToValueAtTime(peak, when + 0.004);
-    g.gain.exponentialRampToValueAtTime(0.0008, when + 0.22);
-    g.gain.linearRampToValueAtTime(0, when + 0.25);
+    g.gain.exponentialRampToValueAtTime(0.0008, when + dec);
+    g.gain.linearRampToValueAtTime(0, when + dec + 0.03);
     osc.connect(g).connect(bus);
-    osc.start(when); osc.stop(when + 0.26);
+    osc.start(when); osc.stop(when + dec + 0.04);
   }
 
   /** A filtered-noise percussion hit — bandpass = snare/clap, highpass = hi-hat. */
