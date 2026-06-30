@@ -1409,11 +1409,14 @@ export class Game {
       const cells = this.roomCells(c.x, c.y);
       const open = cells.filter((p) => this.level.tileAt(p.x, p.y) === "floor" && !this.monsterAt(p.x, p.y) && !this.level.itemAt(p.x, p.y) && !this.playerAt(p.x, p.y));
       if (cells.length < 6 || open.length < 4) continue;
-      const kind = ROT.RNG.getItem(["temple", "zoo", "vault", "morgue", "oracle"])!;
+      const kind = ROT.RNG.getItem(["temple", "zoo", "vault", "morgue", "oracle", "barracks", "beehive", "lephall"])!;
       if (kind === "temple") this.makeTemple(c, open);
       else if (kind === "zoo") this.makeZoo(open);
       else if (kind === "morgue") this.makeMorgue(open);
       else if (kind === "oracle") this.makeOracle(c, open);
+      else if (kind === "barracks") this.makeBarracks(open);
+      else if (kind === "beehive") this.makeBeehive(open);
+      else if (kind === "lephall") this.makeLeprechaunHall(open);
       else this.makeVault(c, open);
       return;
     }
@@ -1453,6 +1456,44 @@ export class Game {
       if (springs < 3 && ROT.RNG.getUniform() < 0.35 && this.level.tileAt(p.x, p.y) === "floor" && !this.level.itemAt(p.x, p.y)) { this.level.tiles[p.y][p.x] = "faucet"; springs++; }
     }
     this.log.add("A strange calm pools through the wall — the Oracle (@) sits among the springs. (c to consult; coin loosens prophecy)", "sys");
+  }
+
+  /** A barracks: a garrison of armed mercenary nodes (the @ soldier line), with weapons + armor strewn about. */
+  private makeBarracks(open: { x: number; y: number }[]): void {
+    const soldier = MONSTERS.find((m) => m.fname === "a soldier") ?? this.pickMonster(this.player.depth);
+    const gear = ITEMS.filter((i) => i.kind === "weapon" || i.kind === "armor");
+    let n = 0;
+    for (const p of open) {
+      const r = ROT.RNG.getUniform();
+      if (r < 0.5) { this.monsters.push(new Monster(this, soldier, p.x, p.y)); n++; }
+      else if (r < 0.72 && !this.level.itemAt(p.x, p.y)) this.level.items.push({ x: p.x, y: p.y, type: ROT.RNG.getItem(gear)!, buc: rollBuc() });
+    }
+    if (n) this.log.add("Boots and barked orders ring through the wall — a barracks of mercenary nodes, armed and waiting.", "bad");
+  }
+
+  /** A beehive: a fast-swarming bot hive dripping with healing royal jelly. */
+  private makeBeehive(open: { x: number; y: number }[]): void {
+    const bot = MONSTERS.find((m) => m.ch === "b") ?? this.pickMonster(this.player.depth);
+    const jelly = ITEMS.find((i) => i.id === "heal")!;
+    let n = 0;
+    for (const p of open) {
+      const r = ROT.RNG.getUniform();
+      if (r < 0.55) { this.monsters.push(new Monster(this, bot, p.x, p.y)); n++; }
+      else if (r < 0.78 && !this.level.itemAt(p.x, p.y)) this.level.items.push({ x: p.x, y: p.y, type: jelly, buc: "blessed", bucKnown: false }); // royal jelly = a healing draught
+    }
+    if (n) this.log.add("A frantic buzzing leaks through the wall — a hive of bots, dripping with healing royal jelly.", "bad");
+  }
+
+  /** A leprechaun hall: airdrop farmers hoarding heaped gold (grab it before they swipe it). */
+  private makeLeprechaunHall(open: { x: number; y: number }[]): void {
+    const lep = MONSTERS.find((m) => m.stealsGold) ?? this.pickMonster(this.player.depth);
+    let n = 0;
+    for (const p of open) {
+      const r = ROT.RNG.getUniform();
+      if (r < 0.45) { this.monsters.push(new Monster(this, lep, p.x, p.y)); n++; }
+      else if (r < 0.78 && !this.level.itemAt(p.x, p.y)) this.level.items.push({ x: p.x, y: p.y, type: GOLD, coins: ROT.RNG.getUniformInt(20, 60) });
+    }
+    if (n) this.log.add("Coins glint and tiny feet scatter — a leprechaun hall of airdrop farmers, hoarding gold.", "good");
   }
 
   /** A zoo: a room packed with monsters guarding scattered loot (an airdrop trap room). */
