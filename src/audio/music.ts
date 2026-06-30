@@ -6,7 +6,9 @@
 // back to the bare ambient bed; the groove snaps back when a threat returns.
 //
 // When fully settled (a long calm), a relaxed CHILL IDLE GROOVE takes over — a half-time
-// syncopated bass + light percussion with very sparse zone-keyed chimes — and the bed
+// syncopated bass + light percussion with very sparse zone-keyed chimes (in the dread depths
+// — Foot of the Relay / Gehennom / Sanctum — it turns ominous instead: a lone deep thud, long
+// low bass tones on dissonant intervals, and rare dark chimes) — and the bed
 // BREATHES: the drone AND the pad swells drop low and fully out for ~30s on a slow ~80s
 // cycle, swelling back — opening space for just the groove + chimes + reverb tails. Distortion (murk + a soured, detuned bed) tracks the VISIBLE
 // THREAT around you (count + proximity, peaking at bosses/swarms) — never depth. A
@@ -704,33 +706,49 @@ export class MusicEngine {
    *  sparse zone-keyed chimes — replaces the old idle bell melody. Drums/bass run through the punchy
    *  groove bus; chimes ring through the area's reverb. */
   private scheduleChillGroove(t: TrackDef, now: number, horizon: number): void {
+    // The dread depths (Foot of the Relay / Gehennom / Sanctum) get an ominous idle: sparser, slower
+    // percussion, long low bass tones, and rare dark dissonant chimes — reinforcing the impending dread.
+    const dread = t.area === "relay" || t.area === "gehennom" || t.area === "sanctum";
     const step = 60 / (t.bpm ?? 110) / 4; // the zone's 16th grid
     const bus = this.grooveBus;
     if (this.nextChillStep < now - 1) { this.nextChillStep = now; this.chillStepIdx = 0; }
     while (this.nextChillStep < horizon) {
       const s = this.chillStepIdx, when = this.nextChillStep;
-      // half-time, laid-back kit: kick on beat 1 + the syncopated "&-of-3"; soft rim on 3; swung shaker
-      if (s === 0 || s === 11) this.kick(when, bus, 0.3);
-      if (s === 8) this.noiseHit(when, 0.11, bus, 0.11, "bandpass", 1700, 0.7);
-      if (s === 6 || s === 14) this.noiseHit(when, 0.04, bus, 0.05, "highpass", 7000, 0.7);
+      if (dread) {
+        // very sparse, deep, slow — a lone heavy thud on the downbeat, an occasional low tom far off the beat
+        if (s === 0) this.kick(when, bus, 0.34, true);
+        if (s === 10 && this.chillBassIdx % 2 === 1) this.noiseHit(when, 0.2, bus, 0.1, "bandpass", 900, 0.7);
+      } else {
+        // half-time, laid-back kit: kick on beat 1 + the syncopated "&-of-3"; soft rim on 3; swung shaker
+        if (s === 0 || s === 11) this.kick(when, bus, 0.3);
+        if (s === 8) this.noiseHit(when, 0.11, bus, 0.11, "bandpass", 1700, 0.7);
+        if (s === 6 || s === 14) this.noiseHit(when, 0.04, bus, 0.05, "highpass", 7000, 0.7);
+      }
       this.chillStepIdx = (s + 1) % 16;
       this.nextChillStep += step;
     }
-    // a sparse, syncopated bassline (degree + step-duration, with rests) in the zone's key — sums to one bar
-    const fig: Note[] = [[0, 3], [REST, 1], [7, 2], [REST, 2], [5, 2], [REST, 1], [0, 3], [REST, 2]];
+    // bass: dread = long sustained low tones on ominous intervals (root → minor 2nd → tritone); else a
+    // sparse syncopated figure. Both in the zone's key, summing to whole bars.
+    const fig: Note[] = dread
+      ? [[0, 16], [1, 8], [0, 16], [6, 8]]
+      : [[0, 3], [REST, 1], [7, 2], [REST, 2], [5, 2], [REST, 1], [0, 3], [REST, 2]];
     if (this.nextChillBass < now - 1) { this.nextChillBass = now; this.chillBassIdx = 0; }
     while (this.nextChillBass < horizon) {
       const [deg, steps] = fig[this.chillBassIdx % fig.length];
       const dur = steps * step;
-      if (deg !== REST) { let bf = semi(t.root, deg); while (bf < 41) bf *= 2; this.bassNote(bf, this.nextChillBass, dur * 0.85, bus, 0.18); }
+      if (deg !== REST) { let bf = semi(t.root, deg); while (bf < 41) bf *= 2; this.bassNote(bf, this.nextChillBass, dur * (dread ? 0.98 : 0.85), bus, dread ? 0.2 : 0.18); }
       this.nextChillBass += dur;
       this.chillBassIdx = (this.chillBassIdx + 1) % fig.length;
     }
-    // very sparse chimes — zone-keyed bells, occasional, through the area reverb
+    // chimes: dread = rare, low + dissonant (a tritone/minor-2nd, an octave down) to unsettle; else bright
+    // zone-keyed bells. Both very sparse, through the area reverb.
     const sc = this.tensionScale(t);
     while (this.nextChillChime < horizon) {
-      if (Math.random() < 0.4 && this.active) this.bellNote(semi(t.root, sc[Math.floor(Math.random() * sc.length)]) * 2, this.nextChillChime, 3.2, this.active.bus, 0.045);
-      this.nextChillChime += 4 + Math.random() * 5; // every 4–9s, 40% → very sparse
+      if (this.active && Math.random() < (dread ? 0.3 : 0.4)) {
+        if (dread) this.bellNote(semi(t.root, [1, 6, 6, 11][Math.floor(Math.random() * 4)]), this.nextChillChime, 3.6, this.active.bus, 0.035); // low, dissonant
+        else this.bellNote(semi(t.root, sc[Math.floor(Math.random() * sc.length)]) * 2, this.nextChillChime, 3.2, this.active.bus, 0.045);
+      }
+      this.nextChillChime += (dread ? 7 : 4) + Math.random() * (dread ? 7 : 5); // dread: every 7–14s, rarer
     }
   }
 
