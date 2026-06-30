@@ -192,10 +192,16 @@ export class Player extends Entity {
     if (this.awaiting) this.drainQueue();
   }
 
+  /** Snapshot of queued-but-unexecuted actions (for the queue indicator). */
+  queuedKeys(): string[] { return this.inputQueue.slice(); }
+  /** LIFO undo — drop the most recently queued action. Returns true if one was removed. */
+  popInput(): boolean { return this.inputQueue.pop() !== undefined; }
+
   private drainQueue(): void {
     this.game.setActive(this.floorKey); // process this player's input against its own floor
     while (this.awaiting && this.inputQueue.length) {
       const key = this.inputQueue.shift()!;
+      this.game.onLocalConsume(this, key); // co-op: broadcast my own actions to the peer as they execute
       const consumed = this.handleKey({ key } as KeyboardEvent);
       if (consumed) { this.awaiting = false; break; } // endTurn() already resolved the turn
     }

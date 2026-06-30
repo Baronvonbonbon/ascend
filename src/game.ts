@@ -24,6 +24,14 @@ import type { CoopMode, Cell, NetMsg } from "./net/protocol";
 
 const PARTNER_FG = "#5fd0d0"; // the co-op partner's @ renders teal
 
+// Compact glyphs for the queued-action badge — movement keys → arrows, else the bare key.
+const QUEUE_MOVE_GLYPH: Record<string, string> = {
+  h: "←", l: "→", k: "↑", j: "↓", y: "↖", u: "↗", b: "↙", n: "↘",
+  ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓",
+  "4": "←", "6": "→", "8": "↑", "2": "↓", "7": "↖", "9": "↗", "1": "↙", "3": "↘",
+};
+function keyGlyph(k: string): string { return QUEUE_MOVE_GLYPH[k] ?? (k.length === 1 ? k : "•"); }
+
 // Gold prices for standard (non-NFT) shop wares, by item kind. NFT gear is priced separately, in PAS.
 const PRICE_GOLD: Record<string, number> = { weapon: 60, armor: 55, potion: 35, scroll: 35, food: 8, ring: 90, wand: 80, tool: 50, spellbook: 70, amulet: 120 };
 const STARTING_GOLD = 25;     // a small purse so the first shop isn't out of reach
@@ -130,6 +138,7 @@ export class Game {
   private screen!: HTMLElement;                 // the map's container — overlays (chat banner, queue badge) attach here
   private chatBannerEl: HTMLElement | null = null;
   private chatBannerTimer: number | null = null;
+  private queueEl: HTMLElement | null = null;   // the local player's queued-action badge
 
   constructor(screen: HTMLElement, logEl: HTMLElement) {
     this.screen = screen;
@@ -579,6 +588,23 @@ export class Game {
     requestAnimationFrame(() => { if (this.chatBannerEl) this.chatBannerEl.style.opacity = "1"; }); // fade in
     if (this.chatBannerTimer != null) clearTimeout(this.chatBannerTimer);
     this.chatBannerTimer = window.setTimeout(() => { if (this.chatBannerEl) this.chatBannerEl.style.opacity = "0"; }, 4200); // fade out
+  }
+
+  /** Live badge of the local player's queued-but-unexecuted actions (count + glyph row). ⌫ pops LIFO. */
+  private renderQueue(): void {
+    if (!this.screen || !this.player) return;
+    if (!this.queueEl) {
+      const q = document.createElement("div");
+      q.style.cssText = "position:absolute;top:8px;left:8px;padding:4px 9px;border-radius:6px;font:600 14px/1.4 'Courier New',monospace;background:#0c0c10e6;color:#cfcf9a;border:1px solid #555;pointer-events:none;z-index:19;opacity:0;transition:opacity .25s ease;";
+      this.screen.appendChild(q);
+      this.queueEl = q;
+    }
+    const q = this.queueEl;
+    const keys = this.localPlayer.queuedKeys();
+    if (keys.length === 0) { q.style.opacity = "0"; return; }
+    const glyphs = keys.map(keyGlyph).join(" ");
+    q.innerHTML = `Queued ${keys.length}: <span style="color:#e0b94d">${glyphs}</span> <span style="color:#777">⌫</span>`;
+    q.style.opacity = "1";
   }
   livingPlayers(): Player[] { return this.allPlayers().filter((p) => p.alive); } // global — for game-over
   /** Living players standing on the floor currently being acted (co-op: floors run independently). */
@@ -3017,6 +3043,13 @@ export class Game {
     };
   }
 
+  /** Co-op lockstep: when the LOCAL player consumes (executes) a queued action, broadcast it so the
+   *  peer replays the same turn. Keys that arrived from the peer (remote player) aren't re-sent, and
+   *  queued-but-unexecuted actions are never sent — so a local LIFO undo needs no network sync. */
+  onLocalConsume(player: Player, key: string): void {
+    if (this.coop && this.netRole !== "solo" && player === this.localPlayer) this.peer?.send({ t: "input", key });
+  }
+
   /** Apply a keystroke the partner broadcast for THEIR avatar (the remote player on this client).
    *  Never gated on `this.busy` — that's a local-UI flag; dropping a remote key would desync the
    *  shared sim. feed() just queues; the engine consumes it on the remote player's own turn. */
@@ -3179,10 +3212,17 @@ export class Game {
       e.preventDefault(); return;
     }
     if (this.coop && !this.localPlayer.alive) { e.preventDefault(); return; } // you're downed — spectate
+    // Backspace = LIFO undo of the last queued action. Purely local: queued keys aren't broadcast
+    // until they EXECUTE (see onLocalConsume), so an unexecuted action can be dropped with no sync.
+    if (e.key === "Backspace" && !this.localPlayer.composing) {
+      this.localPlayer.popInput();
+      this.renderQueue();
+      e.preventDefault(); return;
+    }
     if (this.konamiCheck(e.key)) { e.preventDefault(); return; } // cosmetic skin toggle — fully local, never fed/broadcast
     if (DEBUG && this.netRole === "solo" && this.debugIntercept(e.key)) { e.preventDefault(); return; } // debug: solo only (warps would desync co-op)
-    if (this.netRole !== "solo") this.peer?.send({ t: "input", key: e.key }); // lockstep: broadcast my keystroke to the peer
-    this.localPlayer.feed(e.key); // drive my own avatar
+    this.localPlayer.feed(e.key); // queue locally; each action is broadcast as it executes (lockstep)
+    this.renderQueue();
     e.preventDefault();
   }
 
@@ -3277,5 +3317,6 @@ export class Game {
     for (const [x, y, ch, fg] of cells) this.display.draw(x, y, ch, fg, COLORS.bg);
     this.display.drawText(1, MAP_H + 1, huds[view] || huds[0]);
     if (this.activeKey !== resume) this.setActive(resume); // restore the acting floor
+    this.renderQueue(); // keep the queued-action badge current as turns consume
   }
 }

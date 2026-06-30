@@ -15,5 +15,5 @@ export type NetMsg =
   // host → guest: build the shared world from this seed + the host's archetype (and on a restart)
   | { t: "start"; mode: CoopMode; seed: number; archetype: string }
   | { t: "restart"; seed: number; archetype: string }
-  // either → other: a keystroke for the SENDER's own avatar
+  // either → other: a keystroke the sender's own avatar just EXECUTED (broadcast-on-consume lockstep)
   | { t: "input"; key: string };
