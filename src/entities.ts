@@ -95,6 +95,7 @@ export class Player extends Entity {
   // Phase 8 — polymorph self ("fork")
   polyForm: MonsterDef | null = null;
   polyTurns = 0; savedHp = 0; savedMaxHp = 0;
+  lycanthrope: MonsterDef | null = null; // infected — involuntarily transforms into this were-beast until cured
   // Phase 8 — spellcasting
   energy = 5; maxEnergy = 5;
   spells = new Set<string>(); // known spell ids
@@ -255,6 +256,7 @@ export class Player extends Entity {
     this.game.turn++;
     this.game.censorHuntTick();
     if (this.polyForm && --this.polyTurns <= 0) this.game.revertPoly(this);
+    this.game.tickLycanthropy(this); // infected? a chance to involuntarily shift into the were-beast
     if (this.senseTurns > 0) this.senseTurns--;
     if (this.hasteTurns > 0 && --this.hasteTurns === 0) this.game.log.add(`${this.name === "you" ? "You slow" : this.name + " slows"} back to normal.`, "dim");
     // Natural regeneration (faster with a ring of regeneration; not while starving/poisoned).

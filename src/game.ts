@@ -394,6 +394,7 @@ export class Game {
     if (p.illness > 0) fx.push(`ill ${p.illness}`);
     if (p.hasteTurns > 0) fx.push(`hasted ${p.hasteTurns}`);
     if (p.senseTurns > 0) fx.push(`mind-sense ${p.senseTurns}`);
+    if (p.lycanthrope) fx.push(`lycanthropic — ${monName(p.lycanthrope).replace(/^an? /, "")} (pray to cure)`);
     if (p.polyForm) fx.push(`forked → ${p.polyForm.name.replace(/^an? /, "")} ${p.polyTurns}`);
     this.log.add(`  Status: ${fx.length ? fx.join(", ") : "clear"}.`, fx.some((s) => /STONING|ill|poison/.test(s)) ? "bad" : "dim");
     // progress + the endgame
@@ -1737,6 +1738,7 @@ export class Game {
       if (m.def.engulfs) tags.push("engulfing");
       if (m.def.silences) tags.push("silencing");
       if (m.def.drainsStat) tags.push("mind-draining");
+      if (m.def.infects) tags.push("infectious");
       if (m.sleepTurns > 0) tags.push("asleep");
       if (m.cancelled) tags.push("nullified");
       this.log.add(`You see ${m.name} — ${band} (${tags.join(", ")}).`, "sys");
@@ -1843,6 +1845,7 @@ export class Game {
     p.poison = 0; p.confused = 0; p.silenced = 0;
     const drained = Object.entries(p.statDrain).filter(([, n]) => n > 0);
     if (drained.length) { for (const [a, n] of drained) (p as unknown as Record<string, number>)[a] += n; p.statDrain = {}; this.recomputeEnergy(p); this.log.add("Your drained faculties are restored.", "good"); }
+    if (p.lycanthrope) { p.lycanthrope = null; if (p.polyForm) this.revertPoly(p, true); this.log.add("The wildness is purged — you are wholly yourself again.", "good"); }
     if (p.stoning > 0 || p.illness > 0) { p.stoning = 0; p.illness = 0; this.log.add("The petrifying chill / the bad block lifts.", "good"); }
     if (p.blind > 0) { p.blind = 0; this.recomputeFOV(); }
     if (p.luck < 0) { p.luck = 0; this.log.add("Gavin steadies your fortune.", "good"); }
@@ -2115,6 +2118,10 @@ export class Game {
         this.log.add(`${cap(a.name)} smothers ${d.name} in silence — your voice is gone!`, "bad", who);
       }
       if (!a.cancelled && a.def.drainsStat && d.hp > 0 && ROT.RNG.getUniform() < 0.4) this.drainStat(d, a.name);
+      if (a.def.infects && d.hp > 0 && !d.lycanthrope && ROT.RNG.getUniform() < 0.25) {
+        d.lycanthrope = a.def;
+        this.log.add(`${cap(a.name)}'s bite festers — you've been forked! A wildness takes root in you. (pray to cure)`, "bad", who);
+      }
     }
     else if (a instanceof Player && d instanceof Player) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg} — friendly fire!`, "bad", who);
     else if (a === this.pet) this.log.add(`Your nominator savages ${d.name} for ${dmg}.`, "good", who);
@@ -2586,7 +2593,7 @@ export class Game {
         hit.cancelled = true;
         this.log.add(`${cap(hit.name)} is nullified — its powers fail.`, "good");
       } else if (item.type.id === "wand_probe") {
-        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.stealsGold && "gold thief", hit.def.stealsLuck && "Fortune leech", hit.def.drains && "life-draining", hit.def.engulfs && "engulfing", hit.def.silences && "silencing", hit.def.drainsStat && "mind-draining", hit.def.paralyzes && "paralyzing gaze", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.cancelled && "nullified"].filter(Boolean).join(", ");
+        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.stealsGold && "gold thief", hit.def.stealsLuck && "Fortune leech", hit.def.drains && "life-draining", hit.def.engulfs && "engulfing", hit.def.silences && "silencing", hit.def.drainsStat && "mind-draining", hit.def.infects && "infectious", hit.def.paralyzes && "paralyzing gaze", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.cancelled && "nullified"].filter(Boolean).join(", ");
         this.log.add(`State-read ${hit.name}: ${hit.hp}/${hit.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       }
     }
@@ -2686,6 +2693,16 @@ export class Game {
     this.log.add(`${this.sub(p)} ${this.verbS(p, "hard-fork")} into ${f.name}!`, "sys");
   }
 
+  /** Lycanthropy: while infected, a small chance each turn to involuntarily shift into the were-beast
+   *  (unless already in a form). The fork reverts on its own; the infection persists until cured. */
+  tickLycanthropy(p: Player): void {
+    if (!p.lycanthrope || p.polyForm || !p.alive) return;
+    if (ROT.RNG.getUniform() < 0.04) {
+      this.log.add(`${this.sub(p)} ${this.verbS(p, "convulse")} — the change takes you, against your will!`, "bad", p);
+      this.polySelf(p, p.lycanthrope);
+    }
+  }
+
   /** Snap back to your true form, restoring your real HP pool. */
   revertPoly(p: Player, silent = false): void {
     if (!p.polyForm) return;
@@ -2740,7 +2757,7 @@ export class Game {
     if (item.type.id === "scope") {
       const m = this.monsterAt(p.x + dx, p.y + dy);
       if (!m) { this.log.add("You press the state reader to empty air.", "dim"); return false; }
-      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.stealsGold && "gold thief", m.def.stealsLuck && "Fortune leech", m.def.drains && "life-draining", m.def.engulfs && "engulfing", m.def.silences && "silencing", m.def.drainsStat && "mind-draining", m.def.paralyzes && "paralyzing gaze", m.def.splits && "splits", m.def.corrodes && "corrodes", m.cancelled && "nullified", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
+      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.stealsGold && "gold thief", m.def.stealsLuck && "Fortune leech", m.def.drains && "life-draining", m.def.engulfs && "engulfing", m.def.silences && "silencing", m.def.drainsStat && "mind-draining", m.def.infects && "infectious", m.def.paralyzes && "paralyzing gaze", m.def.splits && "splits", m.def.corrodes && "corrodes", m.cancelled && "nullified", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
       this.log.add(`State-read ${m.name}: ${m.hp}/${m.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       return true;
     }
@@ -3015,8 +3032,9 @@ export class Game {
         break;
       }
       case "cure": {
-        if (p.poison > 0 || p.confused > 0 || p.stoning > 0 || p.illness > 0 || p.blind > 0 || p.silenced > 0) {
+        if (p.poison > 0 || p.confused > 0 || p.stoning > 0 || p.illness > 0 || p.blind > 0 || p.silenced > 0 || p.lycanthrope) {
           p.poison = 0; p.confused = 0; p.stoning = 0; p.illness = 0; p.blind = 0; p.silenced = 0;
+          if (p.lycanthrope) { p.lycanthrope = null; if (p.polyForm) this.revertPoly(p, true); }
           this.log.add("A cleansing light — your afflictions lift.", "good"); this.recomputeFOV();
         } else this.log.add("You feel briefly cleansed.", "dim");
         break;
@@ -3596,6 +3614,7 @@ export class Game {
       (p.illness > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Ill${p.illness}` : "") +
       (p.blind > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Blind` : "") +
       (p.silenced > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Silent` : "") +
+      (p.lycanthrope ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Lycan` : "") +
       (p.intrinsics.has("fast") ? `%c{${COLORS.dim}}  %c{${COLORS.good}}Fast` : "") +
       (p.hasJam ? `%c{${COLORS.dim}}  %c{${COLORS.gold}}✦JAM — ASCEND (<)` : this.jamStolen ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}JAM STOLEN — slay the Censor!` : `%c{${COLORS.dim}}  ${this.gehennomOpen ? `JAM: depth ${GEHENNOM_BOTTOM}` : `Invoke @ depth ${MAX_DEPTH}`}`)
     );
