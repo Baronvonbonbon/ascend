@@ -67,7 +67,7 @@ Every adaptation routes through this table so the theming stays coherent.
 | Priest (altar minister) | **the Architect's Acolyte** | ❌ |
 | Vault + guard | **the Treasury** + a **Council Guard** | ❌ |
 | Nymph (steals items) | **rug puller** (`r`) | ✅ |
-| Leprechaun (steals gold) | **airdrop farmer** (steals PAS) | ❌ |
+| Leprechaun (steals gold) | **airdrop farmer** (`l`, snatches gold + blinks away, drops it on death) | ✅ |
 | Mind flayer (brain) | **the Censor-spawn** (telepathy from its corpse) | 🟡 (telepathy intrinsic + demon bestiary; no brain-drain attack) |
 | Cockatrice/Medusa (petrify) | **the Freezer** (freeze = `Ston` countdown) | ✅ (Phase 7a — stoning, raced/cured) |
 | Fountain (#quaff/#dip) | **a faucet** (`{`) — `q` quaff for chaos; `D` dip to draw Polkadot's Edge | ✅ (Phase 9a/11g) |

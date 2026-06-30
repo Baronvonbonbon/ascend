@@ -2226,6 +2226,13 @@ export class Game {
     return it;
   }
 
+  /** An airdrop farmer grabs a fistful of the player's gold. Returns the amount taken. */
+  stealGold(target: Player): number {
+    const take = Math.min(target.gold, ROT.RNG.getUniformInt(8, 25) + Math.floor(target.gold / 3));
+    target.gold -= take;
+    return take;
+  }
+
   /** Add an item to the pack, rolling wand charges. NFT relics carry enchant + a relic mark; every item gets a BUC. */
   giveItem(type: ItemType, opts?: { enchant?: number; relic?: boolean; buc?: Buc; bucKnown?: boolean }): Item {
     const it = this.acting.inventory.add(type);
@@ -2354,7 +2361,7 @@ export class Game {
         hit.cancelled = true;
         this.log.add(`${cap(hit.name)} is nullified — its powers fail.`, "good");
       } else if (item.type.id === "wand_probe") {
-        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.cancelled && "nullified"].filter(Boolean).join(", ");
+        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.stealsGold && "gold thief", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.cancelled && "nullified"].filter(Boolean).join(", ");
         this.log.add(`State-read ${hit.name}: ${hit.hp}/${hit.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       }
     }
@@ -2493,7 +2500,7 @@ export class Game {
     if (item.type.id === "scope") {
       const m = this.monsterAt(p.x + dx, p.y + dy);
       if (!m) { this.log.add("You press the state reader to empty air.", "dim"); return false; }
-      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.splits && "splits", m.def.corrodes && "corrodes", m.cancelled && "nullified", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
+      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.stealsGold && "gold thief", m.def.splits && "splits", m.def.corrodes && "corrodes", m.cancelled && "nullified", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
       this.log.add(`State-read ${m.name}: ${m.hp}/${m.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       return true;
     }
@@ -2919,6 +2926,13 @@ export class Game {
       this.level.items.push({ x: m.x, y: m.y, type: m.stolen.type, enchant: m.stolen.enchant, relic: m.stolen.relic, buc: m.stolen.buc, bucKnown: m.stolen.bucKnown });
       this.log.add(`${cap(m.name)} drops ${this.ident.name(m.stolen.type)} as it dies.`, "good");
       m.stolen = null;
+    }
+    // A slain airdrop farmer disgorges the gold it grabbed.
+    if (m.stoleGold > 0) {
+      const spot = this.level.itemAt(m.x, m.y) ? this.adjacentFreeFloor(m.x, m.y) : { x: m.x, y: m.y };
+      if (spot) this.level.items.push({ x: spot.x, y: spot.y, type: GOLD, coins: m.stoleGold });
+      this.log.add(`${cap(m.name)} spills ${m.stoleGold} gold as it dies.`, "good");
+      m.stoleGold = 0;
     }
     if (m.def.boss) {
       this.defeatedBosses.add(this.player.depth);

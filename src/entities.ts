@@ -788,6 +788,7 @@ export class Monster extends Entity {
   cancelled = false; // a wand of nullification strips its special powers
   splitsLeft = 0; // a sybil's remaining replications — bounds the swarm (children inherit one fewer)
   stolen: Item | null = null; // a thief (rug puller) carries what it snatched; drops it on death
+  stoleGold = 0;              // an airdrop farmer's snatched gold — disgorged when it's slain
   // A shopkeeper stands peaceful until you steal; then it hunts you down.
   peaceful = false;
   isHunter = false; // THE CENSOR resurrected to chase the JAM-bearer (Phase 12d)
@@ -848,8 +849,8 @@ export class Monster extends Entity {
     // about. Checked AFTER the passive states so a sleeper/dormant mimic/shopkeeper still won't move.
     if (this.game.playersHere().length === 0) { this.wanderStep(); return; }
 
-    // A laden thief wants only to escape — it never turns to fight.
-    if (this.stolen) { this.fleeStep(p); return; }
+    // A laden thief (items or gold) wants only to escape — it never turns to fight.
+    if (this.stolen || this.stoleGold > 0) { this.fleeStep(p); return; }
 
     // A coward turns tail once badly hurt.
     if (this.def.cowardly && this.hp < this.maxHp * 0.3) { this.fleeStep(p); return; }
@@ -899,6 +900,17 @@ export class Monster extends Entity {
         return;
       }
       // nothing to take — fall through and just attack
+    }
+    // The airdrop farmer: adjacent, it snatches a fistful of gold and blinks away.
+    if (!this.cancelled && this.def.stealsGold && dist === 1 && p.gold > 0) {
+      const took = this.game.stealGold(p);
+      if (took > 0) {
+        this.stoleGold += took;
+        const who = this.name.charAt(0).toUpperCase() + this.name.slice(1);
+        this.game.log.add(`${who} swipes ${took} gold and blinks away!`, "bad", p);
+        this.blinkAway(p);
+        return;
+      }
     }
     if (dist === 1) { this.game.attack(this, p); return; }
 
