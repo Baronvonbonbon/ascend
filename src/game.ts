@@ -140,7 +140,10 @@ export class Game {
   }
 
   // ── lifecycle ──────────────────────────────────────────────────────────────
-  newGame(): void {
+  /** Start a run. In co-op both peers pass the SAME seed so they generate an identical
+   *  shared world deterministically (lockstep); omitted = a fresh random run (solo). */
+  newGame(seed?: number): void {
+    if (seed !== undefined) ROT.RNG.setSeed(seed); // shared seed → identical dungeon, loot, appearances on both clients
     this.over = false;
     this.defeatedBosses.clear();
     this.gehennomOpen = false;
@@ -188,7 +191,7 @@ export class Game {
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
     void this.fetchLeaderboard();
-    if (this.wallet) void this.loadRelics(); // carry owned NFT gear into the new run
+    if (this.wallet && !this.coop) void this.loadRelics(); // carry owned NFT gear into the new run (solo only — per-wallet gear would desync a shared co-op world)
   }
 
   /** Pull the player's owned NFT relics into the pack — persistent, tradeable gear
@@ -508,7 +511,7 @@ export class Game {
     }
     if (this.pet && this.pet.alive) this.scheduler.add(this.pet, true);
     this.recomputeFOV();
-    if (this.acting === this.player) this.music.setArea(this.currentAreaId()); // host's speakers follow the host's floor
+    if (this.acting === this.localPlayer) this.music.setArea(this.currentAreaId()); // my speakers follow my own floor
   }
 
   adjacentEnemy(x: number, y: number): Monster | undefined {
@@ -526,6 +529,12 @@ export class Game {
 
   // ── co-op party helpers ──────────────────────────────────────────────────────
   allPlayers(): Player[] { return this.coPlayer ? [this.player, this.coPlayer] : [this.player]; }
+  /** The adventurer THIS client drives (host → Host/this.player, guest → Guest/this.coPlayer). */
+  get localPlayer(): Player { return this.netRole === "guest" ? (this.coPlayer ?? this.player) : this.player; }
+  /** The partner's avatar, driven by the peer's broadcast keystrokes (null when solo / disconnected). */
+  get remotePlayer(): Player | null { return this.netRole === "guest" ? this.player : this.coPlayer; }
+  /** Render viewer index for the local player (0 = this.player, 1 = the companion). */
+  get localViewer(): 0 | 1 { return this.netRole === "guest" ? 1 : 0; }
 
   /** A free once-per-turn shout to the partner: it degrades with distance + walls, and a different
    *  floor swallows it entirely. The sender always hears its own call in full. */
@@ -986,7 +995,7 @@ export class Game {
   private currentAreaId(): string {
     if (this.plane > 0) return this.plane === PLANES.length ? "genesis" : "planes";
     if (this.inQuest || this.currentChain) return "elsewhere";
-    const d = this.player.depth;
+    const d = this.localPlayer.depth;
     if (this.level?.kind === "bigroom") return "mempool";
     if (d >= GEHENNOM_BOTTOM) return "sanctum";
     if (d > MAX_DEPTH) return "gehennom";
@@ -1012,7 +1021,7 @@ export class Game {
   /** The per-frame snapshot the music engine reacts to: threat, danger, and nearby context.
    *  Depth no longer stresses the mix — only what's actually around you does. */
   private musicContext(): MusicContext {
-    const p = this.player;
+    const p = this.localPlayer; // each client's music tracks its OWN adventurer
     const vis = (m: Monster) => this.level.isVisible(m.x, m.y);
     const isBoss = (m: Monster) => m.def.boss || m.isHunter || m.def === MOLOCH || m.def === CENSOR;
     // peril: low HP, afflictions, being hunted — folded into `danger` so the tension cues react to it
@@ -2933,54 +2942,66 @@ export class Game {
     if (p.hp <= 0) this.killPlayer(p);
   }
 
-  // ── co-op session (host-authoritative over WebRTC) ───────────────────────────
-  /** The host runs the simulation for both players and streams frames + log to the guest. */
+  // ── co-op session (peer-authoritative, deterministic lockstep over WebRTC) ───────────────────────
+  // Both peers run the FULL simulation from a shared seed and exchange only keystrokes; each renders
+  // its own player's view locally. No host/guest authority asymmetry beyond who picks the seed.
+  /** Host: pick the shared seed, send it, and build the world. */
   startCoopHost(peer: Peer, mode: CoopMode): void {
     this.netRole = "host"; this.peer = peer; this.coopMode = mode; this.coop = true;
-    peer.onMessage((m: NetMsg) => { if (m?.t === "input" && typeof m.key === "string") this.handleRemoteInput(m.key); });
-    peer.onState((open) => {
-      if (open) return;
-      this.log.add("Partner disconnected — finishing solo.", "bad");
-      const c = this.coPlayer;
-      if (c) { c.cancelTurn(); this.scheduler.remove(c); this.coPlayer = null; this.draw(); } // unstick the shared clock
-    });
-    this.log.onAdd = (text, cls) => peer.send({ t: "log", text, cls }); // stream a guest-bound line to the guest
-    // Per-adventurer log routing: default audience = the acting player; "both" = a shared/world line;
-    // a specific Player = a line about them during a monster's turn (when this.acting is stale).
-    this.log.audience = (who) => ({
-      host: who === "both" || (who ? who === this.player : this.acting === this.player),
-      guest: !!this.coPlayer && (who === "both" || (who ? who === this.coPlayer : this.acting === this.coPlayer)),
-    });
-    peer.send({ t: "start", mode });
-    this.log.add("Co-op hosted — you are the cream @ (Host); your partner is the teal @ (Guest).", "sys");
-    this.newGame(); // a fresh shared dungeon with two adventurers
+    this.wireCoopPeer(peer);
+    this.wireCoopLog();
+    const seed = this.freshSeed();
+    peer.send({ t: "start", mode, seed, archetype: this.archetypeId }); // share the seed + the Host's class so both build it identically
+    this.log.add("Co-op hosted — you are the cream @ (Host); your partner is the teal @ (Guest).", "sys", "both");
+    this.newGame(seed); // both peers build the identical world from this seed
   }
 
-  /** The guest is a thin terminal: it forwards keys and renders the host's frames. */
+  /** Guest: join, then build the identical world when the host's `start` (with seed) arrives. */
   startCoopGuest(peer: Peer): void {
     this.netRole = "guest"; this.peer = peer; this.coop = true;
-    peer.onMessage((m: NetMsg) => this.onGuestMessage(m));
-    peer.onState((open) => { if (!open) this.log.add("Host disconnected — co-op ended.", "bad"); });
-    this.log.add("Linked as Guest — waiting for the host's dungeon…", "sys");
+    this.wireCoopPeer(peer);
+    this.wireCoopLog();
+    this.log.add("Linked as Guest — waiting for the host's dungeon…", "sys", "both");
   }
 
-  private handleRemoteInput(key: string): void {
-    if (this.over) { if (key === "r" || key === "R") this.newGame(); return; }
-    if (this.busy) return;
-    if (this.coPlayer && this.coPlayer.alive) this.coPlayer.feed(key);
+  private freshSeed(): number { return (Math.random() * 0x7fffffff) | 0; }
+
+  /** Common peer wiring for both roles: apply the partner's keystrokes; rebuild on start/restart. */
+  private wireCoopPeer(peer: Peer): void {
+    peer.onMessage((m: NetMsg) => {
+      if (m?.t === "start") { this.coopMode = m.mode; this.archetypeId = m.archetype; this.newGame(m.seed); }   // build the shared world (Host's class)
+      else if (m?.t === "restart") { this.archetypeId = m.archetype; this.newGame(m.seed); }                    // reseeded new run
+      else if (m?.t === "input" && typeof m.key === "string") this.remoteInput(m.key);
+    });
+    peer.onState((open) => {
+      if (open) return;
+      this.log.add("Partner disconnected — playing on alone.", "bad", "both");
+      const r = this.remotePlayer;
+      if (r) { r.cancelTurn(); this.scheduler.remove(r); if (r === this.coPlayer) this.coPlayer = null; this.draw(); } // unstick the clock
+    });
   }
 
-  private onGuestMessage(m: NetMsg): void {
-    if (m?.t === "start") this.log.add(`Shared dungeon started (${m.mode}). You are the teal @ (Guest).`, "sys");
-    else if (m?.t === "frame") this.renderFrame(m.cells, m.huds);
-    else if (m?.t === "log") this.log.paint(m.text, (m.cls ?? "") as "" | "good" | "bad" | "sys" | "dim");
+  /** Each client paints only the log lines its LOCAL adventurer is the audience for (both sims agree). */
+  private wireCoopLog(): void {
+    this.log.audience = (who) => {
+      const lp = this.localPlayer;
+      return who === "both" || (who ? who === lp : this.acting === lp);
+    };
   }
 
-  /** Guest-side render of a host frame: paint the cells + this side's HUD. */
-  private renderFrame(cells: Cell[], huds: [string, string]): void {
-    this.display.clear();
-    for (const [x, y, ch, fg] of cells) this.display.draw(x, y, ch, fg, COLORS.bg);
-    this.display.drawText(1, MAP_H + 1, huds[1] || huds[0]);
+  /** Apply a keystroke the partner broadcast for THEIR avatar (the remote player on this client).
+   *  Never gated on `this.busy` — that's a local-UI flag; dropping a remote key would desync the
+   *  shared sim. feed() just queues; the engine consumes it on the remote player's own turn. */
+  private remoteInput(key: string): void {
+    if (this.over) { if ((key === "r" || key === "R") && this.netRole === "host") this.restartRun(); return; }
+    const r = this.remotePlayer;
+    if (r && r.alive) r.feed(key);
+  }
+
+  /** Restart: the host reseeds + tells the guest; solo just rerolls. */
+  private restartRun(): void {
+    if (this.netRole === "host") { const seed = this.freshSeed(); this.peer?.send({ t: "restart", seed, archetype: this.archetypeId }); this.newGame(seed); }
+    else this.newGame();
   }
 
   // ── input + render ───────────────────────────────────────────────────────
@@ -3121,16 +3142,19 @@ export class Game {
 
   private onKey(e: KeyboardEvent): void {
     if (e.ctrlKey || e.metaKey || e.altKey) return; // let browser shortcuts (refresh, copy, devtools) through
-    if (this.netRole === "guest") { this.peer?.send({ t: "input", key: e.key }); e.preventDefault(); return; }
     if (this.busy) { e.preventDefault(); return; } // frozen while a wallet tx settles
     if (this.over) {
-      if (e.key === "r" || e.key === "R") this.newGame();
-      return;
+      if (e.key === "r" || e.key === "R") {
+        if (this.netRole === "guest") this.peer?.send({ t: "input", key: e.key }); // ask the host to reseed
+        else this.restartRun();
+      }
+      e.preventDefault(); return;
     }
-    if (this.coop && !this.player.alive) { e.preventDefault(); return; } // host downed — spectate
-    if (this.konamiCheck(e.key)) { e.preventDefault(); return; } // the Konami code toggles fantasy ⇄ polkadot flavor
-    if (DEBUG && this.debugIntercept(e.key)) { e.preventDefault(); return; } // ── DEBUG hook (remove for release) ──
-    this.player.feed(e.key);
+    if (this.coop && !this.localPlayer.alive) { e.preventDefault(); return; } // you're downed — spectate
+    if (this.konamiCheck(e.key)) { e.preventDefault(); return; } // cosmetic skin toggle — fully local, never fed/broadcast
+    if (DEBUG && this.netRole === "solo" && this.debugIntercept(e.key)) { e.preventDefault(); return; } // debug: solo only (warps would desync co-op)
+    if (this.netRole !== "solo") this.peer?.send({ t: "input", key: e.key }); // lockstep: broadcast my keystroke to the peer
+    this.localPlayer.feed(e.key); // drive my own avatar
     e.preventDefault();
   }
 
@@ -3210,24 +3234,20 @@ export class Game {
   }
 
   draw(): void {
-    if (this.netRole === "guest") return; // the guest only paints frames it receives
-    // Anchor music + the host's own view to the host's floor, then restore the acting context so
-    // draw() stays side-effect-free for callers that keep working on the active floor afterwards.
+    if (!this.player) return;
+    const lp = this.localPlayer;
+    // Anchor music + my view to MY floor, then restore the acting context so draw() stays
+    // side-effect-free for callers that keep working on the active floor afterwards.
     const resume = this.activeKey;
-    if (this.player?.alive) this.setActive(this.player.floorKey);
-    if (this.player) this.music.setContext(this.musicContext()); // threat, danger, and reactions
+    if (lp.alive) this.setActive(lp.floorKey);
+    this.music.setContext(this.musicContext()); // threat, danger, and reactions — for MY floor
     const huds = this.buildHuds();
-    // each side renders its own fog; a downed player spectates the survivor's view
-    const hostView = this.player.alive ? 0 : (this.coPlayer?.alive ? 1 : 0);
-    const cells = this.buildCells(hostView);
+    // my own fog; if I'm downed, spectate my partner's view
+    const view = lp.alive ? this.localViewer : (this.localViewer === 0 ? 1 : 0);
+    const cells = this.buildCells(view);
     this.display.clear();
     for (const [x, y, ch, fg] of cells) this.display.draw(x, y, ch, fg, COLORS.bg);
-    this.display.drawText(1, MAP_H + 1, huds[0]);
-    if (this.netRole === "host" && this.peer) {
-      const guestView = this.coPlayer?.alive ? 1 : (this.player.alive ? 0 : 1);
-      const guestCells = guestView === hostView ? cells : this.buildCells(guestView);
-      this.peer.send({ t: "frame", cells: guestCells, huds });
-    }
+    this.display.drawText(1, MAP_H + 1, huds[view] || huds[0]);
     if (this.activeKey !== resume) this.setActive(resume); // restore the acting floor
   }
 }

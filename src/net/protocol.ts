@@ -1,9 +1,10 @@
-// Wire messages for host-authoritative co-op. The host runs the simulation and
-// streams render frames + log lines; the guest forwards keystrokes.
+// Wire messages for peer-authoritative co-op (deterministic lockstep). Both clients
+// run the full simulation from a shared RNG seed and exchange only keystrokes — each
+// renders its own player's view locally. No frames or logs cross the wire.
 
 export type CoopMode = "solo" | "coop" | "coop-ff" | "race";
 
-/** One drawn map cell: x, y, glyph, fg colour. */
+/** One drawn map cell: x, y, glyph, fg colour. (Local rendering only — never sent.) */
 export type Cell = [number, number, string, string];
 
 export type NetMsg =
@@ -11,9 +12,8 @@ export type NetMsg =
   | { t: "hello"; role: string; mode: CoopMode }
   | { t: "ping"; at: number }
   | { t: "pong"; at: number }
-  // host → guest
-  | { t: "start"; mode: CoopMode }
-  | { t: "frame"; cells: Cell[]; huds: [string, string] }
-  | { t: "log"; text: string; cls?: string }
-  // guest → host
+  // host → guest: build the shared world from this seed + the host's archetype (and on a restart)
+  | { t: "start"; mode: CoopMode; seed: number; archetype: string }
+  | { t: "restart"; seed: number; archetype: string }
+  // either → other: a keystroke for the SENDER's own avatar
   | { t: "input"; key: string };
