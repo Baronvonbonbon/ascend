@@ -21,6 +21,15 @@
       }
       #log .msg--good { color: #76c66a; } #log .msg--bad { color: #c75c5c; }
       #log .msg--sys  { color: var(--gold); } #log .msg--dim { color: var(--dim); }
+      /* ── co-op chat bar (PC + mobile) ── */
+      #chatbar { display: flex; gap: 6px; width: 100%; max-width: 960px; }
+      #chatbar[hidden] { display: none; }
+      #chat-input { flex: 1; font-family: inherit; font-size: 14px; color: var(--ink); background: #08080a;
+        border: 1px solid #2a3a4a; border-radius: 4px; padding: 7px 10px; min-width: 0; }
+      #chat-input:focus { outline: none; border-color: #3a6fa0; }
+      #chat-send { font-family: inherit; font-size: 13px; color: #8fd0ff; background: #13243a;
+        border: 1px solid #3a6fa0; border-radius: 4px; padding: 7px 16px; cursor: pointer; touch-action: manipulation; }
+      #chat-send:active { background: #1c3550; }
       #help { color: var(--dim); font-size: 12px; max-width: 960px; }
       #wallet { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--dim); flex-wrap: wrap; justify-content: center; }
       #connect { font-family: inherit; font-size: 12px; background: #1c1c20; color: var(--gold);
@@ -70,7 +79,7 @@
         #log { height: 96px; }
       }
     </style>
-    <script type="module" crossorigin src="/ascend/assets/index-Bp2c17_w.js"></script>
+    <script type="module" crossorigin src="/ascend/assets/index-CUh0IPon.js"></script>
   </head>
   <body>
     <div id="app">
@@ -127,6 +136,10 @@
       </div>
       <div id="screen"></div>
       <div id="log"></div>
+      <div id="chatbar" hidden>
+        <input id="chat-input" type="text" maxlength="60" placeholder="message your partner… (one per turn)" autocomplete="off" autocapitalize="sentences" />
+        <button id="chat-send" type="button">Send</button>
+      </div>
 
       <div id="touch">
         <div id="dpad">
