@@ -433,6 +433,12 @@ export class Player extends Entity {
         this.game.lootMenu(item);
         return false;
       }
+      if (id === "lamp") {
+        item.lit = !item.lit;
+        this.game.log.add(item.lit ? "You light the block explorer — its glow pushes back the dark." : "You douse the block explorer.", item.lit ? "good" : "dim");
+        this.game.recomputeFOV(); this.game.draw();
+        return this.endTurn();
+      }
       this.game.log.add("Nothing happens.", "dim"); return false;
     }
     return this.doVerb(verb, item);
@@ -991,7 +997,8 @@ export class Monster extends Entity {
     }
 
     // Chase only what the player can see — unless they're cloaked (ring of privacy).
-    if (this.def.ai === "chase" && !p.stealth && this.game.level.isVisible(this.x, this.y) && dist <= 9) {
+    // Chase what the player can see — or what's close enough to sense you in the dark (so darkness isn't a free pass).
+    if (this.def.ai === "chase" && !p.stealth && (this.game.level.isVisible(this.x, this.y) || dist <= 5) && dist <= 9) {
       const dij = new ROT.Path.Dijkstra(p.x, p.y, (x, y) => this.game.level.isPassable(x, y), { topology: 8 });
       const path: [number, number][] = [];
       dij.compute(this.x, this.y, (x, y) => path.push([x, y]));

@@ -78,7 +78,7 @@ Every adaptation routes through this table so the theming stays coherent.
 | Bag of tricks | **a faucet bag** (`a` apply → spits a foe; charged) | ✅ |
 | Loadstone (cursed, can't drop) | **a HODL stone** (cursed = loadstone) | ✅ (Phase 8c — undroppable when cursed) |
 | Gems / glass | **tokens** (real vs worthless airdrops) | ❌ |
-| Light (lamp/candle) | **block explorer** light sources; **the Genesis Candelabrum** | ❌ |
+| Light (lamp/candle) | **block explorer** light sources; **the Genesis Candelabrum** | ✅ (Phase 7h — lit/dark rooms + a block-explorer lamp) |
 | Invocation items (Bell, Candelabrum, Book of the Dead) | **the Bell of Finality, the Genesis Candelabrum, the Gray Paper** | ✅ (Phase 12a — `I` #invoke ritual) |
 | Bones files | ✅ on-chain bones | ✅ |
 | Topten / scoring | ✅ on-chain Hall of Fame | ✅ |
@@ -100,7 +100,7 @@ Every adaptation routes through this table so the theming stays coherent.
 - **`dbridge.c`** drawbridges → **❌** → "consensus bridges" raised/lowered by levers; crush on close.
 - **`vault.c`** vaults + guard → **❌** → **the Treasury**: a sealed 2×2 of PAS, teleport-in only, a **Council Guard** escorts you out (and confiscates if you grabbed loot you can't account for).
 - **`region.c`** gas clouds / force fields / engulf regions → **🟡** (gas trap exists) → MEV gas clouds, "blacklist regions".
-- **`light.c`, `vision.c`** line-of-sight + light radius + lit rooms + dark areas → **🟡** FOV exists (shadowcasting, radius 8, union FOV for co-op) but **no light sources, no lit rooms, no darkness/blindness model**. **Plan (Phase 7):** lamps/candles ("block explorers"), lit vs dark rooms, blindness (no vision), infravision/telepathy.
+- **`light.c`, `vision.c`** line-of-sight + light radius + lit rooms + dark areas → **✅ (Phase 7h — the full light/darkness model).** Rooms are individually **lit or dark** (`Level.lit`, a flood-filled glow around ~55% of room centers; a lit room is seen whole when you can see into it, even through a doorway). In the **dark** (dark rooms + corridors) your sight collapses to a **~2-tile** bubble unless you carry a **lit block explorer** (an oil lamp, `apply` to light/douse → radius 8); the **Foot of the Relay, Gehennom, and Moloch's Sanctum are wholly dark** (and caves/mazes read dark too). Monsters still sense you within ~5 tiles so darkness is no free pass; a one-time hint + a `Lit` HUD flag guide the player. Blindness already shrinks sight to arm's reach (telepathy still senses minds). Still ❌: infravision, fuel burn on lamps.
 - **`stairs.c`, `do.c`** stairs, trapdoors, level teleport, branch stairs → **✅ (Phase 16).** Up/down stairs + branch stairs + portal "calls" + reorg-trap teleport + **level persistence** (revisit-identical levels, Phase 15). Still ❌: trapdoors as terrain, `#overview`.
 
 ### C. Traps — **`trap.c`**

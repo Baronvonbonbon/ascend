@@ -18,6 +18,7 @@ export class Level {
   tiles: TileType[][] = [];
   explored: boolean[][] = [];    // viewer 0 (host / solo) explored memory
   exploredCo: boolean[][] = [];  // viewer 1 (co-op companion) — its own fog memory
+  lit: boolean[][] = [];         // lit tiles (in lit rooms) — visible at any LOS distance; dark tiles need a light
   items: FloorItem[] = [];
   graves: { x: number; y: number; label: string }[] = []; // bones of fallen heroes
   traps: Trap[] = [];
@@ -43,10 +44,12 @@ export class Level {
       this.tiles[y] = [];
       this.explored[y] = [];
       this.exploredCo[y] = [];
+      this.lit[y] = [];
       for (let x = 0; x < width; x++) {
         this.tiles[y][x] = "wall";
         this.explored[y][x] = false;
         this.exploredCo[y][x] = false;
+        this.lit[y][x] = false;
       }
     }
     if (kind === "bigroom") this.generateBigRoom();
@@ -351,22 +354,40 @@ export class Level {
   isVisible(x: number, y: number): boolean { return this.visible.has(`${x},${y}`); }
   isVisibleCo(x: number, y: number): boolean { return this.visibleCo.has(`${x},${y}`); }
 
-  /** Recompute one viewer's field of view from a viewpoint (separate fog per player in co-op). */
-  computeFOV(px: number, py: number, radius = 8): void { this.computeInto(this.visible, this.explored, px, py, radius); }
-  computeFOVCo(px: number, py: number, radius = 8): void { this.computeInto(this.visibleCo, this.exploredCo, px, py, radius); }
+  /** Recompute one viewer's field of view. `lightRadius` = how far you see dark tiles (carried light /
+   *  2 in the dark / 1 blind); when `useLit`, lit-room tiles are visible at any LOS distance. */
+  computeFOV(px: number, py: number, lightRadius = 8, useLit = true): void { this.computeInto(this.visible, this.explored, px, py, lightRadius, useLit); }
+  computeFOVCo(px: number, py: number, lightRadius = 8, useLit = true): void { this.computeInto(this.visibleCo, this.exploredCo, px, py, lightRadius, useLit); }
 
-  /** Add a viewpoint to viewer 0's set without clearing (union FOV — solo multi-viewpoint helpers). */
-  addFOV(px: number, py: number, radius = 8): void {
-    this.fov.compute(px, py, radius, (x: number, y: number, _r: number, vis: number) => {
-      if (vis > 0 && this.tiles[y]?.[x]) { this.visible.add(`${x},${y}`); this.explored[y][x] = true; }
+  private computeInto(set: Set<string>, explored: boolean[][], px: number, py: number, lightRadius: number, useLit: boolean): void {
+    set.clear();
+    const cap = useLit ? 11 : lightRadius; // shadowcast far enough to reveal a lit room you can see into
+    this.fov.compute(px, py, cap, (x: number, y: number, r: number, vis: number) => {
+      if (vis <= 0 || !this.tiles[y]?.[x]) return;
+      if (r <= lightRadius || (useLit && this.lit[y][x])) { set.add(`${x},${y}`); explored[y][x] = true; }
     });
   }
 
-  private computeInto(set: Set<string>, explored: boolean[][], px: number, py: number, radius: number): void {
-    set.clear();
-    this.fov.compute(px, py, radius, (x: number, y: number, _r: number, vis: number) => {
-      if (vis > 0 && this.tiles[y]?.[x]) { set.add(`${x},${y}`); explored[y][x] = true; }
-    });
+  /** Light a fraction of the rooms (NetHack lit/dark rooms). A lit room (a flood-filled pool around a
+   *  lit center) is visible whole when you can see into it; dark rooms + corridors need a carried light.
+   *  `litChance` 0 = a wholly dark level (the dread depths); the big room is always lit. */
+  markLighting(litChance: number): void {
+    if (this.kind === "bigroom") { for (const f of this.floors) this.lit[f.y][f.x] = true; return; }
+    for (const c of this.roomCenters) {
+      if (ROT.RNG.getUniform() >= litChance) continue;
+      // flood-fill the open area around the center (bounded) — the room glows; corridors stay dark
+      const seen = new Set<string>([`${c.x},${c.y}`]); const q = [{ x: c.x, y: c.y, d: 0 }];
+      while (q.length) {
+        const cur = q.shift()!; this.lit[cur.y][cur.x] = true;
+        if (cur.d >= 6) continue;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]) {
+          const nx = cur.x + dx, ny = cur.y + dy, k = `${nx},${ny}`;
+          if (seen.has(k)) continue; seen.add(k);
+          const t = this.tiles[ny]?.[nx];
+          if (t && t !== "wall" && t !== "doorClosed" && t !== "doorLocked" && t !== "doorHidden") q.push({ x: nx, y: ny, d: cur.d + 1 });
+        }
+      }
+    }
   }
 
   randomFloor(): { x: number; y: number } {

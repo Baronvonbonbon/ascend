@@ -529,6 +529,10 @@ export class Game {
         else if (this.player.depth >= GEHENNOM_BOTTOM) this.placeJamAndBoss();
       }
     }
+    // Lit vs dark rooms (NetHack): the dread depths (Foot of the Relay + Gehennom + Sanctum) are wholly
+    // dark; elsewhere ~half the rooms are lit. Caves/mazes have few room centers, so they read dark too.
+    const litChance = this.plane > 0 ? 0.5 : this.acting.depth >= MAX_DEPTH ? 0 : 0.55;
+    this.level.markLighting(litChance);
     this.placeParty();
     this.rebuildSchedule();
   }
@@ -750,11 +754,25 @@ export class Game {
     const fovOn = (p: Player, co: boolean) => {
       const lvl = p.floorKey === this.activeKey ? this.level : this.slots.get(p.floorKey)?.level;
       if (!lvl) return; // floor not generated yet (mid-build) — the transition will recompute
-      const r = p.blind > 0 ? 1 : 8; // blindness shrinks sight to arm's reach
-      if (co) lvl.computeFOVCo(p.x, p.y, r); else lvl.computeFOV(p.x, p.y, r);
+      // blind → grope adjacent (lit rooms don't help); else a carried light gives full radius, the dark ~2.
+      const lightRadius = p.blind > 0 ? 1 : this.hasLight(p) ? 8 : 2;
+      const useLit = p.blind === 0; // lit rooms reveal whole only while sighted
+      if (co) lvl.computeFOVCo(p.x, p.y, lightRadius, useLit); else lvl.computeFOV(p.x, p.y, lightRadius, useLit);
     };
     fovOn(this.player, false);
     if (this.coPlayer) fovOn(this.coPlayer, true);
+    // a one-time nudge the first time you're groping in the dark with no light
+    const lp = this.localPlayer;
+    if (!this.darkHinted && lp.alive && lp.blind === 0 && !this.hasLight(lp) && lp.floorKey === this.activeKey && this.level.lit[lp.y]?.[lp.x] === false) {
+      this.darkHinted = true;
+      this.log.add("It's dark here — you can see only a step or two. A lit block explorer (an oil lamp; apply it) would light the way.", "sys", lp);
+    }
+  }
+  private darkHinted = false;
+
+  /** A carried, lit light source (a block explorer / the Genesis Candelabrum) gives full sight in the dark. */
+  hasLight(p: Player): boolean {
+    return p.inventory.items.some((it) => (it.type.id === "lamp" || it.type.id === "candelabrum") && it.lit === true);
   }
 
   descend(): void {
@@ -3622,6 +3640,7 @@ export class Game {
       (p.silenced > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Silent` : "") +
       (p.lycanthrope ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Lycan` : "") +
       (p.intrinsics.has("fast") ? `%c{${COLORS.dim}}  %c{${COLORS.good}}Fast` : "") +
+      (this.hasLight(p) ? `%c{${COLORS.dim}}  %c{${COLORS.gold}}Lit` : "") +
       (p.hasJam ? `%c{${COLORS.dim}}  %c{${COLORS.gold}}✦JAM — ASCEND (<)` : this.jamStolen ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}JAM STOLEN — slay the Censor!` : `%c{${COLORS.dim}}  ${this.gehennomOpen ? `JAM: depth ${GEHENNOM_BOTTOM}` : `Invoke @ depth ${MAX_DEPTH}`}`)
     );
   }
