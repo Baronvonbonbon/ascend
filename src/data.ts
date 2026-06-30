@@ -282,6 +282,7 @@ export const MONSTERS: MonsterDef[] = [
   { name: "a gag enforcer",    fname: "a silence wraith", ch: "q", fg: "#8090a0", hp: 18, dmg: [2, 4], ai: "chase",  minDepth: 7, weight: 2, speed: 95, silences: true },
   { name: "a MEV bot",         fname: "a giant bat",     ch: "b", fg: "#80c060", hp: 6,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 3, speed: 135 },
   { name: "a slashing daemon", fname: "a giant serpent", ch: "S", fg: "#e06060", hp: 14, dmg: [4, 8], ai: "chase",  minDepth: 5, weight: 2, muse: true },
+  { name: "a darkpool eel",    fname: "an eel",          ch: ";", fg: "#40a080", hp: 14, dmg: [4, 9], ai: "chase",  minDepth: 5, weight: 2, speed: 110 },
   { name: "a were-validator",  fname: "a werewolf",      ch: "d", fg: "#c08040", hp: 18, dmg: [3, 6], ai: "chase",  minDepth: 6, weight: 2, speed: 110, infects: true },
   { name: "a sudo conjurer",   fname: "a summoner cultist", ch: "&", fg: "#c080e0", hp: 16, dmg: [2, 4], ai: "chase",  minDepth: 6, weight: 2, summons: true },
   { name: "a hex caster",      fname: "a sorcerer",      ch: "H", fg: "#b060d0", hp: 18, dmg: [3, 6], ai: "chase",  minDepth: 7, weight: 2, zaps: "sleep" },

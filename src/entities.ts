@@ -750,12 +750,9 @@ export class Player extends Entity {
     const nx = this.x + dx, ny = this.y + dy;
     const foe = this.game.monsterAt(nx, ny);
     if (foe && !foe.peaceful) { this.game.attack(this, foe); return this.endTurn(); } // only hostiles get hit
-    // Bumping your co-op partner: blocked in pure co-op, a strike under friendly-fire / race.
+    // Your co-op partner is a friendly NPC: you slip past (swap), never auto-attack. To deliberately
+    // turn on them, Kick (K) into them; rays/AoE still strike anyone caught in the line of fire.
     const ally = this.game.otherPlayerAt(this, nx, ny);
-    if (ally) {
-      if (this.game.coopMode === "coop") return false;
-      this.game.attack(this, ally); return this.endTurn();
-    }
     // Doors: a closed one you push open (a turn, then walk through); a locked one you kick.
     const tile = this.game.level.tileAt(nx, ny);
     if (tile === "doorClosed") {
@@ -783,8 +780,9 @@ export class Player extends Entity {
         this.game.log.add("You heave the boulder forward.", "dim");
       } else { this.game.log.add("The boulder won't budge — break it (a fire ray) or go around.", "dim"); return false; }
     }
-    // Displace — slip past a peaceful NPC (the Marketmaker) or your nominator; never attack a friend.
+    // Displace — slip past a peaceful NPC (the Marketmaker), your nominator, or your co-op partner.
     if (foe && foe.peaceful) { foe.x = this.x; foe.y = this.y; this.game.log.add(`You slip past ${foe.name}.`, "dim"); }
+    if (ally) { ally.x = this.x; ally.y = this.y; this.game.log.add(`You slip past ${ally.name}.`, "dim", this); }
     const pet = this.game.pet;
     if (pet && pet.alive && pet.x === nx && pet.y === ny) { pet.x = this.x; pet.y = this.y; }
     this.x = nx; this.y = ny;

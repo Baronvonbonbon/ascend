@@ -755,7 +755,18 @@ export class Game {
     return live.reduce((a, b) => (d(b) < d(a) ? b : a));
   }
   /** Separate fog per player: each sees only its own FOV, computed on its OWN floor's level. */
+  /** Co-op: two adventurers never share a tile. Slipping past swaps them cleanly; but if anything else
+   *  (a teleport landing on a partner, say) collides them, the HOST keeps the tile and the GUEST yields
+   *  to a free neighbour — a deterministic tie-break so both clients agree on the final position. */
+  resolvePlayerOverlap(): void {
+    const h = this.player, g = this.coPlayer; // names are stable across clients: this.player = "Host"
+    if (!g || !g.alive || !h.alive || h.floorKey !== g.floorKey || h.x !== g.x || h.y !== g.y) return;
+    const spot = this.adjacentFree(g.x, g.y);
+    if (spot) { g.x = spot.x; g.y = spot.y; }
+  }
+
   recomputeFOV(): void {
+    if (this.coPlayer) this.resolvePlayerOverlap();
     const fovOn = (p: Player, co: boolean) => {
       const lvl = p.floorKey === this.activeKey ? this.level : this.slots.get(p.floorKey)?.level;
       if (!lvl) return; // floor not generated yet (mid-build) — the transition will recompute
@@ -1409,7 +1420,7 @@ export class Game {
       const cells = this.roomCells(c.x, c.y);
       const open = cells.filter((p) => this.level.tileAt(p.x, p.y) === "floor" && !this.monsterAt(p.x, p.y) && !this.level.itemAt(p.x, p.y) && !this.playerAt(p.x, p.y));
       if (cells.length < 6 || open.length < 4) continue;
-      const kind = ROT.RNG.getItem(["temple", "zoo", "vault", "morgue", "oracle", "barracks", "beehive", "lephall"])!;
+      const kind = ROT.RNG.getItem(["temple", "zoo", "vault", "morgue", "oracle", "barracks", "beehive", "lephall", "swamp"])!;
       if (kind === "temple") this.makeTemple(c, open);
       else if (kind === "zoo") this.makeZoo(open);
       else if (kind === "morgue") this.makeMorgue(open);
@@ -1417,6 +1428,7 @@ export class Game {
       else if (kind === "barracks") this.makeBarracks(open);
       else if (kind === "beehive") this.makeBeehive(open);
       else if (kind === "lephall") this.makeLeprechaunHall(open);
+      else if (kind === "swamp") this.makeSwamp(c, open);
       else this.makeVault(c, open);
       return;
     }
@@ -1494,6 +1506,21 @@ export class Game {
       else if (r < 0.78 && !this.level.itemAt(p.x, p.y)) this.level.items.push({ x: p.x, y: p.y, type: GOLD, coins: ROT.RNG.getUniformInt(20, 60) });
     }
     if (n) this.log.add("Coins glint and tiny feet scatter — a leprechaun hall of airdrop farmers, hoarding gold.", "good");
+  }
+
+  /** A swamp: brackish bog pools (impassable water) churning with eels and serpents, a prize in the muck. */
+  private makeSwamp(center: { x: number; y: number }, open: { x: number; y: number }[]): void {
+    const eel = MONSTERS.find((m) => m.ch === ";") ?? this.pickMonster(this.player.depth);
+    const serpent = MONSTERS.find((m) => m.fname === "a giant serpent") ?? eel;
+    let beasts = 0;
+    for (const p of open) {
+      if (p.x === center.x && p.y === center.y) continue; // keep the core dry so the room stays crossable
+      const r = ROT.RNG.getUniform();
+      if (r < 0.3 && this.level.tileAt(p.x, p.y) === "floor" && !this.level.itemAt(p.x, p.y) && !(p.x === this.player.x && p.y === this.player.y)) this.level.tiles[p.y][p.x] = "water"; // a bog pool
+      else if (r < 0.5) { this.monsters.push(new Monster(this, ROT.RNG.getUniform() < 0.55 ? eel : serpent, p.x, p.y)); beasts++; }
+      else if (r < 0.62 && !this.level.itemAt(p.x, p.y)) this.level.items.push({ x: p.x, y: p.y, type: pickItemType(), buc: rollBuc() });
+    }
+    if (beasts) this.log.add("A dank, brackish reek wells through the wall — a drowned swamp, its bog pools (}) churning with eels and serpents.", "bad");
   }
 
   /** A zoo: a room packed with monsters guarding scattered loot (an airdrop trap room). */
@@ -1580,6 +1607,9 @@ export class Game {
   /** `K` in a direction — kick a foe (damage + maybe stun/knockback), a boulder, a door, or a wall. */
   kick(p: Player, dx: number, dy: number): boolean {
     const nx = p.x + dx, ny = p.y + dy;
+    // Kicking your co-op partner is the deliberate way to turn on them — a real attack.
+    const ally = this.otherPlayerAt(p, nx, ny);
+    if (ally) { this.attack(p, ally); return true; }
     const foe = this.monsterAt(nx, ny);
     if (foe) {
       if (foe.def.keeper && foe.peaceful) { foe.peaceful = false; foe.fg = "#ff5030"; this.log.add("You kick the Marketmaker — \"Assault!\" It turns lethal.", "bad"); }
