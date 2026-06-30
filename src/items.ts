@@ -3,7 +3,7 @@
 import * as ROT from "rot-js";
 import { getFlavor, nameOf } from "./flavor";
 
-export type ItemKind = "weapon" | "armor" | "food" | "potion" | "scroll" | "amulet" | "ring" | "wand" | "tool" | "spellbook";
+export type ItemKind = "weapon" | "armor" | "food" | "potion" | "scroll" | "amulet" | "ring" | "wand" | "tool" | "spellbook" | "gem";
 
 /** Armor occupies one of seven body slots — wear one piece in each. */
 export type ArmorSlot = "shirt" | "body" | "cloak" | "helm" | "gloves" | "boots" | "shield";
@@ -50,6 +50,7 @@ export interface ItemType {
   effect?: EffectId;       // potion / scroll
   teaches?: string;        // spellbook — the spell id it studies into
   skill?: string;          // weapon skill class (#enhance) — "blade" / "blunt"
+  value?: number;          // gem — gold value when sold to the Marketmaker (worthless glass ≈ 0)
   weight: number;          // spawn weight
 }
 
@@ -114,6 +115,16 @@ export const ITEMS: ItemType[] = [
   { id: "vault",   kind: "tool", name: "a multisig vault",    fname: "a bag of holding",    ch: "(", fg: "#d0c060", weight: 2 }, // bag of holding — #loot to stash beyond the pack
   { id: "trickbag", kind: "tool", name: "a faucet bag",        fname: "a bag of tricks",     ch: "(", fg: "#c060c0", weight: 2 }, // bag of tricks — apply to spit out a monster (charged)
   { id: "hodlstone", kind: "tool", name: "a HODL stone",      fname: "a luckstone",         ch: "*", fg: "#e0d040", weight: 2 }, // luckstone (blessed) / loadstone (cursed)
+  { id: "touchstone", kind: "tool", name: "an appraiser's loupe", fname: "a touchstone",     ch: "(", fg: "#b0b0c0", weight: 2 }, // apply to appraise (identify) your gems
+  // ── gems / tokens ── * (real vs worthless glass — randomised appearance; appraise or sell to learn which) ──
+  { id: "gem_diamond",  kind: "gem", name: "a blue-chip token",      fname: "a diamond",   ch: "*", fg: "#e8f0ff", value: 400, weight: 1 },
+  { id: "gem_ruby",     kind: "gem", name: "a governance token",     fname: "a ruby",      ch: "*", fg: "#ff5060", value: 250, weight: 1 },
+  { id: "gem_emerald",  kind: "gem", name: "a yield token",          fname: "an emerald",  ch: "*", fg: "#40e080", value: 180, weight: 1 },
+  { id: "gem_sapphire", kind: "gem", name: "a liquid-staking token", fname: "a sapphire",  ch: "*", fg: "#4080ff", value: 150, weight: 1 },
+  { id: "gem_glass1",   kind: "gem", name: "a worthless airdrop",    fname: "a worthless piece of glass", ch: "*", fg: "#c0c0d0", value: 0, weight: 1 },
+  { id: "gem_glass2",   kind: "gem", name: "a worthless airdrop",    fname: "a worthless piece of glass", ch: "*", fg: "#c0c0d0", value: 0, weight: 1 },
+  { id: "gem_glass3",   kind: "gem", name: "a worthless airdrop",    fname: "a worthless piece of glass", ch: "*", fg: "#c0c0d0", value: 0, weight: 1 },
+  { id: "gem_glass4",   kind: "gem", name: "a worthless airdrop",    fname: "a worthless piece of glass", ch: "*", fg: "#c0c0d0", value: 0, weight: 1 },
   // ── quest artifacts ── (Phase 13c — one per archetype, won from your nemesis; never random-spawn)
   { id: "art_sceptre",  kind: "weapon", name: "the Block Sceptre",    fname: "the Sceptre of Might",   ch: ")", fg: "#ffd040", dmg: [6, 12], skill: "blunt", weight: 0 },
   { id: "art_aegis",    kind: "armor",  name: "the Bonded Aegis",     fname: "the Mirror Aegis",       ch: "[", fg: "#80c0e0", ac: 4, slot: "shield", weight: 0 },
@@ -140,6 +151,9 @@ const POTION_LOOKS_F = ["a ruby potion", "a murky potion", "a glowing vial", "a 
 const POTION_LOOKS_P = ["a fizzy potion", "a murky potion", "a glowing vial", "a smoking flask", "a bubbling phial"];
 const SCROLL_LOOKS_F = ["a scroll labeled XYZZY", "a scroll labeled ELBERETH", "a scroll labeled NR 9", "a scroll labeled FOOBAR", "a scroll labeled VENZAR", "a scroll labeled THARR", "a scroll labeled JUYED"];
 const SCROLL_LOOKS_P = ["a scroll labeled XYZZY", "a scroll labeled ELBERETH", "a scroll labeled HODL", "a scroll labeled WAGMI", "a scroll labeled GM", "a scroll labeled DYOR", "a scroll labeled REKT"];
+const GEM_COLORS = ["white", "red", "green", "blue", "yellow", "violet", "orange", "black"];
+const GEM_LOOKS_F = GEM_COLORS.map((c) => `a ${c} gem`);
+const GEM_LOOKS_P = GEM_COLORS.map((c) => `a ${c} token`);
 
 /** Per-GAME randomised appearances — the world's potions/scrolls look the same to everyone.
  *  Shared by all adventurers; only *knowledge* of what they are is per-character (Idents). */
@@ -147,17 +161,19 @@ export class Appearances {
   private apIdx = new Map<string, number>(); // id → index into the look list (resolved to fantasy/polkadot at display time)
 
   constructor() {
-    const potions = ITEMS.filter((i) => i.kind === "potion");
-    const scrolls = ITEMS.filter((i) => i.kind === "scroll");
-    ROT.RNG.shuffle(potions.map((_, i) => i)).forEach((idx, i) => this.apIdx.set(potions[i].id, idx));
-    ROT.RNG.shuffle(scrolls.map((_, i) => i)).forEach((idx, i) => this.apIdx.set(scrolls[i].id, idx));
+    for (const kind of ["potion", "scroll", "gem"] as const) {
+      const list = ITEMS.filter((i) => i.kind === kind);
+      ROT.RNG.shuffle(list.map((_, i) => i)).forEach((idx, i) => this.apIdx.set(list[i].id, idx));
+    }
   }
 
   look(t: ItemType): string {
     const idx = this.apIdx.get(t.id) ?? 0;
     const fant = getFlavor() === "fantasy";
-    const list = t.kind === "potion" ? (fant ? POTION_LOOKS_F : POTION_LOOKS_P) : (fant ? SCROLL_LOOKS_F : SCROLL_LOOKS_P);
-    return list[idx] ?? (t.kind === "potion" ? "a strange potion" : "a strange scroll");
+    const list = t.kind === "potion" ? (fant ? POTION_LOOKS_F : POTION_LOOKS_P)
+      : t.kind === "gem" ? (fant ? GEM_LOOKS_F : GEM_LOOKS_P)
+      : (fant ? SCROLL_LOOKS_F : SCROLL_LOOKS_P);
+    return list[idx] ?? (t.kind === "potion" ? "a strange potion" : t.kind === "gem" ? "a strange gem" : "a strange scroll");
   }
 }
 
@@ -170,7 +186,7 @@ export class Idents {
   private look(t: ItemType): string { return this.appearances.look(t); }
 
   isKnown(t: ItemType): boolean {
-    return (t.kind !== "potion" && t.kind !== "scroll") || this.known.has(t.id);
+    return (t.kind !== "potion" && t.kind !== "scroll" && t.kind !== "gem") || this.known.has(t.id);
   }
   learn(t: ItemType): void { this.known.add(t.id); }
   name(t: ItemType): string {
@@ -179,7 +195,7 @@ export class Idents {
 
   /** The discoveries screen (`\`): per-class lists of identified potion/scroll types. */
   discoveries(): { kind: string; entries: { name: string; look: string }[]; unknown: number }[] {
-    return (["potion", "scroll"] as const).map((kind) => {
+    return (["potion", "scroll", "gem"] as const).map((kind) => {
       const all = ITEMS.filter((i) => i.kind === kind);
       const entries = all.filter((t) => this.known.has(t.id)).map((t) => ({ name: nameOf(t), look: this.look(t) }));
       return { kind, entries, unknown: all.length - entries.length };

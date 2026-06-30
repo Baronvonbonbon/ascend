@@ -433,6 +433,7 @@ export class Player extends Entity {
         this.game.lootMenu(item);
         return false;
       }
+      if (id === "touchstone") return this.game.appraiseGems(this) ? this.endTurn() : false;
       if (id === "lamp") {
         item.lit = !item.lit;
         this.game.log.add(item.lit ? "You light the block explorer — its glow pushes back the dark." : "You douse the block explorer.", item.lit ? "good" : "dim");

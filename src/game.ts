@@ -1664,18 +1664,53 @@ export class Game {
     return true;
   }
 
+  /** Apply a touchstone (appraiser's loupe): identify every unappraised gem in the pack. */
+  appraiseGems(p: Player): boolean {
+    const seen = new Set<string>();
+    const gems = p.inventory.items.filter((it) => it.type.kind === "gem" && !this.ident.isKnown(it.type));
+    if (!gems.length) { this.log.add("You have no unappraised gems.", "dim"); return false; }
+    for (const g of gems) {
+      if (seen.has(g.type.id)) continue; seen.add(g.type.id);
+      this.ident.learn(g.type);
+      const real = (g.type.value ?? 0) > 0;
+      this.log.add(`You rub it on the loupe — it's ${this.ident.name(g.type)}${real ? " (genuine!)" : " (worthless glass)"}.`, real ? "good" : "dim");
+    }
+    return true;
+  }
+
+  /** The Marketmaker appraises + buys every gem you carry: real ones for their value, glass for a pittance.
+   *  Returns the appraisal line (and pays gold), or null if you carry no gems. */
+  private sellGems(p: Player): string | null {
+    const gems = p.inventory.items.filter((it) => it.type.kind === "gem");
+    if (!gems.length) return null;
+    let gold = 0; const real: string[] = []; let glass = 0;
+    for (const g of gems) {
+      this.ident.learn(g.type);
+      const v = g.type.value ?? 0;
+      if (v > 0) { gold += v; real.push(this.ident.name(g.type)); } else { glass++; gold += 1; }
+      p.inventory.remove(g);
+    }
+    p.gold += gold;
+    this.breakConduct(p, "bankless"); // dealing at the market ends Bankless
+    const parts: string[] = [];
+    if (real.length) parts.push(`${real.join(", ")} — genuine`);
+    if (glass) parts.push(`${glass} worthless ${glass > 1 ? "shards" : "shard"} of glass`);
+    return `The Marketmaker appraises your stones (${parts.join("; ")}) and slides ${gold} gold across. (${p.gold} total)`;
+  }
+
   /** `c` — chat with an adjacent monster. A free social action; lore, banter, or a taunt. */
   chat(m: Monster): void {
     const d = m.def;
     let line: string;
     if (d.keeper) {
-      line = m.peaceful
-        ? ROT.RNG.getItem([
+      const sale = m.peaceful ? this.sellGems(this.acting) : null; // a peaceful keeper appraises + buys any gems you carry
+      line = !m.peaceful
+        ? "\"THIEF! You'll settle this in blood, not blocks!\""
+        : sale ?? ROT.RNG.getItem([
             "\"Welcome, anon. Pay the bill and the goods are yours — lift them and I'll have your keys.\"",
             "\"Coin on the counter, goods in your pack. No credit, no exceptions.\"",
             "\"I make markets in everything but trust. That, you bring yourself.\"",
-          ])!
-        : "\"THIEF! You'll settle this in blood, not blocks!\"";
+          ])!;
     } else if (d.boss) {
       line = ROT.RNG.getItem([
         `${cap(m.name)} regards you coldly: \"You are an unconfirmed transaction. I am finality.\"`,
@@ -2973,7 +3008,7 @@ export class Game {
     }
     if (!any) this.log.add("Nothing identified yet — quaff, read, or use a scroll of identify.", "dim");
     const unknown = groups.reduce((n, g) => n + g.unknown, 0);
-    if (unknown) this.log.add(`${unknown} potion/scroll type(s) still a mystery.`, "dim");
+    if (unknown) this.log.add(`${unknown} potion/scroll/gem type(s) still a mystery.`, "dim");
   }
 
   showInventory(): void {
