@@ -146,9 +146,7 @@ export class Player extends Entity {
   private pendingKick = false;              // kick (K) — choosing a direction
   private pendingName: Item | null = null;  // name (N) — the item being labelled
   private nameBuf = "";                     // accumulating typed text for #name
-  composing = false;                        // signal (") — composing a message to the co-op partner
-  msgBuf = "";                              // accumulating the signal text (≤60 chars)
-  signalledThisTurn = false;                // one free signal per turn (reset in endTurn)
+  signalledThisTurn = false;                // co-op chat rate limit: one message per your own turn (reset in endTurn)
   private castMenu: string[] = [];          // spell ids in the current cast menu order
   private resolveTurn: (() => void) | null = null;
   // Interleaved co-op turns: keys are queued and consumed only on this player's turn.
@@ -290,7 +288,6 @@ export class Player extends Entity {
     if (this.pendingClose) return this.resolveCloseDir(e);
     if (this.pendingKick) return this.resolveKickDir(e);
     if (this.pendingName) return this.resolveName(e);
-    if (this.composing) return this.resolveSignal(e);
     if (this.pendingSpell) return this.resolveCast(e);
     if (this.pending) return this.resolveSelection(e);
     const mv = MOVES[e.key];
@@ -339,7 +336,6 @@ export class Player extends Entity {
       case "Z": return this.startCast();
       case "O": return this.game.offerCorpse(this) ? this.endTurn() : false;
       case "T": return this.startSelect("takeoff");
-      case "\"": return this.startSignal(); // co-op: call out to your partner (degrades with distance/walls)
       case "E": return this.game.engrave() ? this.endTurn() : false;
       case "F": return this.startSelect("forge");
     }
@@ -561,29 +557,6 @@ export class Player extends Entity {
   }
 
   /** Open the signal composer — a free action (one per turn) to call out to the co-op partner. */
-  private startSignal(): boolean {
-    if (this.signalledThisTurn) { this.game.log.add("Your voice is spent for this turn.", "dim"); return false; }
-    this.composing = true; this.msgBuf = "";
-    this.game.log.add("Signal: _  (type ≤60 · Enter sends · Esc cancels)", "sys");
-    return false; // free action — does not consume the turn
-  }
-
-  private resolveSignal(e: KeyboardEvent): boolean {
-    if (e.key === "Escape") { this.composing = false; this.game.log.add("You hold your tongue.", "dim"); return false; }
-    if (e.key === "Enter") {
-      this.composing = false;
-      const msg = this.msgBuf.trim();
-      if (msg) { this.game.sendSignal(this, msg); this.signalledThisTurn = true; }
-      else this.game.log.add("You say nothing.", "dim");
-      return false; // still your turn — signalling is free
-    }
-    if (e.key === "Backspace") this.msgBuf = this.msgBuf.slice(0, -1);
-    else if (e.key.length === 1 && this.msgBuf.length < 60) this.msgBuf += e.key;
-    else return false;
-    this.game.log.add(`Signal: ${this.msgBuf}_`, "sys");
-    return false;
-  }
-
   private resolveThrowDir(e: KeyboardEvent): boolean {
     const item = this.pendingThrow!;
     this.pendingThrow = null;

@@ -201,7 +201,7 @@ export class Game {
     for (const line of grayPaper()) this.log.add(line, "dim", "both");
     if (this.coop) this.log.add(`Co-op (${this.coopMode}) — Host and Guest share this dungeon. Find the JAM together.`, "sys", "both");
     else this.log.add("Your nominator (d) pads at your heels — it backs you, and bites for you.", "dim");
-    this.log.add(`Keys: move · , pick up · o open chest · @ sheet · p buy · F forge · P pray · O offer · q faucet · s search/sit · z zap · Z cast · t throw · a apply · E engrave${this.coop ? ' · " signal partner' : ""} · < > stairs · i/w/W/q/r/e/d items.`, "dim", "both");
+    this.log.add(`Keys: move · , pick up · o open chest · @ sheet · p buy · F forge · P pray · O offer · q faucet · s search/sit · z zap · Z cast · t throw · a apply · E engrave${this.coop ? ' · " chat (or the box below)' : ""} · < > stairs · i/w/W/q/r/e/d items.`, "dim", "both");
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
@@ -551,23 +551,41 @@ export class Game {
   /** Render viewer index for the local player (0 = this.player, 1 = the companion). */
   get localViewer(): 0 | 1 { return this.netRole === "guest" ? 1 : 0; }
 
-  /** A free once-per-turn shout to the partner: it degrades with distance + walls, and a different
-   *  floor swallows it entirely. The sender always hears its own call in full. */
-  sendSignal(from: Player, msg: string): void {
-    this.log.add(`You signal: "${msg}"`, "sys", from);
-    if (this.coop && from === this.localPlayer) this.showChatBanner(`You: ${msg}`, true); // confirm my own call
-    const R = 14; // earshot radius (Chebyshev)
-    for (const to of this.allPlayers()) {
-      if (to === from || !to.alive) continue;
-      if (to.floorKey !== from.floorKey) { this.log.add("…your call goes unheard — your partner is on another floor.", "dim", from); continue; }
+  /** Send a chat message to the partner — OUT OF BAND: it never enters the lockstep turn stream and
+   *  never touches the sim RNG, so it can't desync. Rate-limited to one message per your own turn. */
+  submitChat(text: string): void {
+    const msg = text.trim().slice(0, 60);
+    if (!msg || !this.coop || this.netRole === "solo" || this.over) return;
+    if (this.localPlayer.signalledThisTurn) { this.showChatBanner("(one message per turn — make a move first)", true); return; }
+    this.localPlayer.signalledThisTurn = true;
+    this.log.add(`You signal: "${msg}"`, "sys");
+    this.showChatBanner(`You: ${msg}`, true);
+    this.peer?.send({ t: "chat", text: msg });
+  }
+
+  /** Receive the partner's chat. Degraded HERE (recipient-side) by distance + line-of-sight — using
+   *  Math.random for the display mask (NOT the sim RNG) and our own view of both avatars, so it's
+   *  purely cosmetic and sim-neutral. */
+  private receiveChat(text: string): void {
+    const from = this.remotePlayer, to = this.localPlayer;
+    if (!from || !to) return;
+    let display: string;
+    if (from.floorKey !== to.floorKey) display = "… (unheard — another floor)";
+    else {
       const dist = Math.max(Math.abs(from.x - to.x), Math.abs(from.y - to.y));
-      if (dist > R) { this.log.add("…too far — your call dies in the dark.", "dim", from); continue; }
-      let keep = Math.max(0, Math.min(1, 1 - dist / R)); // closer = clearer
-      if (!this.hasLineOfSight(from.x, from.y, to.x, to.y)) keep *= 0.45; // walls muffle it (both on this floor → this.level)
-      const degraded = [...msg].map((ch) => (ch === " " ? " " : ROT.RNG.getUniform() < keep ? ch : ".")).join("");
-      this.log.add(`Partner signals: "${degraded}"`, "sys", to);
-      if (to === this.localPlayer) this.showChatBanner(`Partner: ${degraded}`, false); // surface the partner's call over the map
+      const R = 14; // earshot (Chebyshev)
+      if (dist > R) display = "… (too far — lost in the dark)";
+      else {
+        let keep = Math.max(0, Math.min(1, 1 - dist / R)); // closer = clearer
+        const resume = this.activeKey; // LOS reads this.level — load the shared floor, then restore
+        this.setActive(to.floorKey);
+        if (!this.hasLineOfSight(from.x, from.y, to.x, to.y)) keep *= 0.45; // walls muffle it
+        if (this.activeKey !== resume) this.setActive(resume);
+        display = [...text].map((ch) => (ch === " " ? " " : Math.random() < keep ? ch : ".")).join("");
+      }
     }
+    this.log.add(`Partner signals: "${display}"`, "sys");
+    this.showChatBanner(`Partner: ${display}`, false);
   }
 
   /** Flash a chat signal as a banner over the top of the map, then fade it. Clean opacity fade in/out. */
@@ -588,6 +606,18 @@ export class Game {
     requestAnimationFrame(() => { if (this.chatBannerEl) this.chatBannerEl.style.opacity = "1"; }); // fade in
     if (this.chatBannerTimer != null) clearTimeout(this.chatBannerTimer);
     this.chatBannerTimer = window.setTimeout(() => { if (this.chatBannerEl) this.chatBannerEl.style.opacity = "0"; }, 4200); // fade out
+  }
+
+  /** Reveal/hide the co-op chat bar (the DOM input below the log). */
+  private showChatBar(on: boolean): void {
+    const bar = document.getElementById("chatbar");
+    if (bar) (bar as HTMLElement).hidden = !on;
+  }
+
+  /** Focus the chat input (the `"` key shortcut on PC; the Send button / tapping it works on mobile). */
+  private focusChat(): void {
+    const inp = document.getElementById("chat-input") as HTMLInputElement | null;
+    if (inp) inp.focus();
   }
 
   /** Live badge of the local player's queued-but-unexecuted actions (count + glyph row). ⌫ pops LIFO. */
@@ -3004,6 +3034,7 @@ export class Game {
     this.netRole = "host"; this.peer = peer; this.coopMode = mode; this.coop = true;
     this.wireCoopPeer(peer);
     this.wireCoopLog();
+    this.showChatBar(true);
     const seed = this.freshSeed();
     peer.send({ t: "start", mode, seed, archetype: this.archetypeId }); // share the seed + the Host's class so both build it identically
     this.log.add("Co-op hosted — you are the cream @ (Host); your partner is the teal @ (Guest).", "sys", "both");
@@ -3015,6 +3046,7 @@ export class Game {
     this.netRole = "guest"; this.peer = peer; this.coop = true;
     this.wireCoopPeer(peer);
     this.wireCoopLog();
+    this.showChatBar(true);
     this.log.add("Linked as Guest — waiting for the host's dungeon…", "sys", "both");
   }
 
@@ -3026,10 +3058,12 @@ export class Game {
       if (m?.t === "start") { this.coopMode = m.mode; this.archetypeId = m.archetype; this.newGame(m.seed); }   // build the shared world (Host's class)
       else if (m?.t === "restart") { this.archetypeId = m.archetype; this.newGame(m.seed); }                    // reseeded new run
       else if (m?.t === "input" && typeof m.key === "string") this.remoteInput(m.key);
+      else if (m?.t === "chat" && typeof m.text === "string") this.receiveChat(m.text);
     });
     peer.onState((open) => {
       if (open) return;
       this.log.add("Partner disconnected — playing on alone.", "bad", "both");
+      this.showChatBar(false);
       const r = this.remotePlayer;
       if (r) { r.cancelTurn(); this.scheduler.remove(r); if (r === this.coPlayer) this.coPlayer = null; this.draw(); } // unstick the clock
     });
@@ -3203,6 +3237,9 @@ export class Game {
 
   private onKey(e: KeyboardEvent): void {
     if (e.ctrlKey || e.metaKey || e.altKey) return; // let browser shortcuts (refresh, copy, devtools) through
+    const ae = document.activeElement; // typing in a text field (chat box, lobby paste) must not drive the game
+    if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA")) return;
+    if (this.coop && this.netRole !== "solo" && (e.key === "\"" || e.key === "'")) { this.focusChat(); e.preventDefault(); return; } // open the chat box
     if (this.busy) { e.preventDefault(); return; } // frozen while a wallet tx settles
     if (this.over) {
       if (e.key === "r" || e.key === "R") {
@@ -3214,7 +3251,7 @@ export class Game {
     if (this.coop && !this.localPlayer.alive) { e.preventDefault(); return; } // you're downed — spectate
     // Backspace = LIFO undo of the last queued action. Purely local: queued keys aren't broadcast
     // until they EXECUTE (see onLocalConsume), so an unexecuted action can be dropped with no sync.
-    if (e.key === "Backspace" && !this.localPlayer.composing) {
+    if (e.key === "Backspace") {
       this.localPlayer.popInput();
       this.renderQueue();
       e.preventDefault(); return;

@@ -16,4 +16,6 @@ export type NetMsg =
   | { t: "start"; mode: CoopMode; seed: number; archetype: string }
   | { t: "restart"; seed: number; archetype: string }
   // either → other: a keystroke the sender's own avatar just EXECUTED (broadcast-on-consume lockstep)
-  | { t: "input"; key: string };
+  | { t: "input"; key: string }
+  // either → other: an out-of-band chat message (degraded by the recipient, never touches the sim)
+  | { t: "chat"; text: string };
