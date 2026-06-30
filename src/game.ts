@@ -6,7 +6,7 @@ import { Log } from "./log";
 import type { LogWho } from "./log";
 import {
   COLORS, TILE_GLYPH, TileType, MONSTERS, MonsterDef, deaths, greetings,
-  MAX_DEPTH, CENSOR, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, PRIEST, COUNCIL_GUARD, realmName, grayPaper, ChainDef, CHAINS, BranchDef, BRANCHES, branchById, questFor,
+  MAX_DEPTH, CENSOR, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, PRIEST, COUNCIL_GUARD, ORACLE, ORACLE_HINTS, ORACLE_RUMORS, realmName, grayPaper, ChainDef, CHAINS, BranchDef, BRANCHES, branchById, questFor,
   abilityMod, archetypeById, ATTRS, ATTR_LABEL, attrFlavor, spellById, Ethos,
   monName, questHomeland, archetypeName, ethosName, spellName, chainName, branchEnd, branchEntryFlavor,
 } from "./data";
@@ -1408,10 +1408,11 @@ export class Game {
       const cells = this.roomCells(c.x, c.y);
       const open = cells.filter((p) => this.level.tileAt(p.x, p.y) === "floor" && !this.monsterAt(p.x, p.y) && !this.level.itemAt(p.x, p.y) && !this.playerAt(p.x, p.y));
       if (cells.length < 6 || open.length < 4) continue;
-      const kind = ROT.RNG.getItem(["temple", "zoo", "vault", "morgue"])!;
+      const kind = ROT.RNG.getItem(["temple", "zoo", "vault", "morgue", "oracle"])!;
       if (kind === "temple") this.makeTemple(c, open);
       else if (kind === "zoo") this.makeZoo(open);
       else if (kind === "morgue") this.makeMorgue(open);
+      else if (kind === "oracle") this.makeOracle(c, open);
       else this.makeVault(c, open);
       return;
     }
@@ -1440,6 +1441,17 @@ export class Game {
       }
     }
     if (dead) this.log.add("A reek of decay seeps through the wall — a morgue of dead chains, its rotting corpses (%) stalked by wraiths.", "bad");
+  }
+
+  /** The Oracle: a peaceful seer seated among springs — #chat (with coin) for a consultation. */
+  private makeOracle(center: { x: number; y: number }, open: { x: number; y: number }[]): void {
+    const m = new Monster(this, ORACLE, center.x, center.y); m.peaceful = true; this.monsters.push(m);
+    let springs = 0;
+    for (const p of open) {
+      if (p.x === center.x && p.y === center.y) continue;
+      if (springs < 3 && ROT.RNG.getUniform() < 0.35 && this.level.tileAt(p.x, p.y) === "floor" && !this.level.itemAt(p.x, p.y)) { this.level.tiles[p.y][p.x] = "faucet"; springs++; }
+    }
+    this.log.add("A strange calm pools through the wall — the Oracle (@) sits among the springs. (c to consult; coin loosens prophecy)", "sys");
   }
 
   /** A zoo: a room packed with monsters guarding scattered loot (an airdrop trap room). */
@@ -1703,11 +1715,29 @@ export class Game {
     return `The Marketmaker appraises your stones (${parts.join("; ")}) and slides ${gold} gold across. (${p.gold} total)`;
   }
 
+  /** The Oracle's consultation: pay gold for guidance. A major (rich purse) buys a real hint; a minor
+   *  buys a cryptic rumor; the penniless get a free mutter. Returns the spoken line. */
+  private oracleConsult(p: Player): string {
+    if (p.gold >= 150) {
+      const fee = Math.max(120, Math.round(p.gold * 0.2));
+      p.gold -= fee; this.breakConduct(p, "bankless");
+      return `The Oracle accepts ${fee} gold for a major consultation: "${ROT.RNG.getItem(ORACLE_HINTS)!}" (${p.gold} left)`;
+    }
+    if (p.gold >= 30) {
+      const fee = Math.min(p.gold, 25 + ROT.RNG.getUniformInt(0, 20));
+      p.gold -= fee; this.breakConduct(p, "bankless");
+      return `The Oracle accepts ${fee} gold for a minor consultation: "${ROT.RNG.getItem(ORACLE_RUMORS)!}" (${p.gold} left)`;
+    }
+    return `The Oracle eyes your thin purse. "Return with coin, seeker." Then, unbidden: "${ROT.RNG.getItem(ORACLE_RUMORS)!}"`;
+  }
+
   /** `c` — chat with an adjacent monster. A free social action; lore, banter, or a taunt. */
   chat(m: Monster): void {
     const d = m.def;
     let line: string;
-    if (d.keeper) {
+    if (d.seer) {
+      line = m.peaceful ? this.oracleConsult(this.acting) : "The Oracle, struck and bleeding, screams curses — the springs run red.";
+    } else if (d.keeper) {
       const sale = m.peaceful ? this.sellGems(this.acting) : null; // a peaceful keeper appraises + buys any gems you carry
       line = !m.peaceful
         ? "\"THIEF! You'll settle this in blood, not blocks!\""
@@ -1767,7 +1797,7 @@ export class Game {
       "%": "food — or a corpse you can eat (e)", "*": "the JAM, a luckstone, or a gem",
       "$": "a pile of gold — step on it to scoop it up",
     };
-    const mons = [...MONSTERS, SHOPKEEPER, PRIEST, COUNCIL_GUARD, HONEYPOT, CENSOR, MOLOCH, ...Object.values(MINIBOSSES), ...BRANCHES.flatMap((b) => (b.bossDef ? [b.bossDef] : []))].find((m) => m.ch === key);
+    const mons = [...MONSTERS, SHOPKEEPER, PRIEST, COUNCIL_GUARD, ORACLE, HONEYPOT, CENSOR, MOLOCH, ...Object.values(MINIBOSSES), ...BRANCHES.flatMap((b) => (b.bossDef ? [b.bossDef] : []))].find((m) => m.ch === key);
     const parts: string[] = [];
     if (mons) parts.push(mons.name);
     if (feat[key]) parts.push(feat[key]);
@@ -2183,6 +2213,11 @@ export class Game {
     if (d instanceof Monster && d.def.priest && d.peaceful) {
       d.peaceful = false; d.fg = "#ff5030";
       this.log.add("The priest's blessing curdles to wrath — \"Sacrilege!\"", "bad", who);
+    }
+    // Striking the Oracle profanes her springs — the seer turns on you.
+    if (d instanceof Monster && d.def.seer && d.peaceful) {
+      d.peaceful = false; d.fg = "#ff5030";
+      this.log.add("You strike the Oracle — \"Fool! The springs will remember this.\"", "bad", who);
     }
     // Striking the Council Guard ends the escort — now it means to see you never leave.
     if (d instanceof Monster && d.def.guard && d.peaceful) {
@@ -3365,7 +3400,7 @@ export class Game {
       this.log.add(`${cap(m.name)} is destroyed.`, "good");
     }
     // It leaves a corpse — food, but eat with care (poison / petrify / rot).
-    if (!m.def.boss && !m.def.keeper && !m.def.mimic && ROT.RNG.getUniform() < 0.55 && !this.level.itemAt(m.x, m.y)) {
+    if (!m.def.boss && !m.def.keeper && !m.def.priest && !m.def.seer && !m.def.guard && !m.def.mimic && ROT.RNG.getUniform() < 0.55 && !this.level.itemAt(m.x, m.y)) {
       this.level.items.push({ x: m.x, y: m.y, type: CORPSE, corpse: { def: m.def, born: this.turn } });
     }
   }

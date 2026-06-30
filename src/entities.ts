@@ -873,7 +873,7 @@ export class Monster extends Entity {
       const look = ROT.RNG.getItem(ITEMS.filter((i) => i.kind !== "amulet"))!;
       this.disguiseCh = look.ch; this.disguiseFg = look.fg; this.disguiseType = look;
     }
-    if (def.keeper || def.priest) this.peaceful = true; // a keeper minds its stall, a priest its altar — until provoked
+    if (def.keeper || def.priest || def.seer) this.peaceful = true; // a keeper minds its stall, a priest its altar, the Oracle its springs — until provoked
     if (def.splits) this.splitsLeft = 2; // a fresh sybil can replicate at most twice
     if (def.muse) this.museLeft = 2;     // it carries a couple of healing draughts
   }

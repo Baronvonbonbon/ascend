@@ -27,8 +27,8 @@ status, and plan the missing parts in the Polkadot/web3 idiom.
 > logs, signal chat, and an action queue (see §4). Since then the **full special-attack
 > matrix**, the **light/darkness model**, the **Treasury vault + Council Guard**, **gems/tokens**,
 > **the Validator's Tower**, and much more have landed. The remaining ❌/🟡 below are the
-> genuinely-unbuilt parts (richer spell/ring/wand breadth, the oracle level,
-> fuller monster item-use, more special rooms).
+> genuinely-unbuilt parts (richer spell/ring/wand breadth, fuller monster
+> item-use, a few more special rooms).
 
 ---
 
@@ -43,7 +43,7 @@ Every adaptation routes through this table so the theming stays coherent.
 | gold (`$`) | **PAS** (on-chain, real wallet) | ✅ |
 | Gnomish Mines (branch) | **the Storage Caverns / Mines** (cave branch off the relay) | ✅ (Phase 16a — real branch) |
 | Sokoban (branch) | **the Consensus Vault** (push *blocks* into order; guaranteed prize) | ✅ (Phase 16b — prefab puzzle branch) |
-| Oracle (level) | **the Oracle** parachain — pay PAS for a major/minor consultation | 🟡 (oracle is a *monster* + `#chat` prophecy; no oracle level) |
+| Oracle (level) | **the Oracle** — a spring-ringed chamber; `#chat` and pay gold for a major/minor consultation | ✅ (Phase 9i — the Oracle chamber + paid consultations) |
 | The Quest (per-role) | role **Quest** — homeland, portal, nemesis, your artifact | ✅ (Phase 13c — per-archetype) |
 | Fort Ludios | **Fort Treasury** (fortress + concentric generators) | 🟡 (Phase 17 fortress layout; no vault economy/guards) |
 | Vlad's Tower | **the Validator's Tower** (Vlad → the Slashing Lord) | ✅ (Phase 16e — a 3-floor fortress branch + boss + prize) |
@@ -97,7 +97,7 @@ Every adaptation routes through this table so the theming stays coherent.
 
 ### B. Dungeon structure
 - **`dungeon.c`, `mklev.c`, `mkroom.c`, `mkmap.c`, `mkmaze.c`, `extralev.c`, `sp_lev.c`/`nhlua.c`** — multi-branch dungeon graph, room/corridor gen, mazes, themed rooms, Lua-scripted **special levels**. → **🟡 (Phases 9/12/14/16/17).** Shipped: a **real branch graph** with the **Mines** (cave branch, Phase 16a) + the **Consensus Vault** (Sokoban prefab, Phase 16b), the **Quest** homeland (Phase 13c), the **Gehennom maze** (EllerMaze, Phase 12e), the **Planes** (per-Plane layouts, Phase 17), the **Mempool** big room (Phase 9d), a **fortress** + concentric generators (Phase 17), layout kinds cave/labyrinth/grid (Phase 14a), and **the Validator's Tower** (Vlad's Tower — a 3-floor **fortress** branch you climb off depth 7, the **Slashing Lord** warding a +2 blessed prize at the Crown, Phase 16e). Still ❌: morgue/barracks/swamp special rooms, full hand-built special-level scripting.
-- **`mkroom.c` special rooms** — shop, temple, throne room, zoo, morgue, beehive, barracks, swamp, leprechaun hall, anthole, cockatrice nest. → **🟡.** Shipped: **shops** (the Marketmaker), a **temple** (an altar tended by a peaceful Gavin **priest**), a **zoo** (a packed menagerie guarding loot), a **treasury vault** (a dense loot room with a locked chest at its heart), and a **morgue** (rotting corpses of dead chains stalked by wraiths) — placed via `placeSpecialRoom`. Still ❌: barracks, swamp/beehive/anthole, leprechaun hall.
+- **`mkroom.c` special rooms** — shop, temple, throne room, zoo, morgue, beehive, barracks, swamp, leprechaun hall, anthole, cockatrice nest. → **🟡.** Shipped: **shops** (the Marketmaker), a **temple** (an altar tended by a peaceful Gavin **priest**), a **zoo** (a packed menagerie guarding loot), a **treasury vault** (a dense loot room with a locked chest at its heart), a **morgue** (rotting corpses of dead chains stalked by wraiths), and **the Oracle** (a peaceful seer among springs, `#chat` for paid consultations) — placed via `placeSpecialRoom`. Still ❌: barracks, swamp/beehive/anthole, leprechaun hall.
 - **`fountain.c`** (fountains & sinks; quaff/dip/wish-from-water-demon/Excalibur) → **✅ faucets (Phase 9a); sinks still ❌.** **faucets** (`{`) — `#quaff` for a random effect (heal, summon a "fountain bot", curse, gem, or — rarely — a *testnet wish*), `#dip` a weapon to draw the lawful artifact. Sinks = "burn sinks" (ring identification by dropping).
 - **`dbridge.c`** drawbridges → **❌** → "consensus bridges" raised/lowered by levers; crush on close.
 - **`vault.c`** vaults + guard → **✅ (Phase 16d).** **The Treasury** — a sealed 2×2 of gold carved into solid rock with no door, reachable **only by teleport** (its tiles join the teleport pool; no random foes spawn inside). Teleport in and **the Council Guard** (`@`) appears, **cuts the shortest passage out**, and escorts you — leave and the gold is yours; it **reseals the vault and departs** once you're clear. **Strike it and it turns merciless** (60 HP), the breach left open as it hunts you. Still ⤬: the "who are you?" password and gold-accounting confiscation (we let honest looters keep the hoard).

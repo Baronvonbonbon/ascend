@@ -247,6 +247,7 @@ export interface MonsterDef {
   fearless?: boolean;    // ignores warding engravings (bosses fear no Gray Paper)
   keeper?: boolean;      // a shopkeeper — peaceful until you shoplift, then merciless
   priest?: boolean;      // a temple priest — peaceful guardian of an altar; turns lethal if struck
+  seer?: boolean;        // the Oracle — a peaceful seer; #chat for a paid consultation (lethal if struck)
   guard?: boolean;       // a Council Guard — escorts you out of the Treasury vault; merciless if provoked
   boss?: boolean;        // a unique mini-boss — drops a guaranteed prize on death
 }
@@ -302,6 +303,36 @@ export const SHOPKEEPER: MonsterDef = {
 export const PRIEST: MonsterDef = {
   name: "the Gavin priest", fname: "the temple priest", ch: "@", fg: "#d6d0f4", hp: 30, dmg: [4, 8], ai: "chase", minDepth: 1, weight: 0, fearless: true, priest: true,
 };
+
+/** The Oracle — a peaceful seer in a spring-ringed chamber; #chat (with coin) for a consultation. */
+export const ORACLE: MonsterDef = {
+  name: "the Oracle", fname: "the Oracle", ch: "@", fg: "#c060e0", hp: 32, dmg: [4, 8], ai: "chase", minDepth: 1, weight: 0, fearless: true, seer: true,
+};
+
+/** Major consultations — genuinely useful guidance (skin() reflavors the proper nouns). */
+export const ORACLE_HINTS = [
+  "The foot of the relay hides a vibrating square — bring the Bell, the Candelabrum, and the Gray Paper, and #invoke there.",
+  "A blessed scroll of formal verification audits your gear — proofed, it will never rust.",
+  "Slay the barrow-wight, then eat its corpse: the epoch it drained returns to you.",
+  "Dip a worthy blade in a fountain and you may draw the lawful relic.",
+  "Cursed gear welds fast to the flesh — a remove-curse alone will free it.",
+  "Eat a censor-imp's corpse and your mind will sense the unseen, even in the dark.",
+  "Prayer mends the direst troubles — but never pray twice before the cooldown lapses, lest wrath answer.",
+  "The Treasury is sealed to feet — only a blink or teleport finds the gold within.",
+  "Reflection rebounds a dragon's breath; an amulet of life saving spends itself to deny one death.",
+  "Carry a lit lamp into the dark, or the deep will swallow your sight to a single stride.",
+];
+/** Minor consultations — cryptic rumors in the NetHack idiom. */
+export const ORACLE_RUMORS = [
+  "Not all that shimmers is a token; some is only worthless glass.",
+  "Probe a foe before you strike, and you will not be surprised.",
+  "The HODL stone steadies the fortunate and chains the cursed.",
+  "A shout carries far through the relay — and the deep is always listening.",
+  "Trapdoors yawn on the descent; tread light, lest the floor give way.",
+  "A silenced tongue casts no spell.",
+  "Some doors only look like walls; search, and they reveal themselves.",
+  "The thirstier the liquidity, the harder it is to climb back out.",
+];
 
 /** The Council Guard — keeper of the Treasury vault. Peaceful escort; lethal if you strike it. */
 export const COUNCIL_GUARD: MonsterDef = {
