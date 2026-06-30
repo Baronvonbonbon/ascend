@@ -251,6 +251,7 @@ export interface MonsterDef {
   muse?: boolean;        // muse.c — gulps a healing draught when badly hurt; cornered, it blinks away
   zaps?: "sleep" | "blind" | "confuse"; // muse.c — zaps a wand-borne debuff at you from range
   throws?: "dart" | "rock"; // mthrowu.c — hurls a physical projectile at you from range (darts are recoverable)
+  wears?: boolean;       // muse.c — dons armor it finds on the floor, growing harder to hit
   diseases?: boolean;    // a plague fly — a hit may make you sick (a deadly illness countdown; cure fast)
   seduces?: boolean;     // a succubus — adjacent, it charms you (a lost turn) and lifts an item, then blinks
   mimic?: boolean;       // a honeypot — sits disguised as loot, strikes when touched
@@ -266,7 +267,7 @@ export interface MonsterDef {
 export const MONSTERS: MonsterDef[] = [
   { name: "a sybil",           fname: "a doppelganger",  ch: "s", fg: "#9a9a9a", hp: 3,  dmg: [1, 2], ai: "chase",  minDepth: 1, weight: 4, splits: true, speed: 105 },
   { name: "a rust bug",        fname: "a rust monster",  ch: "x", fg: "#7ac06a", hp: 2,  dmg: [1, 1], ai: "wander", minDepth: 1, weight: 5, speed: 90, corrodes: true },
-  { name: "a validator golem", fname: "a stone golem",   ch: "V", fg: "#5c8ad0", hp: 12, dmg: [2, 4], ai: "chase",  minDepth: 2, weight: 3, speed: 85 },
+  { name: "a validator golem", fname: "a stone golem",   ch: "V", fg: "#5c8ad0", hp: 12, dmg: [2, 4], ai: "chase",  minDepth: 2, weight: 3, speed: 85, wears: true },
   { name: "a fork daemon",     fname: "a quickling",     ch: "f", fg: "#d0a0d0", hp: 7,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 3, speed: 120, corpseEffect: "speed" },
   { name: "a gas wraith",      fname: "a stench wraith", ch: "w", fg: "#c08adf", hp: 6,  dmg: [2, 3], ai: "chase",  minDepth: 3, weight: 3, inflict: "poison", corpseEffect: "poisonous" },
   { name: "a freezer",         fname: "a cockatrice",    ch: "c", fg: "#bcd6e6", hp: 10, dmg: [2, 4], ai: "chase",  minDepth: 4, weight: 2, corpseEffect: "petrify" },
@@ -291,7 +292,7 @@ export const MONSTERS: MonsterDef[] = [
   { name: "a thought leech",   fname: "a mind flayer",   ch: "u", fg: "#b060c0", hp: 20, dmg: [2, 5], ai: "chase",  minDepth: 8, weight: 2, speed: 95, drainsStat: true },
   { name: "a finality dragon", fname: "an ancient dragon", ch: "D", fg: "#ff5040", hp: 34, dmg: [5, 9], ai: "chase",  minDepth: 6, weight: 1, breath: 16, fearless: true },
   { name: "a panic seller",    fname: "a craven goblin", ch: "p", fg: "#d0d060", hp: 5,  dmg: [1, 3], ai: "chase",  minDepth: 2, weight: 3, cowardly: true },
-  { name: "a mercenary node",  fname: "a soldier",       ch: "@", fg: "#a0a070", hp: 16, dmg: [3, 7], ai: "chase",  minDepth: 4, weight: 2 },
+  { name: "a mercenary node",  fname: "a soldier",       ch: "@", fg: "#a0a070", hp: 16, dmg: [3, 7], ai: "chase",  minDepth: 4, weight: 2, wears: true },
   { name: "a malware fly",     fname: "a plague fly",    ch: "a", fg: "#9ac070", hp: 5,  dmg: [1, 3], ai: "chase",  minDepth: 4, weight: 2, speed: 120, diseases: true },
   { name: "a relay medic",     fname: "a healer acolyte", ch: "h", fg: "#80e0c0", hp: 10, dmg: [1, 2], ai: "chase",  minDepth: 5, weight: 2, heals: true },
   { name: "a honeypot siren",  fname: "a succubus",      ch: "n", fg: "#e080b0", hp: 12, dmg: [2, 4], ai: "chase",  minDepth: 6, weight: 2, speed: 105, seduces: true },

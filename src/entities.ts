@@ -871,6 +871,7 @@ export class Monster extends Entity {
   silenced = 0;   // turns of magical silence — can't summon or fire ranged spells
   museLeft = 0;   // healing draughts it still carries (muse.c) — gulped when badly hurt
   museEscaped = false; // has used its one teleport draught to flee (muse.c)
+  worn = 0;       // evasion gained from armor it has donned off the floor (muse.c — wear)
   splitsLeft = 0; // a sybil's remaining replications — bounds the swarm (children inherit one fewer)
   stolen: Item | null = null; // a thief (rug puller) carries what it snatched; drops it on death
   stoleGold = 0;              // an airdrop farmer's snatched gold — disgorged when it's slain
@@ -950,6 +951,17 @@ export class Monster extends Entity {
 
     // A coward turns tail once badly hurt.
     if (this.def.cowardly && this.hp < this.maxHp * 0.3) { this.fleeStep(p); return; }
+
+    // muse.c (wear): a soldier/golem standing on a piece of armor dons it — harder to hit thereafter.
+    if (this.def.wears && this.worn < 6) {
+      const it = this.game.level.itemAt(this.x, this.y);
+      if (it && it.type.kind === "armor" && !it.corpse && !it.chest && !it.price) {
+        this.worn += Math.max(1, (it.type.ac ?? 1) + (it.enchant ?? 0));
+        this.game.level.items = this.game.level.items.filter((z) => z !== it);
+        this.game.log.add(`${this.name.charAt(0).toUpperCase() + this.name.slice(1)} dons ${this.game.ident.name(it.type)} — better armored now.`, "bad", p);
+        return; // donning takes its turn
+      }
+    }
 
     // muse.c: a tough foe gulps a healing draught when badly hurt — a limited supply.
     if (!this.cancelled && this.def.muse && this.museLeft > 0 && this.hp < this.maxHp * 0.35 && ROT.RNG.getUniform() < 0.45) {

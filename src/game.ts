@@ -1917,6 +1917,7 @@ export class Game {
       if (m.def.muse) tags.push("self-mending");
       if (m.def.zaps) tags.push("caster");
       if (m.def.throws) tags.push("thrower");
+      if (m.worn > 0) tags.push("armored");
       if (m.def.diseases) tags.push("sickening");
       if (m.def.seduces) tags.push("seductive");
       if (m.sleepTurns > 0) tags.push("asleep");
@@ -2391,7 +2392,7 @@ export class Game {
 
     else if (a instanceof Monster) acc = 2 + Math.floor(a.maxHp / 8);
     if (d instanceof Player) eva = abilityMod(d.dex) + Math.floor(d.level / 3) + Math.floor(d.ac / 2) + Math.round(this.luckOf(d) / 3); // armor is dodge now; Fortune helps you slip
-    else if (d instanceof Monster) eva = d.def.speed ? Math.max(0, Math.floor((d.def.speed - 100) / 12)) : 0;
+    else if (d instanceof Monster) eva = (d.def.speed ? Math.max(0, Math.floor((d.def.speed - 100) / 12)) : 0) + d.worn; // worn armor makes a monster harder to hit too
     return roll + acc >= 10 + eva;
   }
 
@@ -2916,7 +2917,7 @@ export class Game {
         hit.cancelled = true;
         this.log.add(`${cap(hit.name)} is nullified — its powers fail.`, "good");
       } else if (item.type.id === "wand_probe") {
-        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.stealsGold && "gold thief", hit.def.stealsLuck && "Fortune leech", hit.def.drains && "life-draining", hit.def.engulfs && "engulfing", hit.def.silences && "silencing", hit.def.drainsStat && "mind-draining", hit.def.infects && "infectious", hit.def.muse && "self-mending", hit.def.zaps && "caster", hit.def.throws && "thrower", hit.def.diseases && "sickening", hit.def.seduces && "seductive", hit.def.paralyzes && "paralyzing gaze", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.cancelled && "nullified"].filter(Boolean).join(", ");
+        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.stealsGold && "gold thief", hit.def.stealsLuck && "Fortune leech", hit.def.drains && "life-draining", hit.def.engulfs && "engulfing", hit.def.silences && "silencing", hit.def.drainsStat && "mind-draining", hit.def.infects && "infectious", hit.def.muse && "self-mending", hit.def.zaps && "caster", hit.def.throws && "thrower", hit.def.diseases && "sickening", hit.def.seduces && "seductive", hit.def.paralyzes && "paralyzing gaze", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.cancelled && "nullified", hit.worn > 0 && "armored"].filter(Boolean).join(", ");
         this.log.add(`State-read ${hit.name}: ${hit.hp}/${hit.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       }
     }
@@ -3118,7 +3119,7 @@ export class Game {
     if (item.type.id === "scope") {
       const m = this.monsterAt(p.x + dx, p.y + dy);
       if (!m) { this.log.add("You press the state reader to empty air.", "dim"); return false; }
-      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.stealsGold && "gold thief", m.def.stealsLuck && "Fortune leech", m.def.drains && "life-draining", m.def.engulfs && "engulfing", m.def.silences && "silencing", m.def.drainsStat && "mind-draining", m.def.infects && "infectious", m.def.muse && "self-mending", m.def.zaps && "caster", m.def.throws && "thrower", m.def.diseases && "sickening", m.def.seduces && "seductive", m.def.paralyzes && "paralyzing gaze", m.def.splits && "splits", m.def.corrodes && "corrodes", m.cancelled && "nullified", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
+      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.stealsGold && "gold thief", m.def.stealsLuck && "Fortune leech", m.def.drains && "life-draining", m.def.engulfs && "engulfing", m.def.silences && "silencing", m.def.drainsStat && "mind-draining", m.def.infects && "infectious", m.def.muse && "self-mending", m.def.zaps && "caster", m.def.throws && "thrower", m.def.diseases && "sickening", m.def.seduces && "seductive", m.def.paralyzes && "paralyzing gaze", m.def.splits && "splits", m.def.corrodes && "corrodes", m.cancelled && "nullified", m.worn > 0 && "armored", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
       this.log.add(`State-read ${m.name}: ${m.hp}/${m.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       return true;
     }
