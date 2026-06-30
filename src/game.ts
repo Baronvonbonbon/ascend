@@ -1643,7 +1643,7 @@ export class Game {
   }
 
   private trapName(k: TrapKind): string {
-    return ({ gas: "gas-fee trap", slash: "slashing trap", reorg: "reorg trap", fork: "fork trap" } as Record<TrapKind, string>)[k];
+    return ({ gas: "gas-fee trap", slash: "slashing trap", reorg: "reorg trap", fork: "fork trap", trapdoor: "trapdoor" } as Record<TrapKind, string>)[k];
   }
 
   /** Search the surrounding tiles: Insight (WIS) reveals hidden traps & doors; then carefully
@@ -3380,6 +3380,8 @@ export class Game {
   private spawnTraps(): void {
     const count = 2 + Math.floor(this.player.depth * 0.8);
     const kinds: TrapKind[] = ["gas", "slash", "reorg", "fork"];
+    // trapdoors drop you a floor — only on the main relay descent, never where there's no floor below
+    if (!this.currentChain && !this.branch && this.player.depth < MAX_DEPTH) kinds.push("trapdoor");
     for (let i = 0; i < count; i++) {
       let pos = this.level.randomFloor();
       let tries = 0;
@@ -3405,6 +3407,14 @@ export class Game {
         this.log.add("A reorg trap flings you across the level!", "bad"); break;
       }
       case "fork": { this.log.add("A fork trap! Reality splits around you —", "bad"); this.polySelf(p); break; }
+      case "trapdoor": {
+        const d = ROT.RNG.getUniformInt(2, 6);
+        p.hp -= d;
+        this.log.add(`A trapdoor yawns open beneath you — you plunge through, landing hard for ${d}!`, "bad");
+        if (p.hp <= 0) { this.killPlayer(p); return; }
+        this.descend(); // fall to the floor below (it draws + recomputes FOV itself)
+        return;
+      }
     }
     if (p.hp <= 0) this.killPlayer(p);
   }
