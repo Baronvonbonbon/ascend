@@ -7,7 +7,7 @@ import type { LogWho } from "./log";
 import {
   COLORS, TILE_GLYPH, TileType, MONSTERS, MonsterDef, deaths, greetings,
   MAX_DEPTH, CENSOR, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, PRIEST, realmName, grayPaper, ChainDef, CHAINS, BranchDef, BRANCHES, branchById, questFor,
-  abilityMod, archetypeById, ATTRS, ATTR_LABEL, spellById, Ethos,
+  abilityMod, archetypeById, ATTRS, ATTR_LABEL, attrFlavor, spellById, Ethos,
   monName, questHomeland, archetypeName, ethosName, spellName, chainName, branchEnd, branchEntryFlavor,
 } from "./data";
 import { fp, skin, toggleFlavor } from "./flavor";
@@ -344,6 +344,17 @@ export class Game {
     if (p.hp <= 0) this.killPlayer(p);
   }
 
+  /** A mind flayer saps a random attribute (min 3). Tracked so prayer can restore exactly what was lost. */
+  drainStat(p: Player, byName: string): void {
+    if (!p.alive) return;
+    const drainable = ATTRS.filter((a) => p[a] > 3);
+    if (drainable.length === 0) return;
+    const a = ROT.RNG.getItem(drainable)!;
+    p[a]--; p.statDrain[a] = (p.statDrain[a] ?? 0) + 1;
+    if (a === "int") { this.recomputeEnergy(p); p.energy = Math.min(p.energy, p.maxEnergy); }
+    this.log.add(`${cap(byName)} drains your ${attrFlavor(a)} — ${ATTR_LABEL[a]} down to ${p[a]}!`, "bad", p);
+  }
+
   showCharSheet(): void {
     const p = this.acting;
     this.log.add(`— ${p.name === "you" ? "You" : p.name}, ${p.title ? p.title + " " : ""}${archetypeName(archetypeById(p.archetype))} · ${ethosName(p.ethos)} · epoch ${p.level} —`, "sys");
@@ -378,6 +389,7 @@ export class Game {
     if (p.confused > 0) fx.push(`confused ${p.confused}`);
     if (p.blind > 0) fx.push(`blind ${p.blind}`);
     if (p.silenced > 0) fx.push(`silenced ${p.silenced}`);
+    { const dr = ATTRS.filter((a) => (p.statDrain[a] ?? 0) > 0); if (dr.length) fx.push(`drained ${dr.map((a) => ATTR_LABEL[a]).join("/")} (pray to restore)`); }
     if (p.stoning > 0) fx.push(`STONING ${p.stoning}`);
     if (p.illness > 0) fx.push(`ill ${p.illness}`);
     if (p.hasteTurns > 0) fx.push(`hasted ${p.hasteTurns}`);
@@ -1724,6 +1736,7 @@ export class Game {
       if (m.def.drains) tags.push("life-draining");
       if (m.def.engulfs) tags.push("engulfing");
       if (m.def.silences) tags.push("silencing");
+      if (m.def.drainsStat) tags.push("mind-draining");
       if (m.sleepTurns > 0) tags.push("asleep");
       if (m.cancelled) tags.push("nullified");
       this.log.add(`You see ${m.name} — ${band} (${tags.join(", ")}).`, "sys");
@@ -1828,6 +1841,8 @@ export class Game {
     p.hp = p.maxHp;
     p.nutrition = Math.max(p.nutrition, 600);
     p.poison = 0; p.confused = 0; p.silenced = 0;
+    const drained = Object.entries(p.statDrain).filter(([, n]) => n > 0);
+    if (drained.length) { for (const [a, n] of drained) (p as unknown as Record<string, number>)[a] += n; p.statDrain = {}; this.recomputeEnergy(p); this.log.add("Your drained faculties are restored.", "good"); }
     if (p.stoning > 0 || p.illness > 0) { p.stoning = 0; p.illness = 0; this.log.add("The petrifying chill / the bad block lifts.", "good"); }
     if (p.blind > 0) { p.blind = 0; this.recomputeFOV(); }
     if (p.luck < 0) { p.luck = 0; this.log.add("Gavin steadies your fortune.", "good"); }
@@ -2099,6 +2114,7 @@ export class Game {
         d.silenced = ROT.RNG.getUniformInt(6, 11);
         this.log.add(`${cap(a.name)} smothers ${d.name} in silence — your voice is gone!`, "bad", who);
       }
+      if (!a.cancelled && a.def.drainsStat && d.hp > 0 && ROT.RNG.getUniform() < 0.4) this.drainStat(d, a.name);
     }
     else if (a instanceof Player && d instanceof Player) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg} — friendly fire!`, "bad", who);
     else if (a === this.pet) this.log.add(`Your nominator savages ${d.name} for ${dmg}.`, "good", who);
@@ -2570,7 +2586,7 @@ export class Game {
         hit.cancelled = true;
         this.log.add(`${cap(hit.name)} is nullified — its powers fail.`, "good");
       } else if (item.type.id === "wand_probe") {
-        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.stealsGold && "gold thief", hit.def.stealsLuck && "Fortune leech", hit.def.drains && "life-draining", hit.def.engulfs && "engulfing", hit.def.silences && "silencing", hit.def.paralyzes && "paralyzing gaze", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.cancelled && "nullified"].filter(Boolean).join(", ");
+        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.stealsGold && "gold thief", hit.def.stealsLuck && "Fortune leech", hit.def.drains && "life-draining", hit.def.engulfs && "engulfing", hit.def.silences && "silencing", hit.def.drainsStat && "mind-draining", hit.def.paralyzes && "paralyzing gaze", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.cancelled && "nullified"].filter(Boolean).join(", ");
         this.log.add(`State-read ${hit.name}: ${hit.hp}/${hit.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       }
     }
@@ -2724,7 +2740,7 @@ export class Game {
     if (item.type.id === "scope") {
       const m = this.monsterAt(p.x + dx, p.y + dy);
       if (!m) { this.log.add("You press the state reader to empty air.", "dim"); return false; }
-      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.stealsGold && "gold thief", m.def.stealsLuck && "Fortune leech", m.def.drains && "life-draining", m.def.engulfs && "engulfing", m.def.silences && "silencing", m.def.paralyzes && "paralyzing gaze", m.def.splits && "splits", m.def.corrodes && "corrodes", m.cancelled && "nullified", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
+      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.stealsGold && "gold thief", m.def.stealsLuck && "Fortune leech", m.def.drains && "life-draining", m.def.engulfs && "engulfing", m.def.silences && "silencing", m.def.drainsStat && "mind-draining", m.def.paralyzes && "paralyzing gaze", m.def.splits && "splits", m.def.corrodes && "corrodes", m.cancelled && "nullified", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
       this.log.add(`State-read ${m.name}: ${m.hp}/${m.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       return true;
     }

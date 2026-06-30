@@ -227,6 +227,7 @@ export interface MonsterDef {
   paralyzes?: boolean;   // a watcher eye (floating eye) — passive, but melee it and its gaze freezes you
   engulfs?: boolean;     // a trapper (liquidity trap) — a hit swallows you whole; struggle out or cut free
   silences?: boolean;    // a gag wraith — a hit smothers you in silence (no casting; in co-op, no chat)
+  drainsStat?: boolean;  // a mind flayer — a hit drains a random attribute (restored by prayer)
   mimic?: boolean;       // a honeypot — sits disguised as loot, strikes when touched
   fearless?: boolean;    // ignores warding engravings (bosses fear no Gray Paper)
   keeper?: boolean;      // a shopkeeper — peaceful until you shoplift, then merciless
@@ -256,6 +257,7 @@ export const MONSTERS: MonsterDef[] = [
   { name: "a MEV bot",         fname: "a giant bat",     ch: "b", fg: "#80c060", hp: 6,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 3, speed: 135 },
   { name: "a slashing daemon", fname: "a giant serpent", ch: "S", fg: "#e06060", hp: 14, dmg: [4, 8], ai: "chase",  minDepth: 5, weight: 2 },
   { name: "a sudo conjurer",   fname: "a summoner cultist", ch: "&", fg: "#c080e0", hp: 16, dmg: [2, 4], ai: "chase",  minDepth: 6, weight: 2, summons: true },
+  { name: "a thought leech",   fname: "a mind flayer",   ch: "u", fg: "#b060c0", hp: 20, dmg: [2, 5], ai: "chase",  minDepth: 8, weight: 2, speed: 95, drainsStat: true },
   { name: "a finality dragon", fname: "an ancient dragon", ch: "D", fg: "#ff5040", hp: 34, dmg: [5, 9], ai: "chase",  minDepth: 6, weight: 1, breath: 16, fearless: true },
   { name: "a panic seller",    fname: "a craven goblin", ch: "p", fg: "#d0d060", hp: 5,  dmg: [1, 3], ai: "chase",  minDepth: 2, weight: 3, cowardly: true },
   { name: "a relay medic",     fname: "a healer acolyte", ch: "h", fg: "#80e0c0", hp: 10, dmg: [1, 2], ai: "chase",  minDepth: 5, weight: 2, heals: true },

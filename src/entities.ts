@@ -72,6 +72,7 @@ export class Player extends Entity {
   blind = 0;           // turns of blindness — FOV shrinks to your fingertips
   paralyzed = 0;       // turns frozen by a gaze (floating eye) — you auto-pass, helpless
   silenced = 0;        // turns of magical silence — can't cast extrinsics; in co-op, can't be heard (no chat)
+  statDrain: Record<string, number> = {}; // attribute points drained by a mind flayer — restored by prayer
   intrinsics = new Set<string>(); // poisonResist, petrifyResist, fast (from eating corpses)
   skillXp: Record<string, number> = {};   // landed hits per weapon-skill class (#enhance)
   skillRank: Record<string, number> = {};  // 0 Unskilled · 1 Basic · 2 Skilled · 3 Expert
