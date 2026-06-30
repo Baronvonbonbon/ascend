@@ -1,20 +1,19 @@
 // Procedural ambient music for Ascend — zero assets, all synthesised live with the
-// Web Audio API. Each area has a bespoke generative track (drone + swelling pad +
-// sparse melodic motes, some with a low pulse); a danger-driven tension layer fades
-// in on top when foes close, the Censor hunts, or a boss looms. Tracks crossfade as
-// the player moves between areas. A master toggle + a picker (auto / shuffle / a
-// specific track) live in the UI; preferences persist in localStorage.
+// Web Audio API. Each area has a generative bed (drone + swelling pad), and a RHYTHM
+// GROOVE — synthesised drums (kick → hats → snare) + a rhythmic bassline — rides on top
+// as the main exploration layer, fading in and out with a hybrid intensity (per-zone
+// baseline + live danger/crowd/JAM/boss). When you've been calm for a while it settles
+// back to the bare ambient bed; the groove snaps back when a threat returns.
 //
-// On the earthy zones (not the sacred relay/planes/genesis) a GROOVE layer rides the
-// bed: synthesised drums (kick → hats → snare) and a rhythmic bassline that fade in
-// with a hybrid intensity (per-zone baseline grooviness + live danger/crowd/JAM/boss),
-// plus an A/B song form — the verse leitmotif gives way to a bigger CHORUS hook on big
-// moments (a boss in view, the JAM near, deep peril). The groove is dry/punchy (it
-// bypasses the distress murk) and ducks under death/ascension stingers.
+// No leitmotifs/melodies — the texture is bed + groove, nothing tonal-foreground.
+// Distortion (murk + a soured, detuned bed) tracks the VISIBLE THREAT around you
+// (count + proximity, peaking at bosses/swarms) — never depth. A danger-driven TENSION
+// layer adds trills, fast beats, and a driving bassline. Tracks crossfade between areas;
+// stingers (death/ascension) duck everything.
 
 type Wave = OscillatorType;
 
-// A leitmotif note: [scale-degree-in-semitones, duration-in-steps]. REST skips a beat.
+// A bassline note: [scale-degree-in-semitones, duration-in-steps]. REST skips a beat.
 const REST = 99;
 type Note = [number, number];
 
@@ -24,90 +23,60 @@ interface TrackDef {
   area: string;        // which dungeon area this track belongs to (auto-by-area pool)
   root: number;        // root frequency (Hz)
   chord: number[];     // semitone offsets (from root) for the sustained pad
-  melody: Note[];      // the area's leitmotif — a fixed rhythmic phrase shared by all its variants
-  melStep: number;     // seconds per rhythmic step
-  melOct: number;      // melody register (× the root octave)
   pad: Wave;
   drone: Wave;
-  melWave: Wave;       // timbre of the melody voice
   cutoff: number;      // lowpass brightness (Hz)
   reverb: number;      // 0..1 wet send
-  pulseBpm: number;    // 0 = none; else a low heartbeat/pulse
-  detune: number;      // cents (warmth / dissonance)
+  pulseBpm: number;    // 0 = none; else a low heartbeat/pulse (only when the groove is resting)
+  detune: number;      // cents (warmth) — soured further by nearby threat
   level: number;       // track mix level
-  // ── Phase: the groove layer (earthy zones only; sacred zones leave these undefined) ──
-  groove?: number;     // 0..1 baseline grooviness — how readily drums + bass fade in (undefined/0 = beatless)
-  bpm?: number;        // tempo for the drum + bass grid (16th-note steps)
-  bass?: Note[];       // a rhythmic bassline over one 16-step bar (degree from root, low register)
-  chorus?: Note[];     // the chorus hook — a bigger leitmotif, swapped in on big moments (boss / JAM / deep peril)
+  // ── the groove layer (every zone has one now — the rhythm IS the exploration texture) ──
+  groove: number;      // 0..1 baseline grooviness — how readily drums + bass fade in
+  bpm: number;         // tempo for the drum + bass grid (16th-note steps)
+  bass: Note[];        // a rhythmic bassline over the bar (degree from root, low register)
 }
 
-// ── the ten base area themes — each carries a distinct, rhythmic, hook-led leitmotif ──
+// ── the ten base area themes — bed timbre + groove character, no melody ──
 const A = 55; // a low A reference
 type Base = Omit<TrackDef, "area">;
 const BASES: Base[] = [
-  // wistful minor hymn: a step up, a sigh down, then a bold leap to the 5th and a long resolve
-  { id: "legacy",    name: "Legacy Stack",      root: A,        chord: [0, 7, 15],        melStep: 0.32, melOct: 4, pad: "sine",     drone: "sine",     melWave: "triangle", cutoff: 700,  reverb: 0.4,  pulseBpm: 0,  detune: 5,  level: 0.5,
-    melody: [[0,3],[2,1],[3,2],[2,1],[0,3],[REST,1],[7,2],[5,2],[3,4]],
-    groove: 0.32, bpm: 80, bass: [[0,4],[7,4],[3,4],[5,4]],
-    chorus: [[0,2],[3,2],[7,2],[12,4],[10,2],[7,2],[3,2],[0,4]] },
-  // playful lilting waltz: a bright leaping arpeggio that bounces up to a 6th and trips home
-  { id: "parachain", name: "Parachain Reaches", root: A * 1.5,  chord: [0, 7, 14, 16],    melStep: 0.24, melOct: 2, pad: "triangle", drone: "sine",     melWave: "triangle", cutoff: 1100, reverb: 0.45, pulseBpm: 0,  detune: 6,  level: 0.5,
-    melody: [[0,1],[4,1],[7,2],[4,1],[9,2],[7,1],[5,1],[2,1],[0,3]],
-    groove: 0.5, bpm: 116, bass: [[0,2],[7,2],[4,2],[7,2],[9,2],[7,2],[5,2],[0,2]],
-    chorus: [[0,2],[7,2],[12,2],[16,4],[14,2],[12,2],[7,2],[0,2]] },
-  // uneasy: a tritone that keeps circling back — jagged and syncopated
-  { id: "kusama",    name: "Kusama Deeps",      root: A * 0.75, chord: [0, 6, 13],        melStep: 0.3,  melOct: 4, pad: "sawtooth", drone: "sine",     melWave: "triangle", cutoff: 600,  reverb: 0.5,  pulseBpm: 0,  detune: 14, level: 0.45,
-    melody: [[0,2],[6,1],[3,1],[6,2],[8,1],[6,1],[3,2],[REST,1],[0,3]],
-    groove: 0.55, bpm: 124, bass: [[0,2],[0,2],[6,2],[0,2],[3,2],[6,2],[0,4]],
-    chorus: [[0,2],[6,2],[8,2],[6,1],[3,1],[6,2],[0,4]] },
-  // motoric anxiety: a stuttering repeated ping, then a quick scrambling run
-  { id: "mempool",   name: "The Mempool",       root: A,        chord: [0, 5, 10],        melStep: 0.16, melOct: 4, pad: "sawtooth", drone: "triangle", melWave: "square",   cutoff: 800,  reverb: 0.35, pulseBpm: 96, detune: 9,  level: 0.45,
-    melody: [[0,1],[0,1],[REST,1],[7,1],[5,1],[10,1],[7,1],[5,1],[3,1],[0,2],[REST,2]],
-    groove: 0.7, bpm: 132, bass: [[0,2],[0,2],[7,2],[0,2],[0,2],[10,2],[7,2],[5,2]],
-    chorus: [[0,1],[3,1],[5,1],[7,1],[10,2],[7,1],[5,1],[3,1],[0,4]] },
-  // solemn bell-tolls: wide open fifths and an octave with long silences between
-  { id: "relay",     name: "Foot of the Relay", root: A * 0.5,  chord: [0, 12],           melStep: 0.46, melOct: 4, pad: "sine",     drone: "sine",     melWave: "sine",     cutoff: 400,  reverb: 0.6,  pulseBpm: 0,  detune: 3,  level: 0.5,
-    melody: [[0,2],[REST,2],[7,2],[REST,1],[12,3],[REST,3],[7,2],[0,4],[REST,3]] },
-  // sinister lurch: a minor-2nd grind into a tritone, collapsing back down low
-  { id: "gehennom",  name: "Gehennom",          root: A * 0.5,  chord: [0, 1, 6],         melStep: 0.3,  melOct: 4, pad: "sawtooth", drone: "sawtooth", melWave: "sawtooth", cutoff: 460,  reverb: 0.5,  pulseBpm: 50, detune: 18, level: 0.5,
-    melody: [[0,2],[1,1],[6,3],[REST,1],[8,1],[6,1],[1,2],[0,4]],
-    groove: 0.1, bpm: 88, bass: [[0,4],[1,2],[6,2],[0,4],[6,2],[1,2]],
-    chorus: [[6,2],[1,2],[0,4],[8,2],[6,2],[1,2],[0,4]] }, // low baseline: the slow heartbeat holds at rest, drums push in only under threat
-  // boss march: a menacing 7–6–7 wobble at the top stabbing down to the root, over the pulse
-  { id: "sanctum",   name: "Moloch's Sanctum",  root: A * 0.5,  chord: [0, 6, 7],         melStep: 0.22, melOct: 4, pad: "sawtooth", drone: "sawtooth", melWave: "square",   cutoff: 620,  reverb: 0.4,  pulseBpm: 84, detune: 16, level: 0.52,
-    melody: [[7,1],[6,1],[7,2],[3,1],[0,2],[REST,1],[7,1],[6,1],[7,1],[0,3]],
-    groove: 0.1, bpm: 100, bass: [[0,2],[0,2],[7,2],[6,2],[0,2],[0,2],[7,2],[7,2]],
-    chorus: [[7,2],[6,2],[7,2],[0,4],[7,1],[6,1],[3,2],[0,4]] }, // low baseline: the march pulse holds at rest; the Moloch fight (boss/JAM/peril) drives it hard
-  // weightless ascent: a slow lydian climb to the #11, hanging in suspension
-  { id: "planes",    name: "The Planes",        root: A * 2,    chord: [0, 7, 16, 23],    melStep: 0.42, melOct: 2, pad: "triangle", drone: "sine",     melWave: "sine",     cutoff: 1600, reverb: 0.7,  pulseBpm: 0,  detune: 7,  level: 0.42,
-    melody: [[0,2],[4,2],[7,3],[11,4],[7,2],[9,2],[4,3],[REST,2]] },
-  // sacred anthem: a clear major arch up to the octave and a hymnlike resolve home
-  { id: "genesis",   name: "The Genesis Plane", root: A * 2,    chord: [0, 4, 7, 11, 14], melStep: 0.34, melOct: 2, pad: "triangle", drone: "sine",     melWave: "triangle", cutoff: 2200, reverb: 0.75, pulseBpm: 0,  detune: 4,  level: 0.42,
-    melody: [[0,2],[4,1],[7,2],[12,4],[11,2],[7,2],[9,1],[7,1],[4,2],[0,4]] },
-  // hypnotic, off-kilter: a symmetric whole-tone figure that circles and never quite lands
-  { id: "elsewhere", name: "Elsewhere",         root: A * 1.25, chord: [0, 4, 8],         melStep: 0.28, melOct: 2, pad: "sine",     drone: "triangle", melWave: "triangle", cutoff: 1000, reverb: 0.55, pulseBpm: 0,  detune: 10, level: 0.45,
-    melody: [[0,1],[2,1],[4,2],[6,1],[8,2],[6,1],[4,1],[2,2],[REST,2]],
-    groove: 0.4, bpm: 112, bass: [[0,2],[4,2],[8,2],[4,2],[0,2],[8,2],[4,2],[0,2]],
-    chorus: [[0,2],[4,2],[8,2],[10,2],[8,2],[4,2],[2,2],[0,2]] },
+  { id: "legacy",    name: "Legacy Stack",      root: A,        chord: [0, 7, 15],        pad: "sine",     drone: "sine",     cutoff: 700,  reverb: 0.4,  pulseBpm: 0,  detune: 5,  level: 0.5,
+    groove: 0.38, bpm: 80,  bass: [[0,4],[7,4],[3,4],[5,4]] },
+  { id: "parachain", name: "Parachain Reaches", root: A * 1.5,  chord: [0, 7, 14, 16],    pad: "triangle", drone: "sine",     cutoff: 1100, reverb: 0.45, pulseBpm: 0,  detune: 6,  level: 0.5,
+    groove: 0.5,  bpm: 116, bass: [[0,2],[7,2],[4,2],[7,2],[9,2],[7,2],[5,2],[0,2]] },
+  { id: "kusama",    name: "Kusama Deeps",      root: A * 0.75, chord: [0, 6, 13],        pad: "sawtooth", drone: "sine",     cutoff: 600,  reverb: 0.5,  pulseBpm: 0,  detune: 14, level: 0.45,
+    groove: 0.5,  bpm: 124, bass: [[0,2],[0,2],[6,2],[0,2],[3,2],[6,2],[0,4]] },
+  { id: "mempool",   name: "The Mempool",       root: A,        chord: [0, 5, 10],        pad: "sawtooth", drone: "triangle", cutoff: 800,  reverb: 0.35, pulseBpm: 96, detune: 9,  level: 0.45,
+    groove: 0.62, bpm: 132, bass: [[0,2],[0,2],[7,2],[0,2],[0,2],[10,2],[7,2],[5,2]] },
+  { id: "relay",     name: "Foot of the Relay", root: A * 0.5,  chord: [0, 12],           pad: "sine",     drone: "sine",     cutoff: 400,  reverb: 0.6,  pulseBpm: 0,  detune: 3,  level: 0.5,
+    groove: 0.28, bpm: 72,  bass: [[0,4],[7,4],[0,4],[12,4]] }, // slow, open fifths — gravely spacious
+  { id: "gehennom",  name: "Gehennom",          root: A * 0.5,  chord: [0, 1, 6],         pad: "sawtooth", drone: "sawtooth", cutoff: 460,  reverb: 0.5,  pulseBpm: 50, detune: 18, level: 0.5,
+    groove: 0.3,  bpm: 88,  bass: [[0,4],[1,2],[6,2],[0,4],[6,2],[1,2]] },
+  { id: "sanctum",   name: "Moloch's Sanctum",  root: A * 0.5,  chord: [0, 6, 7],         pad: "sawtooth", drone: "sawtooth", cutoff: 620,  reverb: 0.4,  pulseBpm: 84, detune: 16, level: 0.52,
+    groove: 0.32, bpm: 100, bass: [[0,2],[0,2],[7,2],[6,2],[0,2],[0,2],[7,2],[7,2]] },
+  { id: "planes",    name: "The Planes",        root: A * 2,    chord: [0, 7, 16, 23],    pad: "triangle", drone: "sine",     cutoff: 1600, reverb: 0.7,  pulseBpm: 0,  detune: 7,  level: 0.42,
+    groove: 0.3,  bpm: 92,  bass: [[0,4],[7,4],[16,4],[7,4]] }, // floating, weightless
+  { id: "genesis",   name: "The Genesis Plane", root: A * 2,    chord: [0, 4, 7, 11, 14], pad: "triangle", drone: "sine",     cutoff: 2200, reverb: 0.75, pulseBpm: 0,  detune: 4,  level: 0.42,
+    groove: 0.32, bpm: 96,  bass: [[0,2],[4,2],[7,2],[4,2],[0,2],[7,2],[4,2],[0,2]] },
+  { id: "elsewhere", name: "Elsewhere",         root: A * 1.25, chord: [0, 4, 8],         pad: "sine",     drone: "triangle", cutoff: 1000, reverb: 0.55, pulseBpm: 0,  detune: 10, level: 0.45,
+    groove: 0.42, bpm: 112, bass: [[0,2],[4,2],[8,2],[4,2],[0,2],[8,2],[4,2],[0,2]] },
 ];
 
 const ROMAN = ["", " II", " III", " IV", " V"];
 const revoice = (c: number[]) => c.map((n, i) => (i === c.length - 1 ? n + 12 : n));
 const clampRev = (r: number) => Math.min(0.85, r);
-// Five textural variants per area — same root, chord, and (crucially) the same melody;
-// only timbre, brightness, register, density, and reverb change, so the leitmotif stays.
+// Five textural variants per area — same root, chord, groove; only timbre, brightness,
+// register, reverb, and pulse change, so the area still reads as itself.
 const VARIANTS: ((b: Base) => Partial<Base>)[] = [
   () => ({}),                                                                                                              // I — the base texture
-  (b) => ({ chord: revoice(b.chord), cutoff: Math.round(b.cutoff * 1.3), detune: b.detune + 4, melStep: +(b.melStep * 0.85).toFixed(3) }), // II — brighter, quicker
-  (b) => ({ pad: b.drone, drone: b.pad, cutoff: Math.round(b.cutoff * 0.78), reverb: clampRev(b.reverb + 0.12), melOct: Math.max(1, b.melOct / 2), pulseBpm: b.pulseBpm ? Math.round(b.pulseBpm * 0.86) : 0 }), // III — darker, lower
-  (b) => ({ cutoff: Math.round(b.cutoff * 1.6), reverb: clampRev(b.reverb + 0.18), melOct: b.melOct * 2, melWave: "sine", melStep: +(b.melStep * 1.15).toFixed(3) }), // IV — high shimmer
-  (b) => ({ pad: b.drone, cutoff: Math.round(b.cutoff * 0.68), detune: b.detune + 7, melStep: +(b.melStep * 1.35).toFixed(3), pulseBpm: b.pulseBpm || 46 }), // V — heavy, slow, weighted
+  (b) => ({ chord: revoice(b.chord), cutoff: Math.round(b.cutoff * 1.3), detune: b.detune + 4 }),                          // II — brighter, revoiced
+  (b) => ({ pad: b.drone, drone: b.pad, cutoff: Math.round(b.cutoff * 0.78), reverb: clampRev(b.reverb + 0.12), pulseBpm: b.pulseBpm ? Math.round(b.pulseBpm * 0.86) : 0 }), // III — darker, lower
+  (b) => ({ cutoff: Math.round(b.cutoff * 1.6), reverb: clampRev(b.reverb + 0.18) }),                                      // IV — high shimmer
+  (b) => ({ pad: b.drone, cutoff: Math.round(b.cutoff * 0.68), detune: b.detune + 7, pulseBpm: b.pulseBpm || 46 }),        // V — heavy, weighted
 ];
 function variant(b: Base, n: number): TrackDef {
   return { ...b, ...VARIANTS[n](b), area: b.id, id: n === 0 ? b.id : `${b.id}-${n + 1}`, name: `${b.name}${ROMAN[n]}` };
 }
-// every area gets five textures sharing one leitmotif → "random by area" stays recognisable
 const TRACKS: TrackDef[] = BASES.flatMap((b) => VARIANTS.map((_, n) => variant(b, n)));
 const tracksForArea = (area: string) => TRACKS.filter((t) => t.area === area);
 
@@ -116,11 +85,10 @@ const semi = (root: number, n: number) => root * Math.pow(2, n / 12);
 interface Voice { osc: OscillatorNode; gain: GainNode; lfo?: OscillatorNode; }
 interface ActiveTrack { def: TrackDef; bus: GainNode; voices: Voice[]; }
 
-/** The game's per-frame snapshot of what's around — drives distress, density, and reactions. */
+/** The game's per-frame snapshot of what's around — drives distortion, groove, and tension. */
 export interface MusicContext {
-  distress: number;   // 0..1 — deeper + more peril = sicker
-  presence: number;   // 0..1 — structural melodic density (fuller shallow, sparser deep)
-  danger: number;     // 0..1 — the tension layer
+  threat: number;     // 0..1 — visible foes (count + proximity) → warps the bed (murk + detune)
+  danger: number;     // 0..1 — drives the tension layer (trills / fast beats / bass)
   bossNear: boolean;  // a boss / dragon / Censor in view → a menace rumble
   crowd: number;      // 0..1 — how thronged the area is
   jamNear: boolean;   // the JAM is on the level / held → a deep ominous pulse
@@ -131,7 +99,7 @@ export interface MusicContext {
 export class MusicEngine {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
-  private murk!: BiquadFilterNode;   // global lowpass the ambient bed runs through — closes with distress
+  private murk!: BiquadFilterNode;   // global lowpass the ambient bed runs through — closes near threats
   private reverb!: ConvolverNode;
   private reverbReturn!: GainNode;
   private active: ActiveTrack | null = null;
@@ -140,30 +108,28 @@ export class MusicEngine {
   private menaceGain!: GainNode;     // a low rumble that rises when a boss looms
   private noiseBuf: AudioBuffer | null = null;
   private timer: number | null = null;
-  private nextMel = 0;       // next melody-note time
-  private melIdx = 0;        // position within the leitmotif phrase
-  private phraseFresh = true;        // a new phrase is about to be decided
-  private phraseSkip = false;        // this cycle is an ambient drift (no melody)
-  private phraseTranspose = 0;       // chord-tone shift for anti-loop variety
-  private phraseOct = 1;             // octave for this restatement
-  private nextTensionMote = 0;
   private nextPulse = 0;
-  private nextTensionPulse = 0;
-  // ── groove layer (drums + bass + verse/chorus) ──
-  private grooveBus!: GainNode;      // drums + bass — dry, punchy, bypasses the distress murk
+  // ── groove layer (drums + bass) ──
+  private grooveBus!: GainNode;      // drums + bass — dry, punchy, bypasses the threat murk
   private nextStep = 0;              // next 16th-note drum step time
-  private stepIdx = 0;              // 0..15 position in the bar
-  private nextBass = 0;             // next bass onset time
-  private bassIdx = 0;             // position in the bassline phrase
-  private chorusUntil = 0;          // play the chorus hook until this time (set on big moments)
-  private stingerUntil = 0;         // a death/ascend stinger owns the mix until this time (tick won't fight it)
-  private phraseMel: Note[] = [];   // the melody (verse or chorus) chosen for the current phrase
+  private stepIdx = 0;               // 0..15 position in the bar
+  private nextBass = 0;              // next bass onset time
+  private bassIdx = 0;               // position in the bassline phrase
+  private calmSince = 0;             // ctx time since things last went calm (drives settle-to-ambience)
+  private stingerUntil = 0;          // a death/ascend stinger owns the mix until this time
+  // ── tension layer (trills + fast beats + bass) ──
+  private nextTrill = 0;
+  private trillTog = false;
+  private nextTensionStep = 0;
+  private tensionStepIdx = 0;
+  private nextTensionBass = 0;
+  private tensionBassIdx = 0;
   private nextJam = 0;
   private nextChime = 0;
   private nextDrip = 0;
   private ebbPhase = Math.random() * Math.PI * 2;
-  private danger = 0;          // 0..1, smoothed target for the tension layer
-  private c: MusicContext = { distress: 0, presence: 1, danger: 0, bossNear: false, crowd: 0, jamNear: false, faucet: false, altar: false };
+  private danger = 0;          // 0..1, the tension layer's target
+  private c: MusicContext = { threat: 0, danger: 0, bossNear: false, crowd: 0, jamNear: false, faucet: false, altar: false };
   private _enabled = false;
   private _mode: string;       // "auto" | "shuffle" | a track id
   private area = "legacy";
@@ -176,7 +142,7 @@ export class MusicEngine {
 
   get enabled(): boolean { return this._enabled; }
   get mode(): string { return this._mode; }
-  get trackList(): { id: string; name: string }[] { return BASES.map((t) => ({ id: t.id, name: t.name })); } // the picker lists themes; variants play under auto/shuffle
+  get trackList(): { id: string; name: string }[] { return BASES.map((t) => ({ id: t.id, name: t.name })); }
 
   /** Resume the context after a user gesture (autoplay policy). */
   resume(): void { if (this.ctx && this.ctx.state === "suspended") void this.ctx.resume(); }
@@ -216,7 +182,7 @@ export class MusicEngine {
   /** The game sets a 0..1 danger level each turn; the tension layer follows it. */
   setDanger(level: number): void { this.danger = Math.max(0, Math.min(1, level)); }
 
-  /** The game's per-frame context — drives distress, density, and reactive layers. */
+  /** The game's per-frame context — drives distortion, groove, and the tension layer. */
   setContext(c: MusicContext): void { this.c = c; this.danger = c.danger; }
 
   /** A one-shot musical cue on death (falling, gloomy) or ascension (rising, luminous). */
@@ -226,10 +192,10 @@ export class MusicEngine {
     this.resume();
     const ctx = this.ctx!;
     const now = ctx.currentTime;
-    // duck the area bed + kill tension so the stinger reads clearly
+    // duck the area bed + kill tension/groove so the stinger reads clearly
     if (this.active) { this.active.bus.gain.cancelScheduledValues(now); this.active.bus.gain.setTargetAtTime(this.active.def.level * 0.2, now, 0.2); }
     this.tensionBus.gain.cancelScheduledValues(now); this.tensionBus.gain.setTargetAtTime(0, now, 0.15);
-    this.grooveBus.gain.cancelScheduledValues(now); this.grooveBus.gain.setTargetAtTime(0, now, 0.15); // drop the beat under the stinger
+    this.grooveBus.gain.cancelScheduledValues(now); this.grooveBus.gain.setTargetAtTime(0, now, 0.15);
     const bus = this.makeBus(0.6);
     bus.gain.value = 0.9;
     if (kind === "ascend") {
@@ -255,7 +221,7 @@ export class MusicEngine {
     this.master = this.ctx.createGain();
     this.master.gain.value = 0.6;
     this.master.connect(this.ctx.destination);
-    // a global lowpass the whole ambient bed passes through — it closes as distress rises (murk)
+    // a global lowpass the whole ambient bed passes through — it closes as nearby threat rises (murk)
     this.murk = this.ctx.createBiquadFilter();
     this.murk.type = "lowpass";
     this.murk.frequency.value = 8500;
@@ -273,8 +239,8 @@ export class MusicEngine {
     this.tensionWet = this.ctx.createGain(); this.tensionWet.gain.value = 0.5;
     this.tensionBus.connect(tDry).connect(this.master);
     this.tensionBus.connect(this.tensionWet).connect(this.reverb);
-    // the groove bus — drums + bass. Dry straight to master (drums stay punchy, not muffled by
-    // the distress murk), with a small reverb send for glue.
+    // the groove bus — drums + bass. Dry straight to master (stays punchy, not muffled by the
+    // threat murk), with a small reverb send for glue.
     this.grooveBus = this.ctx.createGain();
     this.grooveBus.gain.value = 0;
     const gDry = this.ctx.createGain(); gDry.gain.value = 0.92;
@@ -355,15 +321,13 @@ export class MusicEngine {
     // pad chord with slow swells
     for (const c of def.chord) voices.push(this.makePad(def, semi(def.root, c) * 2, bus));
     this.active = { def, bus, voices };
-    this.nextMel = now + 1.2; // let the bed establish before the leitmotif enters
-    this.melIdx = 0;
-    this.phraseFresh = true; this.phraseOct = def.melOct; this.phraseTranspose = 0; this.phraseSkip = false;
-    this.phraseMel = def.melody;
     this.nextPulse = now + 0.5;
+    this.calmSince = now;
     // the groove enters a bar or two after the bed (so a zone fades up ambient first, then finds its beat)
     this.nextStep = this.nextBass = now + 2.4;
     this.stepIdx = this.bassIdx = 0;
-    this.chorusUntil = 0;
+    this.nextTrill = this.nextTensionStep = this.nextTensionBass = now;
+    this.trillTog = false; this.tensionStepIdx = this.tensionBassIdx = 0;
     this.nextJam = this.nextChime = this.nextDrip = now + 1;
   }
 
@@ -393,7 +357,7 @@ export class MusicEngine {
     return { osc, gain, lfo };
   }
 
-  /** A short plucked/bowed note into a bus (motes + tension stabs). */
+  /** A short plucked/bowed note into a bus (tension trills + foley). */
   private note(freq: number, when: number, dur: number, bus: GainNode, type: Wave, peak: number, cutoff: number, detune = 0): void {
     const ctx = this.ctx!;
     const osc = ctx.createOscillator(); osc.type = type; osc.frequency.value = freq; osc.detune.value = detune;
@@ -406,7 +370,7 @@ export class MusicEngine {
     osc.start(when); osc.stop(when + dur + 0.05);
   }
 
-  /** Slow swell-and-recede envelope (~70s) — the ebb and flow of the whole bed. */
+  /** Slow swell-and-recede envelope (~70s) — the ebb and flow of the groove intensity. */
   private ebb(now: number): number { return 0.5 + 0.5 * Math.sin((now / 70) * Math.PI * 2 + this.ebbPhase); }
 
   private startScheduler(): void {
@@ -422,105 +386,90 @@ export class MusicEngine {
     // shuffle mode rotates tracks over time
     if (this._mode === "shuffle" && now > this.shuffleUntil) this.pickShuffle();
 
-    // ── distress → murk + detune the whole bed (deeper/perilous = sicker) ──
-    const ds = this.c.distress;
-    this.murk.frequency.setTargetAtTime(8500 - ds * 7600, now, 1.2);
-    this.menaceGain.gain.setTargetAtTime((this.c.bossNear ? 0.13 : 0) + this.c.crowd * 0.05, now, 0.8);
+    const c = this.c;
+    // ── distortion tracks the VISIBLE THREAT around you (not depth): the murk closes + the bed sours ──
+    const warp = c.threat;
+    this.murk.frequency.setTargetAtTime(8500 - warp * 7000, now, 1.0);
+    this.menaceGain.gain.setTargetAtTime((c.bossNear ? 0.13 : 0) + c.crowd * 0.05, now, 0.8);
 
     const t = this.active?.def;
     if (t && this.active) {
-      for (const v of this.active.voices) v.osc.detune.setTargetAtTime(t.detune + ds * 34, now, 1.5); // beating sours the bed
-      // structural density: fuller shallow, sparser deep — modulated by the slow ebb
-      const presence = Math.max(0.08, Math.min(1, this.c.presence * (0.45 + 0.55 * this.ebb(now))));
+      for (const v of this.active.voices) v.osc.detune.setTargetAtTime(t.detune + warp * 30, now, 1.2); // beating sours the bed near foes
 
-      // ── groove intensity (hybrid: per-zone baseline + situation) drives the drums + bass ──
-      const base = t.groove ?? 0;
-      // a big moment latches the chorus on (and sustains it ~8s past the moment)
-      const bigMoment = this.c.bossNear || this.c.jamNear || ds > 0.72;
-      if (bigMoment && t.chorus) this.chorusUntil = now + 8;
-      const inChorus = now < this.chorusUntil && !!t.chorus;
+      // ── calm → ambience: after ~25s with nothing threatening, the groove ebbs out to the bare bed ──
+      const calm = this.danger < 0.06 && c.crowd < 0.05 && !c.bossNear && !c.jamNear && warp < 0.06;
+      if (!calm) this.calmSince = now;
+      const settled = now - this.calmSince > 25; // long calm → settle into ambience
+
+      // ── groove intensity (per-zone baseline + situation), silenced once we've settled into calm ──
+      const baseG = t.groove ?? 0;
       let intensity = 0;
-      if (base > 0) {
-        const situ = Math.max(this.danger, this.c.crowd * 0.7) + (this.c.jamNear ? 0.15 : 0) + (this.c.bossNear ? 0.2 : 0);
-        intensity = Math.min(1, base * (0.6 + 0.4 * this.ebb(now)) + 0.45 * situ + (inChorus ? 0.3 : 0));
+      if (baseG > 0 && !settled) {
+        const situ = Math.max(this.danger, c.crowd * 0.7) + (c.jamNear ? 0.15 : 0) + (c.bossNear ? 0.2 : 0);
+        intensity = Math.min(1, baseG * (0.55 + 0.45 * this.ebb(now)) + 0.45 * situ);
       }
-      const grooveOn = intensity > 0.14;
+      const grooveOn = intensity > 0.12;
 
-      // the leitmotif — a continuously-mutating line: each restatement varies, with ambient drifts.
-      // On big moments it states the bigger CHORUS hook instead of the verse.
-      while (this.nextMel < horizon) {
-        if (this.phraseFresh) {
-          this.phraseFresh = false;
-          this.phraseMel = inChorus && t.chorus ? t.chorus : t.melody;
-          if (!inChorus && Math.random() > presence * 0.85 + 0.12) {
-            this.phraseSkip = true; // this cycle is an ambient drift — no motif (never during the chorus)
-          } else {
-            this.phraseSkip = false;
-            this.phraseTranspose = !inChorus && Math.random() < 0.35 ? (t.chord[1 + Math.floor(Math.random() * (t.chord.length - 1))] ?? 0) : 0;
-            const r = Math.random();
-            this.phraseOct = inChorus ? t.melOct : r < 0.18 ? t.melOct * 2 : r < 0.34 ? Math.max(1, t.melOct / 2) : t.melOct;
-          }
-        }
-        if (this.phraseSkip) {
-          this.nextMel += t.melStep * (14 + Math.random() * 18 + (1 - presence) * 16); // a long, variable silence
-          this.melIdx = 0; this.phraseFresh = true;
-          continue;
-        }
-        if (this.melIdx < this.phraseMel.length) {
-          const [deg, steps] = this.phraseMel[this.melIdx];
-          const dropP = inChorus ? 0 : (1 - presence) * 0.4 + ds * 0.15; // the hook plays every note
-          if (deg !== REST && Math.random() > dropP) {
-            const freq = semi(t.root, deg + this.phraseTranspose) * this.phraseOct;
-            const dur = Math.min(steps * t.melStep * 1.25, steps * t.melStep + 0.4);
-            const bend = Math.random() < ds * 0.4 ? -ds * 45 * Math.random() : 0; // notes sag flat under distress
-            const peak = (inChorus ? 0.115 : 0.085) * (0.55 + 0.45 * presence); // the chorus sings out
-            this.note(freq, this.nextMel, dur, this.active.bus, t.melWave, peak, t.cutoff * 2.5, bend);
-          }
-          this.nextMel += steps * t.melStep * (1 + (Math.random() - 0.5) * ds * 0.5); // timing falters when sick
-          this.melIdx++;
-        } else {
-          this.nextMel += t.melStep * (inChorus ? 1 : 4 + (1 - presence) * 9); // the hook repeats tightly; the verse breathes
-          this.melIdx = 0; this.phraseFresh = true;
-        }
-      }
-
-      // ── the groove: drums on a 16-step bar + a rhythmic bassline, fading in with intensity ──
       const stinging = now < this.stingerUntil;
-      this.grooveBus.gain.setTargetAtTime(grooveOn && !stinging ? intensity * 0.5 : 0, now, 1.0);
+      // a slow fade when settling into ambience, snappy otherwise
+      this.grooveBus.gain.setTargetAtTime(grooveOn && !stinging ? intensity * 0.5 : 0, now, settled ? 2.6 : 1.0);
       if (grooveOn && !stinging) this.scheduleGroove(t, now, horizon, intensity);
       else { this.nextStep = this.nextBass = now; this.stepIdx = this.bassIdx = 0; }
 
-      // low pulse / heartbeat — the groove's kick takes over the low end once it's going
+      // low pulse / heartbeat — only when the groove is resting
       if (t.pulseBpm > 0 && !grooveOn) {
         const beat = 60 / t.pulseBpm;
         while (this.nextPulse < horizon) { this.pulse(t.root * 0.5, this.nextPulse, this.active.bus, 0.18); this.nextPulse += beat; }
       } else this.nextPulse = now;
 
       // ── context reactions ──
-      // the JAM on the level: a deep, slow, ominous pulse
-      if (this.c.jamNear) { while (this.nextJam < horizon) { this.pulse(t.root * 0.5, this.nextJam, this.active.bus, 0.16); this.nextJam += 2.4; } } else this.nextJam = now;
-      // altar: a soft high chime (musical reaction + signature foley)
-      if (this.c.altar) { while (this.nextChime < horizon) { this.note(semi(t.root, 12) * 4, this.nextChime, 2.6, this.active.bus, "sine", 0.05, 4000); this.nextChime += 3.5 + Math.random() * 2.5; } } else this.nextChime = now;
-      // faucet: occasional water drips (signature foley)
-      if (this.c.faucet) { while (this.nextDrip < horizon) { this.drip(this.nextDrip); this.nextDrip += 0.7 + Math.random() * 1.8; } } else this.nextDrip = now;
+      if (c.jamNear) { while (this.nextJam < horizon) { this.pulse(t.root * 0.5, this.nextJam, this.active.bus, 0.16); this.nextJam += 2.4; } } else this.nextJam = now;
+      if (c.altar) { while (this.nextChime < horizon) { this.note(semi(t.root, 12) * 4, this.nextChime, 2.6, this.active.bus, "sine", 0.05, 4000); this.nextChime += 3.5 + Math.random() * 2.5; } } else this.nextChime = now;
+      if (c.faucet) { while (this.nextDrip < horizon) { this.drip(this.nextDrip); this.nextDrip += 0.7 + Math.random() * 1.8; } } else this.nextDrip = now;
     }
 
-    // ── the tension layer, scaled by danger (a stinger owns the mix while it plays) ──
-    this.tensionBus.gain.setTargetAtTime(now < this.stingerUntil ? 0 : this.danger * 0.5, now, 0.6);
-    if (this.danger > 0.05 && t) {
-      while (this.nextTensionMote < horizon) {
-        const f = semi(t.root, 6 + (Math.random() < 0.5 ? 0 : 1)) * 3;
-        this.note(f, this.nextTensionMote, 0.5 + Math.random(), this.tensionBus, "sawtooth", 0.05, 1400);
-        this.nextTensionMote += (1.6 - this.danger) * (0.7 + Math.random() * 0.6);
-      }
-      if (this.danger > 0.4) {
-        const beat = 60 / (90 + this.danger * 60);
-        while (this.nextTensionPulse < horizon) { this.pulse(t.root * 0.5, this.nextTensionPulse, this.tensionBus, 0.12); this.nextTensionPulse += beat; }
-      } else this.nextTensionPulse = now;
-    } else {
-      this.nextTensionMote = now;
-      this.nextTensionPulse = now;
+    // ── the tension layer: trills + fast beats + a driving bass, scaled by danger ──
+    this.scheduleTension(now, horizon);
+  }
+
+  /** Tension: a rapid trill shimmer, a quickening drum pulse, and a driving bass — all by danger. */
+  private scheduleTension(now: number, horizon: number): void {
+    const t = this.active?.def;
+    const d = this.danger;
+    const stinging = now < this.stingerUntil;
+    this.tensionBus.gain.setTargetAtTime(stinging ? 0 : d * 0.5, now, 0.5);
+    if (stinging || !t || d <= 0.05) { this.nextTrill = this.nextTensionStep = this.nextTensionBass = now; return; }
+
+    const root = t.root;
+    // ── trills: a rapid alternation between two close, dissonant pitches; faster + tighter as danger climbs ──
+    const trillGap = 0.22 - d * 0.13; // ~0.22s → ~0.09s
+    while (this.nextTrill < horizon) {
+      const deg = this.trillTog ? 6 : 7; // a tritone/fifth shimmer
+      this.note(semi(root, deg) * 3, this.nextTrill, trillGap * 1.4, this.tensionBus, "square", 0.03 + d * 0.035, 2200);
+      this.trillTog = !this.trillTog;
+      this.nextTrill += trillGap;
     }
+    // ── fast beats: a tension percussion that quickens with danger (8th notes ~120 → ~230 bpm) ──
+    const beat = 60 / (120 + d * 110) / 2;
+    while (this.nextTensionStep < horizon) {
+      const s = this.tensionStepIdx;
+      this.noiseHit(this.nextTensionStep, 0.03, this.tensionBus, 0.05 + d * 0.05, "highpass", 7000, 0.7); // a fast hat every step
+      if (s % 2 === 0) this.kick(this.nextTensionStep, this.tensionBus, 0.16 + d * 0.22);                  // a pulse on the beat
+      if (d > 0.55 && s % 4 === 2) this.noiseHit(this.nextTensionStep, 0.12, this.tensionBus, 0.14, "bandpass", 1900, 0.8); // a snare crack under heavy danger
+      this.tensionStepIdx = (s + 1) % 8;
+      this.nextTensionStep += beat;
+    }
+    // ── a driving tension bassline: a low ostinato that pumps once danger is real ──
+    if (d > 0.3) {
+      const fig = [0, 0, 7, 0]; // root-root-fifth-root
+      while (this.nextTensionBass < horizon) {
+        let bf = semi(root, fig[this.tensionBassIdx % fig.length]);
+        while (bf < 41) bf *= 2; // lift very-low roots into audible bass range
+        this.bassNote(bf, this.nextTensionBass, beat * 0.9, this.tensionBus, 0.16 + d * 0.12);
+        this.tensionBassIdx = (this.tensionBassIdx + 1) % fig.length;
+        this.nextTensionBass += beat;
+      }
+    } else this.nextTensionBass = now;
   }
 
   /** A water drip — a quick high blip that falls in pitch. */

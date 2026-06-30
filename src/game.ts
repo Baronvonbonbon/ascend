@@ -1009,28 +1009,38 @@ export class Game {
     return danger;
   }
 
-  /** The per-frame snapshot the music engine reacts to: distress, density, and nearby context. */
+  /** The per-frame snapshot the music engine reacts to: threat, danger, and nearby context.
+   *  Depth no longer stresses the mix — only what's actually around you does. */
   private musicContext(): MusicContext {
     const p = this.player;
-    // depth fraction across the descent; the Planes stay uneasy (a held undercurrent)
-    const depthFrac = this.plane > 0 ? 0.62 : Math.min(1, (p.depth - 1) / (GEHENNOM_BOTTOM - 1));
-    // peril: low HP, afflictions, being hunted
+    const vis = (m: Monster) => this.level.isVisible(m.x, m.y);
+    const isBoss = (m: Monster) => m.def.boss || m.isHunter || m.def === MOLOCH || m.def === CENSOR;
+    // peril: low HP, afflictions, being hunted — folded into `danger` so the tension cues react to it
     let peril = 0;
     if (p.hp < p.maxHp * 0.4) peril = Math.max(peril, 1 - p.hp / (p.maxHp * 0.4));
     if (p.stoning > 0 || p.illness > 0) peril = Math.max(peril, 0.7);
     if (p.poison > 0) peril = Math.max(peril, 0.4);
     if (this.jamStolen || this.monsters.some((m) => m.alive && m.isHunter)) peril = Math.max(peril, 0.55);
-    const distress = Math.min(1, depthFrac * 0.8 + peril * 0.45);
-    const presence = Math.max(0.18, 1 - depthFrac * 0.7); // fuller shallow, sparser deep
-    const vis = (m: Monster) => this.level.isVisible(m.x, m.y);
-    const bossNear = this.monsters.some((m) => m.alive && (m.def.boss || m.isHunter || m.def === MOLOCH || m.def === CENSOR) && vis(m));
+    // threat: visible non-peaceful foes, scaled by how MANY and how CLOSE, peaking at bosses/swarms —
+    // this is what now warps the sound (murk + detune), in place of depth.
+    const here = this.playersHere();
+    let threat = 0;
+    for (const m of this.monsters) {
+      if (!m.alive || m.peaceful || !vis(m)) continue;
+      let dist = 99;
+      for (const q of here) dist = Math.min(dist, Math.max(Math.abs(m.x - q.x), Math.abs(m.y - q.y)));
+      const prox = Math.max(0, 1 - dist / 10); // ramps up within ~10 tiles
+      threat += prox * 0.35 * (isBoss(m) ? 2.2 : 1);
+    }
+    threat = Math.min(1, threat);
+    const bossNear = this.monsters.some((m) => m.alive && isBoss(m) && vis(m));
     const crowd = Math.min(1, this.monsters.filter((m) => m.alive && !m.peaceful && vis(m)).length / 6);
     const jamNear = this.allPlayers().some((q) => q.hasJam) || this.jamStolen || this.level.items.some((i) => i.type.id === "jam");
     const onFeat = (tile: string) => {
       for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]) if (this.level.tileAt(p.x + dx, p.y + dy) === tile) return true;
       return false;
     };
-    return { distress, presence, danger: this.dangerLevel(), bossNear, crowd, jamNear, faucet: onFeat("faucet"), altar: onFeat("altar") };
+    return { threat, danger: Math.min(1, Math.max(this.dangerLevel(), peril)), bossNear, crowd, jamNear, faucet: onFeat("faucet"), altar: onFeat("altar") };
   }
 
   /** Which level layout a depth uses — the descent rotates through layout zones for variety. */
@@ -3205,7 +3215,7 @@ export class Game {
     // draw() stays side-effect-free for callers that keep working on the active floor afterwards.
     const resume = this.activeKey;
     if (this.player?.alive) this.setActive(this.player.floorKey);
-    if (this.player) this.music.setContext(this.musicContext()); // distress, density, and reactions
+    if (this.player) this.music.setContext(this.musicContext()); // threat, danger, and reactions
     const huds = this.buildHuds();
     // each side renders its own fog; a downed player spectates the survivor's view
     const hostView = this.player.alive ? 0 : (this.coPlayer?.alive ? 1 : 0);
