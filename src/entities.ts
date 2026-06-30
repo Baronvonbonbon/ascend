@@ -304,7 +304,12 @@ export class Player extends Entity {
       case "@": this.game.showCharSheet(); return false;
       case "w": return this.startSelect("wield");
       case "W": return this.startSelect("wear");
-      case "q": return this.game.level.tileAt(this.x, this.y) === "faucet" ? (this.game.quaffFaucet(this) ? this.endTurn() : false) : this.startSelect("quaff");
+      case "q": {
+        const here = this.game.level.tileAt(this.x, this.y);
+        if (here === "faucet") return this.game.quaffFaucet(this) ? this.endTurn() : false;
+        if (here === "sink") return this.game.quaffSink(this) ? this.endTurn() : false;
+        return this.startSelect("quaff");
+      }
       case "s": return this.game.level.tileAt(this.x, this.y) === "throne" ? (this.game.sitThrone(this) ? this.endTurn() : false) : (this.game.search(this) ? this.endTurn() : false);
       case "o": // a chest underfoot opens directly; otherwise pick a direction to open a door
         if (this.game.chestUnderfoot(this)) return this.game.openChest(this) ? this.endTurn() : false;

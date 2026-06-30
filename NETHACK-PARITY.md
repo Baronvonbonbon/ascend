@@ -71,7 +71,7 @@ Every adaptation routes through this table so the theming stays coherent.
 | Mind flayer (brain) | **the Censor-spawn** (telepathy from its corpse) | 🟡 (telepathy intrinsic + demon bestiary; no brain-drain attack) |
 | Cockatrice/Medusa (petrify) | **the Freezer** (freeze = `Ston` countdown) | ✅ (Phase 7a — stoning, raced/cured) |
 | Fountain (#quaff/#dip) | **a faucet** (`{`) — `q` quaff for chaos; `D` dip to draw Polkadot's Edge | ✅ (Phase 9a/11g) |
-| Sink | **a burn sink** | ❌ |
+| Sink | **a burn sink** (`=`) — `q` quaff for chaos, `K` kick for a ring | ✅ |
 | Throne (#sit) | **the Sudo Throne** (`\`) | ✅ (Phase 9a — `s` sit) |
 | Altar | **Gavin's altar** (`_`) | ✅ |
 | Bag of holding | **a multisig vault** (`(`) | ✅ (Phase 11d — `#loot`, +12 slots) |

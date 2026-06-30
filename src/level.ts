@@ -312,7 +312,7 @@ export class Level {
   private lightPasses(x: number, y: number): boolean {
     const t = this.tiles[y]?.[x];
     // sight crosses open water (you see the far shore) but you cannot walk into it
-    return t === "floor" || t === "door" || t === "stairsDown" || t === "stairsUp" || t === "altar" || t === "portal" || t === "faucet" || t === "throne" || t === "vibrating" || t === "water" || t === "branchDown" || t === "pit";
+    return t === "floor" || t === "door" || t === "stairsDown" || t === "stairsUp" || t === "altar" || t === "portal" || t === "faucet" || t === "throne" || t === "sink" || t === "vibrating" || t === "water" || t === "branchDown" || t === "pit";
   }
 
   isPassable(x: number, y: number): boolean {

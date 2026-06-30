@@ -479,6 +479,7 @@ export class Game {
         this.placeAltar();
         this.placeFeature("faucet", 0.3);
         this.placeFeature("throne", 0.16);
+        this.placeFeature("sink", 0.18);
         this.placeChest(0.35);
         this.placeBoulders();
         this.placeSpecialRoom();
@@ -1417,6 +1418,7 @@ export class Game {
       this.draw(); return true;
     }
     const tile = this.level.tileAt(nx, ny);
+    if (tile === "sink") return this.kickSink(p, nx, ny);
     if (tile === "doorLocked") return this.kickDoor(p, nx, ny);
     if (tile === "doorClosed") { this.level.tiles[ny][nx] = "door"; this.recomputeFOV(); this.log.add("You kick the door open.", "good"); this.draw(); return true; }
     if (tile === "wall" || tile === "doorHidden") { this.log.add("You kick the wall. Ow — that was foolish.", "dim"); if (ROT.RNG.getUniform() < 0.4) { p.hp -= 1; if (p.hp <= 0) this.killPlayer(p); } return true; }
@@ -1673,6 +1675,32 @@ export class Game {
     else if (r < 0.90) { this.level.tiles[p.y][p.x] = "floor"; this.log.add("The faucet sputters and runs dry.", "dim"); }
     else this.log.add("You sip. Nothing happens.", "dim");
     if (p.hp <= 0) this.killPlayer(p);
+    return true;
+  }
+
+  /** Quaff from a burn sink underfoot — foul, mostly; rarely a ring rattles loose in the pipes. */
+  quaffSink(p: Player): boolean {
+    const r = ROT.RNG.getUniform();
+    if (r < 0.45) { this.log.add("You take a sip from the burn sink. Foul — that token was worthless.", "dim"); p.nutrition = Math.max(0, p.nutrition - 5); }
+    else if (r < 0.62) { this.log.add("The sink quivers and rumbles — something's stuck in the drain. (kick it?)", "sys"); }
+    else if (r < 0.78) { this.log.add("Acrid backwash from the burn address!", "bad"); this.applyStatus(p, "poison"); }
+    else if (r < 0.90) { const spot = this.adjacentFree(p.x, p.y); if (spot) { const m = new Monster(this, MONSTERS[0], spot.x, spot.y); this.monsters.push(m); this.scheduler.add(m, true); } this.log.add("A sludge bot crawls up out of the drain!", "bad"); }
+    else { this.log.add("You quaff. The pipes gurgle. Nothing.", "dim"); }
+    if (p.hp <= 0) this.killPlayer(p);
+    return true;
+  }
+
+  /** Kick a burn sink — the classic gamble: a ring may rattle loose, or you just stub your boot. */
+  private kickSink(p: Player, nx: number, ny: number): boolean {
+    const r = ROT.RNG.getUniform();
+    if (r < 0.22) {
+      const rings = ITEMS.filter((i) => i.kind === "ring");
+      const spot = this.level.itemAt(nx, ny) ? this.adjacentFreeFloor(nx, ny) : { x: nx, y: ny };
+      if (rings.length && spot) { this.level.items.push({ x: spot.x, y: spot.y, type: ROT.RNG.getItem(rings)!, buc: rollBuc() }); this.log.add("Clang! A ring rattles loose from the drain.", "good"); }
+      else this.log.add("Clang! The pipes shudder but yield nothing.", "dim");
+    } else if (r < 0.42) { const spot = this.adjacentFree(p.x, p.y); if (spot) { const m = new Monster(this, MONSTERS[0], spot.x, spot.y); this.monsters.push(m); this.scheduler.add(m, true); } this.log.add("Your kick dislodges a sludge bot!", "bad"); }
+    else { this.log.add("You kick the burn sink. Clang — and your foot smarts.", "dim"); if (ROT.RNG.getUniform() < 0.4) { p.hp -= 1; if (p.hp <= 0) this.killPlayer(p); } }
+    this.draw();
     return true;
   }
 
