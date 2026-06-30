@@ -5,11 +5,14 @@
 // baseline + live danger/crowd/JAM/boss). When you've been calm for a while it settles
 // back to the bare ambient bed; the groove snaps back when a threat returns.
 //
-// No leitmotifs/melodies — the texture is bed + groove, nothing tonal-foreground.
+// When fully settled (a long calm), a SLOW SPARSE BELL MELODY drawn from the zone's chord
+// drifts over the bed, with limited percussion that swells in and out over ~58s.
 // Distortion (murk + a soured, detuned bed) tracks the VISIBLE THREAT around you
 // (count + proximity, peaking at bosses/swarms) — never depth. A danger-driven TENSION
-// layer adds trills, fast beats, and a driving bassline. Tracks crossfade between areas;
-// stingers (death/ascension) duck everything.
+// layer picks one of several DANGER THEMES on the rising edge of danger (a boss/swarm
+// forces a heavy theme; the hells may too), then escalates it by threat — trills tighten,
+// bass enters, kicks fill, and heavy themes/high threat add sub-bass presence. Tracks
+// crossfade between areas; stingers (death/ascension) duck everything.
 
 type Wave = OscillatorType;
 
@@ -82,6 +85,30 @@ const tracksForArea = (area: string) => TRACKS.filter((t) => t.area === area);
 
 const semi = (root: number, n: number) => root * Math.pow(2, n / 12);
 
+// ── danger themes ────────────────────────────────────────────────────────────
+// On the rising edge of danger we pick ONE of these; visible threat then escalates
+// its arrangement (trills tighten → bass enters → kick fills → sub-bass presence).
+// "Light" themes sing in the zone's own chord (so combat grows out of the level's
+// harmony); "heavy" themes are self-contained dark scales, reserved for bosses,
+// swarms, and the hells — leaning into bass + low-end presence.
+interface DangerTheme {
+  id: string;
+  zoned: boolean;                               // true → trill in the zone's tensionScale (reshaped by `contour`)
+  scale?: number[];                             // self-contained scale (heavy themes)
+  contour?: (zoneScale: number[]) => number[];  // reshape the zone scale for melodic variety
+  lead: Wave; grace: Wave; cutoff: number;      // trill timbre + brightness
+  bassFig: number[];                            // ostinato (scale degrees) once danger is real
+  kickFill: number;                             // 0..1 — how aggressively kicks fill the bar
+  heavy: boolean;                               // dark + sub-bass + presence-forward
+}
+const DANGER_THEMES: DangerTheme[] = [
+  { id: "climb", zoned: true,  contour: (s) => s,                                                              lead: "triangle", grace: "square",   cutoff: 2600, bassFig: [0, 7, 0, 7, 0, 0, 7, 0], kickFill: 0.5,  heavy: false },
+  { id: "surge", zoned: true,  contour: (s) => [...s].reverse(),                                               lead: "square",   grace: "triangle", cutoff: 2300, bassFig: [0, 0, 7, 0, 0, 7, 5, 7], kickFill: 0.75, heavy: false },
+  { id: "weave", zoned: true,  contour: (s) => s.filter((_, i) => i % 2 === 0).concat(s.filter((_, i) => i % 2 === 1)), lead: "triangle", grace: "sine", cutoff: 2950, bassFig: [0, 5, 7, 5],          kickFill: 0.4,  heavy: false },
+  { id: "dread", zoned: false, scale: [0, 1, 3, 6, 7, 6, 3, 1],                                                lead: "sawtooth", grace: "square",   cutoff: 1700, bassFig: [0, 0, 1, 0, 6, 0, 1, 0], kickFill: 0.9,  heavy: true },
+  { id: "hunt",  zoned: false, scale: [0, 3, 6, 7, 10, 7, 6, 3],                                               lead: "square",   grace: "sawtooth", cutoff: 2050, bassFig: [0, 0, 0, 6, 0, 0, 7, 6], kickFill: 1.0,  heavy: true },
+];
+
 interface Voice { osc: OscillatorNode; gain: GainNode; lfo?: OscillatorNode; }
 interface ActiveTrack { def: TrackDef; bus: GainNode; voices: Voice[]; }
 
@@ -128,6 +155,15 @@ export class MusicEngine {
   private nextChime = 0;
   private nextDrip = 0;
   private ebbPhase = Math.random() * Math.PI * 2;
+  // ── calm ambient melody + sparse percussion (settled state) ──
+  private nextAmbMel = 0;
+  private ambMelIdx = 0;
+  private nextAmbPerc = 0;
+  private ambPercIdx = 0;
+  private ambPhase = Math.random() * Math.PI * 2; // phase of the ~58s percussion in/out cycle
+  // ── danger theme (picked on the rising edge of danger, escalated by threat) ──
+  private dangerActive = false;
+  private dangerTheme: DangerTheme | null = null;
   private danger = 0;          // 0..1, the tension layer's target
   private c: MusicContext = { threat: 0, danger: 0, bossNear: false, crowd: 0, jamNear: false, faucet: false, altar: false };
   private _enabled = false;
@@ -329,6 +365,8 @@ export class MusicEngine {
     this.nextTrill = this.nextTensionStep = this.nextTensionBass = now;
     this.trillIdx = 0; this.tensionStepIdx = this.tensionBassIdx = 0;
     this.nextJam = this.nextChime = this.nextDrip = now + 1;
+    this.nextAmbMel = this.nextAmbPerc = now + 2; this.ambMelIdx = 0;
+    this.dangerActive = false; this.dangerTheme = null;
   }
 
   private makeDrone(def: TrackDef, freq: number, level: number, bus: GainNode): Voice {
@@ -369,6 +407,22 @@ export class MusicEngine {
     g.gain.exponentialRampToValueAtTime(0.0008, when + dur);
     g.gain.linearRampToValueAtTime(0, when + dur + 0.04); // settle to true silence before stop — no click
     osc.start(when); osc.stop(when + dur + 0.05);
+  }
+
+  /** A soft bell/pad tone for the calm ambient melody — slow swell-in, long ring, rounded + with a
+   *  quiet octave shimmer. Routed into the area bus so it picks up the zone's reverb. */
+  private bellNote(freq: number, when: number, dur: number, bus: GainNode, peak: number): void {
+    const ctx = this.ctx!;
+    const osc = ctx.createOscillator(); osc.type = "triangle"; osc.frequency.value = freq;
+    const shimmer = ctx.createOscillator(); shimmer.type = "sine"; shimmer.frequency.value = freq * 2.005; // a touch of glassy octave
+    const sg = ctx.createGain(); sg.gain.value = 0.28;
+    const filt = ctx.createBiquadFilter(); filt.type = "lowpass"; filt.frequency.value = 2400;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(peak, when + 0.45);            // soft swell-in (no pluck)
+    g.gain.exponentialRampToValueAtTime(0.0006, when + dur);
+    g.gain.linearRampToValueAtTime(0, when + dur + 0.1);
+    osc.connect(filt); shimmer.connect(sg).connect(filt); filt.connect(g).connect(bus);
+    osc.start(when); shimmer.start(when); osc.stop(when + dur + 0.12); shimmer.stop(when + dur + 0.12);
   }
 
   /** Slow swell-and-recede envelope (~70s) — the ebb and flow of the groove intensity. */
@@ -427,6 +481,31 @@ export class MusicEngine {
       if (c.jamNear) { while (this.nextJam < horizon) { this.pulse(t.root * 0.5, this.nextJam, this.active.bus, 0.16); this.nextJam += 2.4; } } else this.nextJam = now;
       if (c.altar) { while (this.nextChime < horizon) { this.note(semi(t.root, 12) * 4, this.nextChime, 2.6, this.active.bus, "sine", 0.05, 4000); this.nextChime += 3.5 + Math.random() * 2.5; } } else this.nextChime = now;
       if (c.faucet) { while (this.nextDrip < horizon) { this.drip(this.nextDrip); this.nextDrip += 0.7 + Math.random() * 1.8; } } else this.nextDrip = now;
+
+      // ── calm ambience: once settled, a slow sparse bell melody + percussion that drifts in/out (~58s) ──
+      const ambient = settled && !stinging;
+      if (ambient) {
+        // a soft, slow, sparse melodic line drawn from the zone's own chord tones (with rests)
+        const sc = this.tensionScale(t);
+        while (this.nextAmbMel < horizon) {
+          if (Math.random() < 0.72) this.bellNote(semi(t.root, sc[this.ambMelIdx % sc.length]) * 2, this.nextAmbMel, 3.0, this.active.bus, 0.05);
+          this.ambMelIdx++;
+          this.nextAmbMel += 1.7 + Math.random() * 1.9; // 1.7–3.6s — sparse, unhurried
+        }
+        // limited percussion that swells in and out over ~58s — present only on the upper half of the cycle
+        const pc = 0.5 + 0.5 * Math.sin((now / 58) * Math.PI * 2 + this.ambPhase);
+        if (pc > 0.5) {
+          const amp = (pc - 0.5) * 2; // 0..1 within the active half of the cycle
+          while (this.nextAmbPerc < horizon) {
+            const s = this.ambPercIdx & 7; // a slow 8-step phrase
+            // a sparse, lightly-syncopated soft shaker — denser as the swell peaks, never on every step
+            if (s === 0 || s === 3 || s === 6 || (amp > 0.6 && (s === 4 || s === 7))) this.noiseHit(this.nextAmbPerc, 0.05, this.active.bus, (s === 0 ? 0.022 : 0.014) * amp, "highpass", 6500, 0.6);
+            if (s === 0 && Math.random() < 0.5) this.kick(this.nextAmbPerc, this.active.bus, 0.06 * amp); // an occasional soft heartbeat on the downbeat
+            this.ambPercIdx++;
+            this.nextAmbPerc += 0.46 + Math.random() * 0.08; // ~slow 8ths, slightly humanised
+          }
+        } else this.nextAmbPerc = now;
+      } else { this.nextAmbMel = now; this.nextAmbPerc = now; }
     }
 
     // ── the tension layer: trills + fast beats + a driving bass, scaled by danger ──
@@ -439,45 +518,72 @@ export class MusicEngine {
     const t = this.active?.def;
     const d = this.danger;
     const stinging = now < this.stingerUntil;
-    this.tensionBus.gain.setTargetAtTime(stinging ? 0 : d * 0.5, now, 0.6);
-    if (stinging || !t || d <= 0.05) { this.nextTrill = this.nextTensionStep = this.nextTensionBass = now; return; }
+    // Danger triggers the layer; visible threat (count + proximity), bosses, and crowds ESCALATE it.
+    const sev = Math.min(1, Math.max(d, this.c.threat) + (this.c.bossNear ? 0.15 : 0) + this.c.crowd * 0.2);
+    this.tensionBus.gain.setTargetAtTime(stinging ? 0 : Math.min(0.6, sev * 0.5), now, 0.6);
+    if (stinging || !t || d <= 0.05) {
+      this.nextTrill = this.nextTensionStep = this.nextTensionBass = now;
+      this.dangerActive = false; this.dangerTheme = null; // reset so the next fight re-rolls a theme
+      return;
+    }
+    // Rising edge → pick a theme. A boss/swarm arriving mid-fight upgrades a light theme to a heavy one.
+    if (!this.dangerActive || !this.dangerTheme) { this.dangerActive = true; this.pickDangerTheme(); }
+    else if (!this.dangerTheme.heavy && (this.c.bossNear || this.c.crowd > 0.55)) this.pickDangerTheme();
+    const th = this.dangerTheme!;
 
     const root = t.root;
     const sixteenth = 60 / (t.bpm ?? 110) / 4; // everything rides the zone's tempo grid
-    const scale = this.tensionScale(t);        // a melodic contour from the area's own chord
+    const scale = th.zoned ? (th.contour ? th.contour(this.tensionScale(t)) : this.tensionScale(t)) : th.scale!;
 
-    // ── melodic trills: a flowing line in the area's scale; subdivision tightens with danger ──
-    const gap = sixteenth * (d > 0.66 ? 1 : d > 0.33 ? 2 : 4); // 16th / 8th / quarter notes
-    const peak = 0.03 + d * 0.04;
+    // ── melodic trills: the theme's line; subdivision tightens with severity, grace shimmer enters mid ──
+    const gap = sixteenth * (sev > 0.66 ? 1 : sev > 0.33 ? 2 : 4); // 16th / 8th / quarter notes
+    const peak = 0.03 + sev * 0.04;
     while (this.nextTrill < horizon) {
       const deg = scale[this.trillIdx % scale.length];
-      this.note(semi(root, deg) * 2, this.nextTrill, gap * 0.85, this.tensionBus, "triangle", peak, 2600);
-      if (d > 0.4) this.note(semi(root, deg + 2) * 2, this.nextTrill + sixteenth * 0.5, sixteenth * 0.5, this.tensionBus, "square", peak * 0.7, 2400); // upper-neighbour grace = the trill shimmer
+      this.note(semi(root, deg) * 2, this.nextTrill, gap * 0.85, this.tensionBus, th.lead, peak, th.cutoff);
+      if (sev > 0.4) this.note(semi(root, deg + 2) * 2, this.nextTrill + sixteenth * 0.5, sixteenth * 0.5, this.tensionBus, th.grace, peak * 0.7, th.cutoff - 200); // grace shimmer
       this.trillIdx++;
       this.nextTrill += gap;
     }
 
-    // ── combat drums on the SAME 16-step bar as the zone groove, so they lock to the bed ──
+    // ── combat drums: kick density scales with severity × the theme's fill ──
     while (this.nextTensionStep < horizon) {
       const s = this.tensionStepIdx, when = this.nextTensionStep;
-      if (s === 0 || s === 8 || (d > 0.5 && (s === 4 || s === 12)) || (d > 0.75 && (s === 6 || s === 14))) this.kick(when, this.tensionBus, 0.18 + d * 0.22);
-      if ((s === 4 || s === 12) && d > 0.4) this.noiseHit(when, 0.12, this.tensionBus, 0.16, "bandpass", 1900, 0.8); // snare backbeat
-      if (s % 2 === 0 || d > 0.6) this.noiseHit(when, 0.03, this.tensionBus, 0.05 + d * 0.04, "highpass", 7600, 0.7); // hats
+      const fill = sev * (0.6 + th.kickFill * 0.6);
+      const kp = (0.16 + sev * 0.22) * (0.75 + th.kickFill * 0.4); // heavier themes hit harder
+      if (s === 0 || s === 8 || (fill > 0.5 && (s === 4 || s === 12)) || (fill > 0.75 && (s === 6 || s === 14))) this.kick(when, this.tensionBus, kp);
+      if ((s === 4 || s === 12) && sev > 0.4) this.noiseHit(when, 0.12, this.tensionBus, 0.16, "bandpass", 1900, 0.8); // snare backbeat
+      if (s % 2 === 0 || sev > 0.6) this.noiseHit(when, 0.03, this.tensionBus, 0.05 + sev * 0.04, "highpass", 7600, 0.7); // hats
       this.tensionStepIdx = (s + 1) % 16;
       this.nextTensionStep += sixteenth;
     }
 
-    // ── a driving tension bass: a root/fifth ostinato on the grid (8th notes) once danger is real ──
-    if (d > 0.3) {
-      const fig = [0, 7, 0, 7, 0, 0, 7, 0];
+    // ── driving bass (the theme's figure) once danger is real; high severity / heavy themes add sub-bass presence ──
+    if (sev > 0.3) {
+      const fig = th.bassFig;
       while (this.nextTensionBass < horizon) {
         let bf = semi(root, fig[this.tensionBassIdx % fig.length]);
         while (bf < 41) bf *= 2; // lift very-low roots into audible bass range
-        this.bassNote(bf, this.nextTensionBass, sixteenth * 1.8, this.tensionBus, 0.16 + d * 0.12);
+        this.bassNote(bf, this.nextTensionBass, sixteenth * 1.8, this.tensionBus, 0.16 + sev * 0.12);
+        if ((th.heavy || sev > 0.66) && bf / 2 >= 27) this.bassNote(bf / 2, this.nextTensionBass, sixteenth * 1.8, this.tensionBus, 0.09 + sev * 0.07); // sub-octave presence
         this.tensionBassIdx++;
         this.nextTensionBass += sixteenth * 2; // 8th notes
       }
     } else { this.nextTensionBass = now; this.tensionBassIdx = 0; }
+  }
+
+  /** On the rising edge of danger, choose a danger theme: a boss or swarm forces a heavy one; the
+   *  hells may draw a heavy one too; otherwise a light, zone-keyed theme. Avoids repeating the last. */
+  private pickDangerTheme(): void {
+    const heavies = DANGER_THEMES.filter((x) => x.heavy);
+    const lights = DANGER_THEMES.filter((x) => !x.heavy);
+    let pool: DangerTheme[];
+    if (this.c.bossNear || this.c.crowd > 0.55) pool = heavies;
+    else if (this.area === "gehennom" || this.area === "sanctum") pool = DANGER_THEMES;
+    else pool = lights;
+    let pick = pool[Math.floor(Math.random() * pool.length)];
+    if (pool.length > 1 && this.dangerTheme && pick.id === this.dangerTheme.id) pick = pool[(pool.indexOf(pick) + 1) % pool.length];
+    this.dangerTheme = pick;
   }
 
   /** A flowing up-and-back melodic contour drawn from the area's chord tones — the trills sing in
