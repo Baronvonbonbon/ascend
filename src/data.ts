@@ -248,7 +248,8 @@ export interface MonsterDef {
   silences?: boolean;    // a gag wraith — a hit smothers you in silence (no casting; in co-op, no chat)
   drainsStat?: boolean;  // a mind flayer — a hit drains a random attribute (restored by prayer)
   infects?: boolean;     // a werewolf — a hit may infect you with lycanthropy (uncontrolled were-forms)
-  muse?: boolean;        // muse.c — gulps a healing draught when badly hurt (a limited supply)
+  muse?: boolean;        // muse.c — gulps a healing draught when badly hurt; cornered, it blinks away
+  zaps?: "sleep" | "blind" | "confuse"; // muse.c — zaps a wand-borne debuff at you from range
   diseases?: boolean;    // a plague fly — a hit may make you sick (a deadly illness countdown; cure fast)
   seduces?: boolean;     // a succubus — adjacent, it charms you (a lost turn) and lifts an item, then blinks
   mimic?: boolean;       // a honeypot — sits disguised as loot, strikes when touched
@@ -283,6 +284,7 @@ export const MONSTERS: MonsterDef[] = [
   { name: "a slashing daemon", fname: "a giant serpent", ch: "S", fg: "#e06060", hp: 14, dmg: [4, 8], ai: "chase",  minDepth: 5, weight: 2, muse: true },
   { name: "a were-validator",  fname: "a werewolf",      ch: "d", fg: "#c08040", hp: 18, dmg: [3, 6], ai: "chase",  minDepth: 6, weight: 2, speed: 110, infects: true },
   { name: "a sudo conjurer",   fname: "a summoner cultist", ch: "&", fg: "#c080e0", hp: 16, dmg: [2, 4], ai: "chase",  minDepth: 6, weight: 2, summons: true },
+  { name: "a hex caster",      fname: "a sorcerer",      ch: "H", fg: "#b060d0", hp: 18, dmg: [3, 6], ai: "chase",  minDepth: 7, weight: 2, zaps: "sleep" },
   { name: "a thought leech",   fname: "a mind flayer",   ch: "u", fg: "#b060c0", hp: 20, dmg: [2, 5], ai: "chase",  minDepth: 8, weight: 2, speed: 95, drainsStat: true },
   { name: "a finality dragon", fname: "an ancient dragon", ch: "D", fg: "#ff5040", hp: 34, dmg: [5, 9], ai: "chase",  minDepth: 6, weight: 1, breath: 16, fearless: true },
   { name: "a panic seller",    fname: "a craven goblin", ch: "p", fg: "#d0d060", hp: 5,  dmg: [1, 3], ai: "chase",  minDepth: 2, weight: 3, cowardly: true },
@@ -299,7 +301,7 @@ export const MONSTERS: MonsterDef[] = [
   // ── deep Gehennom (Phase 18) — the back half of the descent gets fresh terrors, not just scaled-up shallows ──
   { name: "a cartel enforcer",   fname: "an iron enforcer",   ch: "B", fg: "#d06030", hp: 34, dmg: [6, 10], ai: "chase", minDepth: 13, weight: 2, corrodes: true, speed: 85, muse: true },
   { name: "a darkpool kraken",   fname: "a deepwater horror", ch: "Y", fg: "#5060c0", hp: 30, dmg: [5, 9],  ai: "chase", minDepth: 15, weight: 2, ranged: true, inflict: "confuse" },
-  { name: "a sovereign daemon",  fname: "an arch-lich",       ch: "Z", fg: "#e02020", hp: 42, dmg: [6, 11], ai: "chase", minDepth: 17, weight: 1, summons: true, fearless: true, breath: 16, muse: true },
+  { name: "a sovereign daemon",  fname: "an arch-lich",       ch: "Z", fg: "#e02020", hp: 42, dmg: [6, 11], ai: "chase", minDepth: 17, weight: 1, summons: true, fearless: true, muse: true, zaps: "blind" },
 ];
 
 /** The Marketmaker — a bazaar shopkeeper. Peaceful while you pay; lethal if you shoplift. */

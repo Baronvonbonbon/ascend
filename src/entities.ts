@@ -857,6 +857,7 @@ export class Monster extends Entity {
   cancelled = false; // a wand of nullification strips its special powers
   silenced = 0;   // turns of magical silence — can't summon or fire ranged spells
   museLeft = 0;   // healing draughts it still carries (muse.c) — gulped when badly hurt
+  museEscaped = false; // has used its one teleport draught to flee (muse.c)
   splitsLeft = 0; // a sybil's remaining replications — bounds the swarm (children inherit one fewer)
   stolen: Item | null = null; // a thief (rug puller) carries what it snatched; drops it on death
   stoleGold = 0;              // an airdrop farmer's snatched gold — disgorged when it's slain
@@ -945,6 +946,12 @@ export class Monster extends Entity {
       this.game.log.add(`${this.name.charAt(0).toUpperCase() + this.name.slice(1)} gulps a draught and steadies — +${h}.`, "bad", p);
       return;
     }
+    // muse.c escape: out of draughts and near death, it gulps a teleport draught and blinks across the level.
+    if (!this.cancelled && this.def.muse && this.museLeft === 0 && !this.museEscaped && this.hp < this.maxHp * 0.25 && ROT.RNG.getUniform() < 0.4) {
+      this.museEscaped = true;
+      this.game.museTeleport(this, p);
+      return;
+    }
 
     // A medic mends a wounded ally within reach instead of fighting.
     if (!this.cancelled && this.def.heals) {
@@ -1017,6 +1024,12 @@ export class Monster extends Entity {
     const pet = this.game.pet;
     if (pet && pet.alive && Math.max(Math.abs(this.x - pet.x), Math.abs(this.y - pet.y)) === 1) { this.game.attack(this, pet); return; }
 
+    // muse.c: a caster zaps a wand-borne debuff at you from range (sleep / blind / confuse) — silence stops it.
+    if (!this.cancelled && this.silenced === 0 && this.def.zaps && !p.stealth && dist >= 2 && dist <= 6 &&
+        this.game.level.isVisible(this.x, this.y) && this.game.hasLineOfSight(this.x, this.y, p.x, p.y) && ROT.RNG.getUniform() < 0.5) {
+      this.game.monsterZap(this, p);
+      return;
+    }
     // Ranged foes (oracles) zap the player from a distance with line-of-sight — a cast, stopped by silence.
     if (!this.cancelled && this.silenced === 0 && this.def.ranged && !p.stealth && dist >= 2 && dist <= 6 && this.game.level.isVisible(this.x, this.y) && this.game.hasLineOfSight(this.x, this.y, p.x, p.y)) {
       this.game.rangedAttack(this);
