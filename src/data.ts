@@ -218,8 +218,9 @@ export interface MonsterDef {
   cowardly?: boolean;    // flees once badly hurt
   heals?: boolean;       // a medic — mends wounded allies instead of fighting
   breeds?: boolean;      // multiplies when a pair of its kind is adjacent
-  corpseEffect?: "poisonous" | "petrify" | "speed" | "telepathy"; // what eating its corpse does
+  corpseEffect?: "poisonous" | "petrify" | "speed" | "telepathy" | "levelup"; // what eating its corpse does
   corrodes?: boolean;    // its touch rusts/corrodes a worn armor piece
+  drains?: boolean;      // a barrow-wight (wraith) — its touch saps an epoch (XP level); eat its corpse to regain one
   steals?: boolean;      // a thief — snatches a pack item and flees (the rug pull)
   stealsGold?: boolean;  // an airdrop farmer (leprechaun) — snatches gold and blinks away
   stealsLuck?: boolean;  // a doubt gremlin — leeches your Fortune (Luck) on a hit
@@ -245,6 +246,7 @@ export const MONSTERS: MonsterDef[] = [
   { name: "a watcher eye",     fname: "a floating eye",  ch: "e", fg: "#d8d040", hp: 14, dmg: [0, 0], ai: "chase",  minDepth: 4, weight: 2, speed: 60,  paralyzes: true },
   { name: "a censor imp",      fname: "a confusion imp", ch: "i", fg: "#d05c5c", hp: 8,  dmg: [3, 5], ai: "chase",  minDepth: 4, weight: 2, inflict: "confuse", corpseEffect: "telepathy" },
   { name: "a whale",           fname: "a hill giant",    ch: "O", fg: "#4090c0", hp: 24, dmg: [3, 6], ai: "chase",  minDepth: 5, weight: 2, speed: 60 },
+  { name: "a dilution wraith",  fname: "a barrow-wight",  ch: "W", fg: "#b6b0d4", hp: 16, dmg: [2, 4], ai: "chase",  minDepth: 6, weight: 2, speed: 90, drains: true, corpseEffect: "levelup" },
   { name: "an oracle",         fname: "a dark seer",     ch: "o", fg: "#e0c040", hp: 9,  dmg: [3, 6], ai: "chase",  minDepth: 5, weight: 2, ranged: true },
   { name: "a 51% attacker",    fname: "a berserker",     ch: "A", fg: "#e05050", hp: 16, dmg: [4, 8], ai: "chase",  minDepth: 6, weight: 2, speed: 110, inflict: "confuse" },
   { name: "a MEV bot",         fname: "a giant bat",     ch: "b", fg: "#80c060", hp: 6,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 3, speed: 135 },

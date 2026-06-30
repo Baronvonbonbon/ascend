@@ -238,7 +238,7 @@ export class Game {
   async forge(item: Item): Promise<void> {
     if (this.busy) return;
     if (this.coop) { this.log.add("Shops & forging are solo-only in co-op for now.", "dim"); return; }
-    if (!this.wallet) { this.log.add("Connect a wallet to forge a relic.", "bad"); return; }
+    if (!this.wallet) { this.log.add("The forge lies dormant — relic-forging returns in a later update.", "dim"); return; }
     if (!isGear(item.type)) { this.log.add("Only equipment — weapons, armor, rings, wands — can be forged.", "dim"); return; }
     if (item.relic) { this.log.add(`${cap(this.ident.name(item.type))} is already an on-chain relic.`, "dim"); return; }
     const base = Math.min(item.enchant ?? 0, 3); // the forge accepts at most +3 of base enchant
@@ -325,12 +325,31 @@ export class Game {
     }
   }
 
+  /** A barrow-wight's touch saps an epoch (NetHack drain-life). Eating its corpse regains one. */
+  drainLevel(p: Player, byName: string): void {
+    if (!p.alive) return;
+    if (p.level <= 1) { // can't slip below epoch 1 — sap raw vitality instead
+      const loss = ROT.RNG.getUniformInt(2, 5);
+      p.maxHp = Math.max(1, p.maxHp - loss); p.hp = Math.min(p.hp, p.maxHp);
+      this.log.add(`${cap(byName)} drains your vitality — max HP down ${loss}.`, "bad", p);
+      if (p.hp <= 0) this.killPlayer(p);
+      return;
+    }
+    p.level--;
+    const loss = ROT.RNG.getUniformInt(3, 8) + Math.max(0, abilityMod(p.con));
+    p.maxHp = Math.max(p.level, p.maxHp - loss); p.hp = Math.min(p.hp, p.maxHp);
+    p.xp = this.xpForLevel(p.level); // drop to the floor of the now-lower epoch
+    this.recomputeEnergy(p); p.energy = Math.min(p.energy, p.maxEnergy);
+    this.log.add(`${cap(byName)} drains an epoch — you slip to epoch ${p.level}! (max HP ${p.maxHp})`, "bad", p);
+    if (p.hp <= 0) this.killPlayer(p);
+  }
+
   showCharSheet(): void {
     const p = this.acting;
     this.log.add(`— ${p.name === "you" ? "You" : p.name}, ${p.title ? p.title + " " : ""}${archetypeName(archetypeById(p.archetype))} · ${ethosName(p.ethos)} · epoch ${p.level} —`, "sys");
     this.log.add(`  ${ATTRS.map((a) => `${ATTR_LABEL[a]} ${p[a]}`).join("  ")}`, "dim");
     this.log.add(`  HP ${p.hp}/${p.maxHp}  AC ${p.ac}  Fortune ${this.luckOf(p) >= 0 ? "+" : ""}${this.luckOf(p)}  XP ${p.xp}/${this.xpForLevel(p.level + 1)}`, "dim");
-    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", fast: "fast", telepathy: "telepathy" } as Record<string, string>)[i] ?? i);
+    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", drainResist: "drain resist", fast: "fast", telepathy: "telepathy" } as Record<string, string>)[i] ?? i);
     if (intr.length) this.log.add(`  Intrinsics: ${intr.join(", ")}.`, "good");
     if (p.spells.size) this.log.add(`  Energy ${p.energy}/${p.maxEnergy}. ${fp("Spells", "Extrinsics")}: ${[...p.spells].map((id) => { const s = spellById(id); return s ? spellName(s) : id; }).join(", ")}. (Z to cast)`, "sys");
     this.log.add(`  ${fp("Alignment", "Ethos")}: ${ethosName(p.ethos)}, favor ${p.favor}${p.crowned ? ` — ${fp("Knighted", "Technical Fellowship")} ${p.title}` : ""}.`, "dim");
@@ -350,7 +369,7 @@ export class Game {
     const skills = Object.keys(p.skillXp);
     if (skills.length) this.log.add(`  Skills: ${skills.map((c) => `${SKILL_LABEL[c] ?? c} ${SKILL_RANKS[p.skillRank[c] ?? 0]}`).join(", ")}.`, "dim");
     // intrinsics + spells
-    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", fast: "fast", telepathy: "telepathy" } as Record<string, string>)[i] ?? i);
+    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", drainResist: "drain resist", fast: "fast", telepathy: "telepathy" } as Record<string, string>)[i] ?? i);
     if (intr.length) this.log.add(`  Intrinsics: ${intr.join(", ")}.`, "good");
     if (p.spells.size) this.log.add(`  Extrinsics: ${[...p.spells].map((id) => spellById(id)?.name ?? id).join(", ")}.`, "dim");
     // active afflictions / timeouts
@@ -371,9 +390,7 @@ export class Game {
     // conducts
     const kept = CONDUCTS.filter((c) => p.conducts.has(c.id));
     this.log.add(`  Vows kept: ${kept.length ? kept.map((c) => c.label).join(", ") : "none"}.`, kept.length ? "good" : "dim");
-    // on-chain
-    if (this.wallet) this.log.add(`  Wallet ${this.wallet.address.slice(0, 6)}…${this.wallet.address.slice(-4)} · ${p.pas.toFixed(1)} PAS · ${this.loadedRelics.size} relic(s) loaded.`, "sys");
-    else this.log.add("  Off-chain (no wallet connected).", "dim");
+    // on-chain wallet/PAS readout is deferred — to be reintroduced in a later update.
   }
 
   /** A line summarising the vows a player still holds (for the death/ascension screen). */
@@ -555,6 +572,8 @@ export class Game {
   /** Voice ranges (Chebyshev tiles) — sound carries far past sight (FOV ≈ 8); reverberation, not
    *  distance, is the main degrader. */
   private static CHAT_RANGE = { whisper: 18, say: 40, shout: 90 } as const;
+  /** The fully-legible inner radius for each volume; past it, distance starts to erode the call. */
+  private static CHAT_CLEAR = { whisper: 5, say: 14, shout: 55 } as const;
 
   /** Send a chat message to the partner — OUT OF BAND: the displayed text never enters the lockstep
    *  turn stream and never touches the sim RNG, so it can't desync. The SOUND (which alerts enemies)
@@ -581,12 +600,24 @@ export class Game {
     const dist = Math.max(Math.abs(from.x - to.x), Math.abs(from.y - to.y));
     const R = Game.CHAT_RANGE[power];
     if (dist > R) return; // beyond earshot — lost to the dark
-    let keep = Math.max(0, 1 - dist / R); // gentle distance falloff over a long range
     const resume = this.activeKey; this.setActive(to.floorKey); // wallsBetween reads this.level
     const walls = this.wallsBetween(from.x, from.y, to.x, to.y);
     if (this.activeKey !== resume) this.setActive(resume);
-    keep *= Math.pow(0.8, walls); // ~20% lost per wall the sound reverberates around
-    keep = Math.max(0, Math.min(1, keep));
+    let keep: number;
+    if (walls === 0) {
+      keep = 1; // clear line of sight within range — always heard, plainly
+    } else {
+      // No LOS: only reverberation carries the call. A "clear core" stays legible within it; past it,
+      // distance erodes it. The louder the call, the bigger the core and the better it penetrates.
+      const core = Game.CHAT_CLEAR[power];
+      keep = dist <= core ? 1 : Math.max(0, 1 - (dist - core) / Math.max(1, R - core));
+      // Reverberation saturates — sound diffracts around a few corners rather than dying linearly per
+      // wall (and the straight line overcounts walls cutting through a corner's solid block, so cap it).
+      // Volume drives penetration: a shout carries around corners; a whisper barely survives one.
+      const perWall = power === "shout" ? 0.93 : power === "whisper" ? 0.72 : 0.85;
+      keep *= Math.pow(perWall, Math.min(walls, 4));
+      keep = Math.max(0, Math.min(1, keep));
+    }
     let total = 0, survived = 0;
     const degraded = [...text].map((ch) => {
       if (ch === " ") return " ";
@@ -1611,7 +1642,7 @@ export class Game {
       line = m.peaceful
         ? ROT.RNG.getItem([
             "\"Welcome, anon. Pay the bill and the goods are yours — lift them and I'll have your keys.\"",
-            "\"Liquidity's deep today. Drop your PAS on the counter, no slippage.\"",
+            "\"Coin on the counter, goods in your pack. No credit, no exceptions.\"",
             "\"I make markets in everything but trust. That, you bring yourself.\"",
           ])!
         : "\"THIEF! You'll settle this in blood, not blocks!\"";
@@ -1690,6 +1721,7 @@ export class Game {
       if (m.def.steals) tags.push("thief");
       if (m.def.breeds || m.def.splits) tags.push("breeder");
       if (m.def.corpseEffect === "petrify") tags.push("petrifying");
+      if (m.def.drains) tags.push("life-draining");
       if (m.sleepTurns > 0) tags.push("asleep");
       if (m.cancelled) tags.push("nullified");
       this.log.add(`You see ${m.name} — ${band} (${tags.join(", ")}).`, "sys");
@@ -1983,7 +2015,7 @@ export class Game {
 
   // ── on-chain persistence (Phase 4) ─────────────────────────────────────────
   private async recordResult(won: boolean): Promise<void> {
-    if (!this.wallet) { this.log.add("(connect a wallet to etch this run on-chain)", "dim"); return; }
+    if (!this.wallet) return; // on-chain run records are deferred — to be reintroduced in a later update
     const depth = won ? GEHENNOM_BOTTOM : this.player.maxDepthReached; // a win means wresting the JAM from the bottom
     const r = await recordRun(this.wallet.provider, this.wallet.address, depth, won);
     if (r.ok) { this.log.add("Your run is etched into the on-chain Hall of Fame (gasless).", "sys"); void this.fetchLeaderboard(); }
@@ -2056,6 +2088,7 @@ export class Game {
         d.luck = Math.max(-13, d.luck - 1);
         this.log.add(`${cap(a.name)} leeches your Fortune — doubt creeps in.`, "bad", who);
       }
+      if (!a.cancelled && a.def.drains && d.hp > 0 && !d.intrinsics.has("drainResist") && ROT.RNG.getUniform() < 0.33) this.drainLevel(d, a.name);
     }
     else if (a instanceof Player && d instanceof Player) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg} — friendly fire!`, "bad", who);
     else if (a === this.pet) this.log.add(`Your nominator savages ${d.name} for ${dmg}.`, "good", who);
@@ -2467,7 +2500,7 @@ export class Game {
         hit.cancelled = true;
         this.log.add(`${cap(hit.name)} is nullified — its powers fail.`, "good");
       } else if (item.type.id === "wand_probe") {
-        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.stealsGold && "gold thief", hit.def.stealsLuck && "Fortune leech", hit.def.paralyzes && "paralyzing gaze", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.cancelled && "nullified"].filter(Boolean).join(", ");
+        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.stealsGold && "gold thief", hit.def.stealsLuck && "Fortune leech", hit.def.drains && "life-draining", hit.def.paralyzes && "paralyzing gaze", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.cancelled && "nullified"].filter(Boolean).join(", ");
         this.log.add(`State-read ${hit.name}: ${hit.hp}/${hit.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       }
     }
@@ -2620,7 +2653,7 @@ export class Game {
     if (item.type.id === "scope") {
       const m = this.monsterAt(p.x + dx, p.y + dy);
       if (!m) { this.log.add("You press the state reader to empty air.", "dim"); return false; }
-      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.stealsGold && "gold thief", m.def.stealsLuck && "Fortune leech", m.def.paralyzes && "paralyzing gaze", m.def.splits && "splits", m.def.corrodes && "corrodes", m.cancelled && "nullified", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
+      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.stealsGold && "gold thief", m.def.stealsLuck && "Fortune leech", m.def.drains && "life-draining", m.def.paralyzes && "paralyzing gaze", m.def.splits && "splits", m.def.corrodes && "corrodes", m.cancelled && "nullified", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
       this.log.add(`State-read ${m.name}: ${m.hp}/${m.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       return true;
     }
@@ -2759,6 +2792,10 @@ export class Game {
       if (!p.intrinsics.has("fast") && ROT.RNG.getUniform() < 0.4) { p.intrinsics.add("fast"); this.log.add("You feel quick! (intrinsic speed)", "good"); }
     } else if (def.corpseEffect === "telepathy") {
       if (!p.intrinsics.has("telepathy")) { p.intrinsics.add("telepathy"); this.log.add("Your mind expands — you sense other minds while blind. (telepathy)", "good"); }
+    } else if (def.corpseEffect === "levelup") {
+      this.gainXp(p, Math.max(10, this.xpForLevel(p.level + 1) - p.xp + 1), false); // the wight's hoarded vitality flows back
+      this.log.add("Stolen vitality floods back into you — you feel experienced!", "good");
+      if (!p.intrinsics.has("drainResist") && ROT.RNG.getUniform() < 0.33) { p.intrinsics.add("drainResist"); this.log.add("Your spirit anchors — draining can't take hold. (drain resistance)", "good"); }
     } else if (rotten && !p.intrinsics.has("poisonResist") && ROT.RNG.getUniform() < 0.5) {
       p.illness = 8;
       this.log.add("That was rotten — a bad block churns in you. (cure it before it's fatal)", "bad");
@@ -2944,23 +2981,8 @@ export class Game {
         }
       }
     }
-    // From the Parachain Reaches on, the bazaar may carry a relic — an NFT ware
-    // that mints to you on purchase (a wallet tx) and persists across runs.
-    if (this.player.depth >= 5 && ROT.RNG.getUniform() < 0.5) {
-      const relicTypes = ITEMS.filter((i) => isGear(i));
-      const rt = ROT.RNG.getItem(relicTypes)!;
-      const enchant = ROT.RNG.getUniformInt(1, 2);
-      while (oi < offsets.length) {
-        const [dx, dy] = offsets[oi++];
-        const x = c.x + dx, y = c.y + dy;
-        if (this.level.isPassable(x, y) && !this.level.itemAt(x, y) &&
-            this.level.tileAt(x, y) !== "stairsDown" && !(x === this.player.x && y === this.player.y)) {
-          this.level.items.push({ x, y, type: rt, price: 12 + enchant * 4, nft: true, relic: true, mintOnBuy: true, enchant, buc: "blessed", bucKnown: true });
-          this.log.add("A fine enchanted relic is among the stock — an NFT ware, bought with your wallet (p).", "dim");
-          break;
-        }
-      }
-    }
+    // NFT relic wares (bought with PAS from a connected wallet) are deferred — to be
+    // reintroduced in a later update. The bazaar carries gold-priced standard stock only.
     // Post a Marketmaker to mind the stall — peaceful while you pay, lethal if you don't.
     const ring = [[2, 1], [1, 2], [-2, -1], [-1, -2], [2, -1], [-2, 1], [1, -2], [-1, 2], [2, 0], [-2, 0], [0, 2], [0, -2]];
     let keeper = false;
@@ -2976,8 +2998,8 @@ export class Game {
     }
     this.log.add(
       keeper
-        ? "A bazaar glints on this floor — the Marketmaker ($) tends it. Pay with PAS (stand on a ware, press p); shoplift and it turns lethal."
-        : "A bazaar glints somewhere on this floor — provisions for PAS (stand on a ware, press p).",
+        ? "A bazaar glints on this floor — the Marketmaker ($) tends it. Pay with gold (stand on a ware, press p); shoplift and it turns lethal."
+        : "A bazaar glints somewhere on this floor — provisions for gold (stand on a ware, press p).",
       "dim",
     );
   }

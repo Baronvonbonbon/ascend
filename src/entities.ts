@@ -746,7 +746,7 @@ export class Player extends Entity {
       else if (here.corpse) this.game.log.add(`A ${here.corpse.def.name} corpse lies here. (e to eat)`, "dim");
       else {
         const nm = this.game.ident.name(here.type);
-        this.game.log.add(here.price ? (here.nft ? `${nm} — ${here.price} PAS, an NFT (press p to mint-buy).` : `${nm} — ${here.price} gold (press p to buy).`) : `You see ${nm} here. (, to pick up)`, "dim");
+        this.game.log.add(here.price ? `${nm} — ${here.price} gold (press p to buy).` : `You see ${nm} here. (, to pick up)`, "dim");
       }
     }
     const grave = this.game.level.graveAt(this.x, this.y);
