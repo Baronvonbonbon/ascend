@@ -584,9 +584,7 @@ export class Game {
     if (!msg || !this.coop || this.netRole === "solo" || this.over || !this.localPlayer.alive) return;
     if (this.localPlayer.signalledThisTurn) { this.showChatBanner("(one message per turn — make a move first)", true); return; }
     this.localPlayer.signalledThisTurn = true;
-    const verb = power === "shout" ? "shout" : power === "whisper" ? "whisper" : "signal";
-    this.log.add(`You ${verb}: "${msg}"`, "sys");
-    this.showChatBanner(`You: ${msg}`, true);
+    this.showChatBanner(`You: ${msg}`, true); // banner only — chat never enters the event log
     this.peer?.send({ t: "chat", text: msg, power });
     this.emitOwnSound(power); // queue a deterministic "noise" so enemies can investigate (lockstep-safe)
   }
@@ -627,9 +625,7 @@ export class Game {
       return ".";
     }).join("");
     if (total === 0 || survived / total < 0.12) return; // nearly all lost — fades into dungeon sounds; show nothing
-    const label = power === "shout" ? "Partner shouts" : power === "whisper" ? "Partner whispers" : "Partner signals";
-    this.log.add(`${label}: "${degraded}"`, "sys");
-    this.showChatBanner(`${power === "shout" ? "Partner!" : "Partner"}: ${degraded}`, false);
+    this.showChatBanner(`${power === "shout" ? "Partner!" : "Partner"}: ${degraded}`, false); // banner only — not logged
   }
 
   /** Count the sound-blocking cells (walls / shut doors) on the straight line between two points — a
