@@ -18,4 +18,4 @@ export type NetMsg =
   // either → other: a keystroke the sender's own avatar just EXECUTED (broadcast-on-consume lockstep)
   | { t: "input"; key: string }
   // either → other: an out-of-band chat message (degraded by the recipient, never touches the sim)
-  | { t: "chat"; text: string };
+  | { t: "chat"; text: string; power: "whisper" | "say" | "shout" };

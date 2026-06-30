@@ -552,41 +552,91 @@ export class Game {
   /** Render viewer index for the local player (0 = this.player, 1 = the companion). */
   get localViewer(): 0 | 1 { return this.netRole === "guest" ? 1 : 0; }
 
-  /** Send a chat message to the partner — OUT OF BAND: it never enters the lockstep turn stream and
-   *  never touches the sim RNG, so it can't desync. Rate-limited to one message per your own turn. */
-  submitChat(text: string): void {
+  /** Voice ranges (Chebyshev tiles) — sound carries far past sight (FOV ≈ 8); reverberation, not
+   *  distance, is the main degrader. */
+  private static CHAT_RANGE = { whisper: 18, say: 40, shout: 90 } as const;
+
+  /** Send a chat message to the partner — OUT OF BAND: the displayed text never enters the lockstep
+   *  turn stream and never touches the sim RNG, so it can't desync. The SOUND (which alerts enemies)
+   *  is emitted separately + deterministically via emitOwnSound(). One message per your own turn. */
+  submitChat(text: string, power: "whisper" | "say" | "shout" = "say"): void {
     const msg = text.trim().slice(0, 60);
-    if (!msg || !this.coop || this.netRole === "solo" || this.over) return;
+    if (!msg || !this.coop || this.netRole === "solo" || this.over || !this.localPlayer.alive) return;
     if (this.localPlayer.signalledThisTurn) { this.showChatBanner("(one message per turn — make a move first)", true); return; }
     this.localPlayer.signalledThisTurn = true;
-    this.log.add(`You signal: "${msg}"`, "sys");
+    const verb = power === "shout" ? "shout" : power === "whisper" ? "whisper" : "signal";
+    this.log.add(`You ${verb}: "${msg}"`, "sys");
     this.showChatBanner(`You: ${msg}`, true);
-    this.peer?.send({ t: "chat", text: msg });
+    this.peer?.send({ t: "chat", text: msg, power });
+    this.emitOwnSound(power); // queue a deterministic "noise" so enemies can investigate (lockstep-safe)
   }
 
-  /** Receive the partner's chat. Degraded HERE (recipient-side) by distance + line-of-sight — using
-   *  Math.random for the display mask (NOT the sim RNG) and our own view of both avatars, so it's
-   *  purely cosmetic and sim-neutral. */
-  private receiveChat(text: string): void {
+  /** Receive the partner's chat. Degraded HERE (recipient-side) by distance + reverberation (walls the
+   *  sound must bounce around). Display-only: Math.random for the mask, our own view of both avatars —
+   *  sim-neutral. If nearly everything is lost, it fades into the dungeon and nothing is shown. */
+  private receiveChat(text: string, power: "whisper" | "say" | "shout"): void {
     const from = this.remotePlayer, to = this.localPlayer;
     if (!from || !to) return;
-    let display: string;
-    if (from.floorKey !== to.floorKey) display = "… (unheard — another floor)";
-    else {
-      const dist = Math.max(Math.abs(from.x - to.x), Math.abs(from.y - to.y));
-      const R = 14; // earshot (Chebyshev)
-      if (dist > R) display = "… (too far — lost in the dark)";
-      else {
-        let keep = Math.max(0, Math.min(1, 1 - dist / R)); // closer = clearer
-        const resume = this.activeKey; // LOS reads this.level — load the shared floor, then restore
-        this.setActive(to.floorKey);
-        if (!this.hasLineOfSight(from.x, from.y, to.x, to.y)) keep *= 0.45; // walls muffle it
-        if (this.activeKey !== resume) this.setActive(resume);
-        display = [...text].map((ch) => (ch === " " ? " " : Math.random() < keep ? ch : ".")).join("");
+    if (from.floorKey !== to.floorKey) return; // sound doesn't carry between dungeon floors — lost
+    const dist = Math.max(Math.abs(from.x - to.x), Math.abs(from.y - to.y));
+    const R = Game.CHAT_RANGE[power];
+    if (dist > R) return; // beyond earshot — lost to the dark
+    let keep = Math.max(0, 1 - dist / R); // gentle distance falloff over a long range
+    const resume = this.activeKey; this.setActive(to.floorKey); // wallsBetween reads this.level
+    const walls = this.wallsBetween(from.x, from.y, to.x, to.y);
+    if (this.activeKey !== resume) this.setActive(resume);
+    keep *= Math.pow(0.8, walls); // ~20% lost per wall the sound reverberates around
+    keep = Math.max(0, Math.min(1, keep));
+    let total = 0, survived = 0;
+    const degraded = [...text].map((ch) => {
+      if (ch === " ") return " ";
+      total++;
+      if (Math.random() < keep) { survived++; return ch; }
+      return ".";
+    }).join("");
+    if (total === 0 || survived / total < 0.12) return; // nearly all lost — fades into dungeon sounds; show nothing
+    const label = power === "shout" ? "Partner shouts" : power === "whisper" ? "Partner whispers" : "Partner signals";
+    this.log.add(`${label}: "${degraded}"`, "sys");
+    this.showChatBanner(`${power === "shout" ? "Partner!" : "Partner"}: ${degraded}`, false);
+  }
+
+  /** Count the sound-blocking cells (walls / shut doors) on the straight line between two points — a
+   *  proxy for how much the call has to reverberate around obstacles. */
+  private wallsBetween(x0: number, y0: number, x1: number, y1: number): number {
+    let walls = 0;
+    let dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+    let err = dx - dy, x = x0, y = y0;
+    while (x !== x1 || y !== y1) {
+      const e2 = 2 * err;
+      if (e2 > -dy) { err -= dy; x += sx; }
+      if (e2 < dx) { err += dx; y += sy; }
+      if (x === x1 && y === y1) break;
+      const t = this.level.tileAt(x, y);
+      if (t === "wall" || t === "doorClosed" || t === "doorLocked" || t === "doorHidden") walls++;
+    }
+    return walls;
+  }
+
+  /** Queue a deterministic "noise" into the lockstep stream so enemies can react. The synthetic key
+   *  (control-char prefix + power index) is broadcast-on-consume, so emitSound runs on the shouter's
+   *  turn on BOTH clients identically. */
+  private emitOwnSound(power: "whisper" | "say" | "shout"): void {
+    const idx = power === "shout" ? 2 : power === "whisper" ? 0 : 1;
+    this.localPlayer.feed("" + idx);
+  }
+
+  /** Apply a heard-sound alert: non-peaceful foes within earshot of the shouter turn to investigate
+   *  where the noise came from. Deterministic (positions only, no RNG) — safe in lockstep. */
+  emitSound(shouter: Player, powerIdx: number): void {
+    const radius = powerIdx === 2 ? 30 : powerIdx === 0 ? 4 : 12; // shout wakes the floor; a whisper barely carries
+    if (radius <= 0) return;
+    for (const m of this.monsters) {
+      if (!m.alive || m.peaceful || (m.def.mimic && !m.revealed)) continue;
+      if (Math.max(Math.abs(m.x - shouter.x), Math.abs(m.y - shouter.y)) <= radius) {
+        m.heardSound = { x: shouter.x, y: shouter.y, ttl: 6 + powerIdx * 2 };
       }
     }
-    this.log.add(`Partner signals: "${display}"`, "sys");
-    this.showChatBanner(`Partner: ${display}`, false);
   }
 
   /** Flash a chat signal as a banner over the top of the map, then fade it. Clean opacity fade in/out. */
@@ -3137,7 +3187,7 @@ export class Game {
       if (m?.t === "start") { this.coopMode = m.mode; this.archetypeId = m.archetype; this.newGame(m.seed); }   // build the shared world (Host's class)
       else if (m?.t === "restart") { this.archetypeId = m.archetype; this.newGame(m.seed); }                    // reseeded new run
       else if (m?.t === "input" && typeof m.key === "string") this.remoteInput(m.key);
-      else if (m?.t === "chat" && typeof m.text === "string") this.receiveChat(m.text);
+      else if (m?.t === "chat" && typeof m.text === "string") this.receiveChat(m.text, m.power ?? "say");
     });
     peer.onState((open) => {
       if (open) return;

@@ -47,8 +47,9 @@ if (screen && logEl) {
   // ── co-op chat bar: type + Send (PC keyboard or mobile touch keyboard) ──
   const chatInput = document.getElementById("chat-input") as HTMLInputElement | null;
   const chatSend = document.getElementById("chat-send") as HTMLButtonElement | null;
+  const chatPower = document.getElementById("chat-power") as HTMLSelectElement | null;
   if (chatInput && chatSend) {
-    const send = () => { const v = chatInput.value; chatInput.value = ""; if (v.trim()) game.submitChat(v); chatInput.blur(); };
+    const send = () => { const v = chatInput.value; chatInput.value = ""; if (v.trim()) game.submitChat(v, (chatPower?.value as "whisper" | "say" | "shout") ?? "say"); chatInput.blur(); };
     chatSend.addEventListener("click", send);
     chatInput.addEventListener("keydown", (e) => {
       e.stopPropagation(); // keep chat typing out of the game's keyboard handler

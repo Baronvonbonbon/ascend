@@ -24,6 +24,8 @@
       /* ── co-op chat bar (PC + mobile) ── */
       #chatbar { display: flex; gap: 6px; width: 100%; max-width: 960px; }
       #chatbar[hidden] { display: none; }
+      #chat-power { font-family: inherit; font-size: 13px; color: #8fd0ff; background: #13243a;
+        border: 1px solid #3a6fa0; border-radius: 4px; padding: 7px 4px; cursor: pointer; }
       #chat-input { flex: 1; font-family: inherit; font-size: 14px; color: var(--ink); background: #08080a;
         border: 1px solid #2a3a4a; border-radius: 4px; padding: 7px 10px; min-width: 0; }
       #chat-input:focus { outline: none; border-color: #3a6fa0; }
@@ -136,6 +138,11 @@
       <div id="screen"></div>
       <div id="log"></div>
       <div id="chatbar" hidden>
+        <select id="chat-power" title="Voice — louder carries farther but wakes more enemies">
+          <option value="whisper">🤫 whisper</option>
+          <option value="say" selected>💬 say</option>
+          <option value="shout">📢 shout</option>
+        </select>
         <input id="chat-input" type="text" maxlength="60" placeholder="message your partner… (one per turn)" autocomplete="off" autocapitalize="sentences" />
         <button id="chat-send" type="button">Send</button>
       </div>

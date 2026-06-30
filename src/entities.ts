@@ -191,9 +191,14 @@ export class Player extends Entity {
   }
 
   /** Snapshot of queued-but-unexecuted actions (for the queue indicator). */
-  queuedKeys(): string[] { return this.inputQueue.slice(); }
-  /** LIFO undo — drop the most recently queued action. Returns true if one was removed. */
-  popInput(): boolean { return this.inputQueue.pop() !== undefined; }
+  queuedKeys(): string[] { return this.inputQueue.filter((k) => k.charCodeAt(0) !== 1); } // hide internal sound markers
+  /** LIFO undo — drop the most recently queued real action (skipping internal sound markers). */
+  popInput(): boolean {
+    for (let i = this.inputQueue.length - 1; i >= 0; i--) {
+      if (this.inputQueue[i].charCodeAt(0) !== 1) { this.inputQueue.splice(i, 1); return true; }
+    }
+    return false;
+  }
 
   private drainQueue(): void {
     this.game.setActive(this.floorKey); // process this player's input against its own floor
@@ -275,6 +280,7 @@ export class Player extends Entity {
   /** Returns true if a turn was consumed (a key the engine should act on). */
   handleKey(e: KeyboardEvent): boolean {
     this.game.acting = this; // the player whose action this is (co-op: host or guest avatar)
+    if (e.key.charCodeAt(0) === 1) { this.game.emitSound(this, +e.key.slice(1)); return false; } // a queued shout/noise — alert nearby foes, free action
     if (this.pendingDir) return this.resolveZapDir(e);
     if (this.pendingThrow) return this.resolveThrowDir(e);
     if (this.pendingApply) return this.resolveApplyDir(e);
@@ -795,6 +801,7 @@ export class Monster extends Entity {
   splitsLeft = 0; // a sybil's remaining replications — bounds the swarm (children inherit one fewer)
   stolen: Item | null = null; // a thief (rug puller) carries what it snatched; drops it on death
   stoleGold = 0;              // an airdrop farmer's snatched gold — disgorged when it's slain
+  heardSound: { x: number; y: number; ttl: number } | null = null; // a partner's call it's investigating
   // A shopkeeper stands peaceful until you steal; then it hunts you down.
   peaceful = false;
   isHunter = false; // THE CENSOR resurrected to chase the JAM-bearer (Phase 12d)
@@ -837,6 +844,7 @@ export class Monster extends Entity {
   act(): void {
     this.game.setActive(this.floorKey); // act in this monster's floor context (co-op: floors run independently)
     if (!this.alive) return;
+    if (this.heardSound && --this.heardSound.ttl <= 0) this.heardSound = null; // a heard call fades over time
     const p = this.game.nearestPlayer(this.x, this.y); // target the closer of the party
     if (!p.alive) return;
 
@@ -951,8 +959,26 @@ export class Monster extends Entity {
       return;
     }
 
+    // Investigate a partner's call it heard — head toward where the noise came from.
+    if (this.heardSound) {
+      if (this.x === this.heardSound.x && this.y === this.heardSound.y) this.heardSound = null; // arrived — nothing here
+      else { this.stepToward(this.heardSound.x, this.heardSound.y); return; }
+    }
+
     // Wander.
     this.wanderStep();
+  }
+
+  /** Take one Dijkstra step toward a target tile (for investigating a heard sound). */
+  private stepToward(tx: number, ty: number): void {
+    const dij = new ROT.Path.Dijkstra(tx, ty, (x, y) => this.game.level.isPassable(x, y), { topology: 8 });
+    const path: [number, number][] = [];
+    dij.compute(this.x, this.y, (x, y) => path.push([x, y]));
+    path.shift(); // drop current tile
+    if (path.length) {
+      const [nx, ny] = path[0];
+      if (!this.game.monsterAt(nx, ny) && !this.game.playerAt(nx, ny) && !this.game.level.boulderAt(nx, ny)) { this.x = nx; this.y = ny; }
+    }
   }
 
   /** A random shuffle into an open neighbour — never onto a player. */
