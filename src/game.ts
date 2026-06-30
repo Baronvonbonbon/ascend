@@ -483,6 +483,7 @@ export class Game {
 
   /** Populate a freshly generated level, then place the party and build the schedule. */
   private enterLevel(): void {
+    for (const p of this.allPlayers()) p.engulfedBy = null; // a fresh floor's monsters are rebuilt — no engulfer carries over
     this.monsters = [];
     if (this.plane > 0) {
       this.setupPlane();
@@ -1723,6 +1724,7 @@ export class Game {
       if (m.def.breeds || m.def.splits) tags.push("breeder");
       if (m.def.corpseEffect === "petrify") tags.push("petrifying");
       if (m.def.drains) tags.push("life-draining");
+      if (m.def.engulfs) tags.push("engulfing");
       if (m.sleepTurns > 0) tags.push("asleep");
       if (m.cancelled) tags.push("nullified");
       this.log.add(`You see ${m.name} — ${band} (${tags.join(", ")}).`, "sys");
@@ -2090,6 +2092,10 @@ export class Game {
         this.log.add(`${cap(a.name)} leeches your Fortune — doubt creeps in.`, "bad", who);
       }
       if (!a.cancelled && a.def.drains && d.hp > 0 && !d.intrinsics.has("drainResist") && ROT.RNG.getUniform() < 0.33) this.drainLevel(d, a.name);
+      if (a.def.engulfs && d.hp > 0 && !d.engulfedBy) {
+        d.engulfedBy = a;
+        this.log.add(`${cap(a.name)} engulfs ${d.name} — swallowed whole! (move in any direction to struggle free)`, "bad", who);
+      }
     }
     else if (a instanceof Player && d instanceof Player) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg} — friendly fire!`, "bad", who);
     else if (a === this.pet) this.log.add(`Your nominator savages ${d.name} for ${dmg}.`, "good", who);
@@ -2197,6 +2203,36 @@ export class Game {
 
   /** A worn amulet of reflection rebounds rays/breath back at the source (works even cursed). */
   private reflects(p: Player): boolean { return p.amulet?.type.id === "amulet_reflect"; }
+
+  /** A trapper digests the adventurer it has swallowed — direct damage, no escape unless you struggle. */
+  digestEngulfed(m: Monster): boolean {
+    const p = this.allPlayers().find((q) => q.alive && q.engulfedBy === m);
+    if (!p) return false;
+    if (Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) > 1) { p.engulfedBy = null; return false; } // knocked apart — released
+    const [lo, hi] = m.attackDmg;
+    const d = ROT.RNG.getUniformInt(lo, hi);
+    p.hp -= d;
+    this.log.add(`${cap(m.name)} digests ${p.name} for ${d}!`, "bad", p);
+    if (p.hp <= 0) this.killPlayer(p);
+    return true;
+  }
+
+  /** Thrash against the trapper that swallowed you: a strike at it, plus a chance to wrench free. */
+  struggleEngulf(p: Player): boolean {
+    const m = p.engulfedBy;
+    if (!m || !m.alive) { p.engulfedBy = null; return false; }
+    if (Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) > 1) { p.engulfedBy = null; return false; } // knocked apart — freed
+    this.attack(p, m); // a swing from inside
+    if (!m.alive) { p.engulfedBy = null; this.log.add(`${this.sub(p)} ${this.verbS(p, "cut")} free as ${m.name} dies!`, "good", p); return true; }
+    const odds = 0.3 + Math.max(0, abilityMod(p.str)) * 0.06 + Math.max(0, abilityMod(p.dex)) * 0.04;
+    if (ROT.RNG.getUniform() < odds) {
+      p.engulfedBy = null;
+      this.log.add(`${this.sub(p)} ${this.verbS(p, "wrench")} free of ${m.name}!`, "good", p);
+    } else {
+      this.log.add(`${this.sub(p)} ${this.verbS(p, "struggle")} against ${m.name}'s grip.`, "dim", p);
+    }
+    return true;
+  }
 
   /** A ranged foe zaps the nearest party member (armor half-soaks; can still inflict status). */
   rangedAttack(a: Monster): void {
@@ -2528,7 +2564,7 @@ export class Game {
         hit.cancelled = true;
         this.log.add(`${cap(hit.name)} is nullified — its powers fail.`, "good");
       } else if (item.type.id === "wand_probe") {
-        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.stealsGold && "gold thief", hit.def.stealsLuck && "Fortune leech", hit.def.drains && "life-draining", hit.def.paralyzes && "paralyzing gaze", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.cancelled && "nullified"].filter(Boolean).join(", ");
+        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.stealsGold && "gold thief", hit.def.stealsLuck && "Fortune leech", hit.def.drains && "life-draining", hit.def.engulfs && "engulfing", hit.def.paralyzes && "paralyzing gaze", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.cancelled && "nullified"].filter(Boolean).join(", ");
         this.log.add(`State-read ${hit.name}: ${hit.hp}/${hit.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       }
     }
@@ -2681,7 +2717,7 @@ export class Game {
     if (item.type.id === "scope") {
       const m = this.monsterAt(p.x + dx, p.y + dy);
       if (!m) { this.log.add("You press the state reader to empty air.", "dim"); return false; }
-      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.stealsGold && "gold thief", m.def.stealsLuck && "Fortune leech", m.def.drains && "life-draining", m.def.paralyzes && "paralyzing gaze", m.def.splits && "splits", m.def.corrodes && "corrodes", m.cancelled && "nullified", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
+      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.stealsGold && "gold thief", m.def.stealsLuck && "Fortune leech", m.def.drains && "life-draining", m.def.engulfs && "engulfing", m.def.paralyzes && "paralyzing gaze", m.def.splits && "splits", m.def.corrodes && "corrodes", m.cancelled && "nullified", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
       this.log.add(`State-read ${m.name}: ${m.hp}/${m.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       return true;
     }
@@ -2915,7 +2951,7 @@ export class Game {
       case "teleport": {
         let pos = this.level.randomFloor(), t = 0;
         while (t < 40 && (this.monsterAt(pos.x, pos.y) || this.level.tileAt(pos.x, pos.y) === "stairsDown")) { pos = this.level.randomFloor(); t++; }
-        p.x = pos.x; p.y = pos.y; this.recomputeFOV();
+        p.x = pos.x; p.y = pos.y; p.engulfedBy = null; this.recomputeFOV(); // a blink slips you out of a trapper's gut
         this.log.add("You blink across the chain.", "sys"); break;
       }
       case "map": {
@@ -3080,6 +3116,7 @@ export class Game {
     if (d instanceof Player) { this.downPlayer(d); return; }
     if (d === this.pet) { this.log.add("Your nominator falls. You descend alone.", "bad"); this.scheduler.remove(this.pet); return; }
     const m = d as Monster;
+    for (const pl of this.allPlayers()) if (pl.engulfedBy === m) pl.engulfedBy = null; // a slain trapper releases its victim
     const mi = this.monsters.indexOf(m); // splice in place — the array identity is the persisted level's monster list
     if (mi >= 0) this.monsters.splice(mi, 1);
     this.scheduler.remove(m);
@@ -3509,6 +3546,7 @@ export class Game {
       (this.wallet && !this.coop ? `%c{${COLORS.dim}}  PAS %c{${COLORS.gold}}${p.pas.toFixed(1)}` : "") +
       (hunger ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}${hunger}` : "") +
       (p.paralyzed > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Para${p.paralyzed}` : "") +
+      (p.engulfedBy ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Swallowed` : "") +
       (p.poison > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Psn` : "") +
       (p.confused > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Cfz` : "") +
       (p.stoning > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Ston${p.stoning}` : "") +

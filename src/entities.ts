@@ -62,6 +62,7 @@ export class Player extends Entity {
   wornArmor: Item[] = []; // up to one piece per slot
   ring: Item | null = null;
   amulet: Item | null = null; // worn around the neck (life-saving / reflection)
+  engulfedBy: Monster | null = null; // swallowed by a trapper — must struggle/cut free before moving
   stealth = false;     // ring of privacy — monsters can't track you
   regenFast = false;   // ring of regeneration
   poison = 0;          // turns of damage-over-time remaining
@@ -705,6 +706,9 @@ export class Player extends Entity {
   }
 
   private tryMove(dx: number, dy: number): boolean {
+    // Swallowed by a trapper: you can't walk — every move is a thrash to break free (handled in game).
+    if (this.engulfedBy && this.engulfedBy.alive) return this.game.struggleEngulf(this) ? this.endTurn() : false;
+    if (this.engulfedBy) this.engulfedBy = null; // engulfer died between turns — freed
     if (this.confused > 0 && ROT.RNG.getUniform() < 0.6) {
       const d = ROT.RNG.getItem([[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, 1], [-1, 1], [1, -1]] as [number, number][])!;
       dx = d[0]; dy = d[1];
@@ -878,6 +882,9 @@ export class Monster extends Entity {
 
     // A peaceful shopkeeper minds its stall — it neither chases nor attacks.
     if (this.peaceful) return;
+
+    // A trapper that has swallowed an adventurer digests it where it stands — no chase, no to-hit.
+    if (this.def.engulfs && this.game.digestEngulfed(this)) return;
 
     // A watcher eye just floats — it never gives chase or strikes; its danger is the gaze it
     // returns when YOU melee it (handled in attack). Zap it from afar instead.
