@@ -6,7 +6,7 @@ import { Log } from "./log";
 import type { LogWho } from "./log";
 import {
   COLORS, TILE_GLYPH, TileType, MONSTERS, MonsterDef, deaths, greetings,
-  MAX_DEPTH, CENSOR, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, PRIEST, realmName, grayPaper, ChainDef, CHAINS, BranchDef, BRANCHES, branchById, questFor,
+  MAX_DEPTH, CENSOR, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, PRIEST, COUNCIL_GUARD, realmName, grayPaper, ChainDef, CHAINS, BranchDef, BRANCHES, branchById, questFor,
   abilityMod, archetypeById, ATTRS, ATTR_LABEL, attrFlavor, spellById, Ethos,
   monName, questHomeland, archetypeName, ethosName, spellName, chainName, branchEnd, branchEntryFlavor,
 } from "./data";
@@ -108,6 +108,7 @@ export class Game {
   private plane = 0;                              // 0 = the dungeon; 1..PLANES.length = the ascent above the surface
   private genesisAltars: { x: number; y: number; ethos: Ethos }[] = []; // the three Astral altars — only your aligned one ascends
   private jamStolen = false;                     // THE CENSOR has snatched the JAM — slay the hunter to reclaim it
+  private vaultGuard: Monster | null = null;     // the Council Guard, while it tends the Treasury vault escort
   private censorTimer = 0;                        // turns until the next resurrection rises
   private inQuest = false;                        // currently in your archetype's Quest homeland
   private questDone = false;                      // your nemesis is slain and the artifact claimed
@@ -485,6 +486,7 @@ export class Game {
   /** Re-enter an already-generated level: re-place the party beside the arriving player and
    *  rebuild the schedule from the stored (frozen) actors. No respawn, no new loot. */
   private restoreEnter(): void {
+    this.vaultGuard = null; // a fresh visit re-derives the vault escort on demand
     const lead = this.acting; // the arriving adventurer (co-op: only this one travels)
     // a monster may have frozen on the very stair we arrive at — step the player to a free neighbour
     if (this.monsterAt(lead.x, lead.y)) {
@@ -498,6 +500,7 @@ export class Game {
   /** Populate a freshly generated level, then place the party and build the schedule. */
   private enterLevel(): void {
     for (const p of this.allPlayers()) p.engulfedBy = null; // a fresh floor's monsters are rebuilt — no engulfer carries over
+    this.vaultGuard = null; // the Council Guard belongs to the floor we just left
     this.monsters = [];
     if (this.plane > 0) {
       this.setupPlane();
@@ -515,6 +518,7 @@ export class Game {
         this.placeChest(0.35);
         this.placeBoulders();
         this.placeSpecialRoom();
+        this.placeVault();
       }
       this.maybePlaceBones();
       this.spawnTraps();
@@ -1762,7 +1766,7 @@ export class Game {
       "%": "food — or a corpse you can eat (e)", "*": "the JAM, a luckstone, or a gem",
       "$": "a pile of gold — step on it to scoop it up",
     };
-    const mons = [...MONSTERS, SHOPKEEPER, PRIEST, HONEYPOT, CENSOR, MOLOCH, ...Object.values(MINIBOSSES)].find((m) => m.ch === key);
+    const mons = [...MONSTERS, SHOPKEEPER, PRIEST, COUNCIL_GUARD, HONEYPOT, CENSOR, MOLOCH, ...Object.values(MINIBOSSES)].find((m) => m.ch === key);
     const parts: string[] = [];
     if (mons) parts.push(mons.name);
     if (feat[key]) parts.push(feat[key]);
@@ -2119,6 +2123,44 @@ export class Game {
     this.level.graves.push({ x: pos.x, y: pos.y, label: r.won ? `${who} ascended from here` : `Here fell ${who}, at depth ${r.depth}` });
   }
 
+  // ── the Treasury vault (NetHack vault + guard) ───────────────────────────────
+  /** Carve a sealed vault into the rock (~18% of cozy floors, d3+) and heap it with gold. Teleport-in only. */
+  private placeVault(): void {
+    if (this.acting.depth < 3 || ROT.RNG.getUniform() > 0.18) return;
+    if (!this.level.placeVault() || !this.level.vault) return;
+    const v = this.level.vault;
+    const piles = [{ x: v.x0, y: v.y0 }, { x: v.x1, y: v.y1 }]; // a couple of fat hoards
+    for (const s of piles) if (!this.level.itemAt(s.x, s.y)) this.level.items.push({ x: s.x, y: s.y, type: GOLD, coins: ROT.RNG.getUniformInt(120, 280) + this.acting.depth * 30 });
+  }
+
+  /** The vault guardian flow: spawn the Council Guard when an adventurer teleports into the Treasury;
+   *  it cuts an exit and escorts them out; once they're clear it reseals and departs. */
+  checkVault(): void {
+    if (!this.level.vault) return;
+    const inside = this.playersHere().some((p) => this.level.inVault(p.x, p.y));
+    if (inside && (!this.vaultGuard || !this.vaultGuard.alive)) {
+      this.level.openVaultExit();
+      const v = this.level.vault;
+      const spot = this.level.vaultBreach[0] ?? { x: v.x0, y: v.y0 };
+      const g = new Monster(this, COUNCIL_GUARD, spot.x, spot.y);
+      g.peaceful = true;
+      this.monsters.push(g); this.scheduler.add(g, true);
+      this.vaultGuard = g;
+      this.recomputeFOV();
+      this.log.add("\"HALT. This is the Treasury — you've no business here.\" A Council Guard cuts a passage and beckons you out. (leave, and the gold is yours)", "sys");
+      this.draw();
+    } else if (!inside && this.vaultGuard && this.vaultGuard.alive && this.vaultGuard.peaceful && this.level.vaultBreach.length) {
+      // escorted out cleanly — the guard reseals the Treasury and withdraws
+      for (const b of this.level.vaultBreach) if (!this.monsterAt(b.x, b.y) && !this.playerAt(b.x, b.y) && !this.level.itemAt(b.x, b.y)) this.level.tiles[b.y][b.x] = "wall";
+      this.level.vaultBreach = [];
+      const gi = this.monsters.indexOf(this.vaultGuard); if (gi >= 0) this.monsters.splice(gi, 1);
+      this.scheduler.remove(this.vaultGuard); this.vaultGuard = null;
+      this.recomputeFOV();
+      this.log.add("The Council Guard seals the Treasury behind you and is gone.", "dim");
+      this.draw();
+    }
+  }
+
   // ── combat ─────────────────────────────────────────────────────────────────
   attack(a: Entity, d: Entity): void {
     // Per-player log routing: an attack belongs to the player(s) involved (a monster's turn leaves
@@ -2139,6 +2181,11 @@ export class Game {
     if (d instanceof Monster && d.def.priest && d.peaceful) {
       d.peaceful = false; d.fg = "#ff5030";
       this.log.add("The priest's blessing curdles to wrath — \"Sacrilege!\"", "bad", who);
+    }
+    // Striking the Council Guard ends the escort — now it means to see you never leave.
+    if (d instanceof Monster && d.def.guard && d.peaceful) {
+      d.peaceful = false; d.fg = "#ff5030"; this.vaultGuard = null;
+      this.log.add("The Council Guard's patience snaps — \"Then you'll not leave at all!\"", "bad", who);
     }
     // A d20 to-hit layer: level + DEX + enchant vs the target's dodge. Misses happen now.
     if (!this.lands(a, d)) {
@@ -3288,6 +3335,7 @@ export class Game {
         tries < 60 &&
         (this.monsterAt(pos.x, pos.y) ||
           (pos.x === this.player.x && pos.y === this.player.y) ||
+          this.level.inVault(pos.x, pos.y) || // the sealed Treasury holds no random foes — only its Guard
           this.level.tileAt(pos.x, pos.y) === "stairsDown")
       ) {
         pos = this.level.randomFloor();

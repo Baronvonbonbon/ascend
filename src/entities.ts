@@ -257,6 +257,7 @@ export class Player extends Entity {
     this.game.censorHuntTick();
     if (this.polyForm && --this.polyTurns <= 0) this.game.revertPoly(this);
     this.game.tickLycanthropy(this); // infected? a chance to involuntarily shift into the were-beast
+    this.game.checkVault();          // teleported into the Treasury? summon the Council Guard escort
     if (this.senseTurns > 0) this.senseTurns--;
     if (this.hasteTurns > 0 && --this.hasteTurns === 0) this.game.log.add(`${this.name === "you" ? "You slow" : this.name + " slows"} back to normal.`, "dim");
     // Natural regeneration (faster with a ring of regeneration; not while starving/poisoned).

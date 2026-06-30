@@ -422,6 +422,56 @@ export class Level {
     return this.boulders.find((b) => b.x === x && b.y === y);
   }
 
+  // ── the Treasury vault (NetHack vault): a sealed cell of gold, reachable only by teleport ──
+  vault: { x0: number; y0: number; x1: number; y1: number } | null = null;
+  vaultBreach: { x: number; y: number }[] = []; // walls the Council Guard cut to escort you out (resealed after)
+
+  inVault(x: number, y: number): boolean {
+    const v = this.vault;
+    return !!v && x >= v.x0 && x <= v.x1 && y >= v.y0 && y <= v.y1;
+  }
+
+  /** Carve a sealed 2×2 vault into solid rock (no door — teleport-in only). Returns true if placed. */
+  placeVault(): boolean {
+    if (this.vault) return false;
+    for (let tries = 0; tries < 80; tries++) {
+      const x = 2 + Math.floor(ROT.RNG.getUniform() * (this.width - 6));
+      const y = 2 + Math.floor(ROT.RNG.getUniform() * (this.height - 6));
+      let solid = true; // need a 4×4 of solid wall so the 2×2 interior stays fully enclosed
+      for (let dy = 0; dy < 4 && solid; dy++) for (let dx = 0; dx < 4; dx++) if (this.tiles[y + dy]?.[x + dx] !== "wall") { solid = false; break; }
+      if (!solid) continue;
+      this.vault = { x0: x + 1, y0: y + 1, x1: x + 2, y1: y + 2 };
+      for (let iy = this.vault.y0; iy <= this.vault.y1; iy++) for (let ix = this.vault.x0; ix <= this.vault.x1; ix++) {
+        this.tiles[iy][ix] = "floor"; this.lit[iy][ix] = true; this.floors.push({ x: ix, y: iy }); // lit (gold glints) + teleport-reachable
+      }
+      return true;
+    }
+    return false;
+  }
+
+  /** The Council Guard cuts the shortest passage from the vault to the nearest open floor. */
+  openVaultExit(): void {
+    if (!this.vault || this.vaultBreach.length) return;
+    const prev = new Map<string, string | null>(); const q: { x: number; y: number }[] = [];
+    for (let y = this.vault.y0; y <= this.vault.y1; y++) for (let x = this.vault.x0; x <= this.vault.x1; x++) { prev.set(`${x},${y}`, null); q.push({ x, y }); }
+    let target: { x: number; y: number } | null = null;
+    while (q.length) {
+      const c = q.shift()!;
+      const t = this.tiles[c.y]?.[c.x];
+      if (!this.inVault(c.x, c.y) && (t === "floor" || t === "door")) { target = c; break; }
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]) {
+        const nx = c.x + dx, ny = c.y + dy, k = `${nx},${ny}`;
+        if (nx < 1 || ny < 1 || nx >= this.width - 1 || ny >= this.height - 1 || prev.has(k)) continue;
+        prev.set(k, `${c.x},${c.y}`); q.push({ x: nx, y: ny });
+      }
+    }
+    if (!target) return;
+    for (let cur: string | null = `${target.x},${target.y}`; cur; cur = prev.get(cur) ?? null) {
+      const [cx, cy] = cur.split(",").map(Number);
+      if (!this.inVault(cx, cy) && this.tiles[cy][cx] === "wall") { this.tiles[cy][cx] = "floor"; this.vaultBreach.push({ x: cx, y: cy }); }
+    }
+  }
+
   revealAll(): void {
     for (let y = 0; y < this.height; y++)
       for (let x = 0; x < this.width; x++)

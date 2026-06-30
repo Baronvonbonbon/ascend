@@ -235,6 +235,7 @@ export interface MonsterDef {
   fearless?: boolean;    // ignores warding engravings (bosses fear no Gray Paper)
   keeper?: boolean;      // a shopkeeper — peaceful until you shoplift, then merciless
   priest?: boolean;      // a temple priest — peaceful guardian of an altar; turns lethal if struck
+  guard?: boolean;       // a Council Guard — escorts you out of the Treasury vault; merciless if provoked
   boss?: boolean;        // a unique mini-boss — drops a guaranteed prize on death
 }
 
@@ -288,6 +289,11 @@ export const SHOPKEEPER: MonsterDef = {
 /** A temple priest — peaceful keeper of a shrine's altar; turns lethal if struck or robbed. */
 export const PRIEST: MonsterDef = {
   name: "the Gavin priest", fname: "the temple priest", ch: "@", fg: "#d6d0f4", hp: 30, dmg: [4, 8], ai: "chase", minDepth: 1, weight: 0, fearless: true, priest: true,
+};
+
+/** The Council Guard — keeper of the Treasury vault. Peaceful escort; lethal if you strike it. */
+export const COUNCIL_GUARD: MonsterDef = {
+  name: "the Council Guard", fname: "the Vault Guard", ch: "@", fg: "#d0c060", hp: 60, dmg: [6, 12], ai: "chase", minDepth: 1, weight: 0, fearless: true, guard: true,
 };
 
 /** The honeypot — a mimic. Spawned separately (placeMimics), disguised as loot. */
