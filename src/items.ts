@@ -105,6 +105,7 @@ export const ITEMS: ItemType[] = [
   { id: "marker",  kind: "tool", name: "a contract deployer", fname: "a magic marker",      ch: "(", fg: "#a0d0e0", weight: 2 }, // writes scrolls (charged)
   { id: "scope",   kind: "tool", name: "a state reader",      fname: "a crystal lens",      ch: "(", fg: "#a0c0a0", weight: 2 }, // probe an adjacent foe
   { id: "vault",   kind: "tool", name: "a multisig vault",    fname: "a bag of holding",    ch: "(", fg: "#d0c060", weight: 2 }, // bag of holding — #loot to stash beyond the pack
+  { id: "trickbag", kind: "tool", name: "a faucet bag",        fname: "a bag of tricks",     ch: "(", fg: "#c060c0", weight: 2 }, // bag of tricks — apply to spit out a monster (charged)
   { id: "hodlstone", kind: "tool", name: "a HODL stone",      fname: "a luckstone",         ch: "*", fg: "#e0d040", weight: 2 }, // luckstone (blessed) / loadstone (cursed)
   // ── quest artifacts ── (Phase 13c — one per archetype, won from your nemesis; never random-spawn)
   { id: "art_sceptre",  kind: "weapon", name: "the Block Sceptre",    fname: "the Sceptre of Might",   ch: ")", fg: "#ffd040", dmg: [6, 12], skill: "blunt", weight: 0 },

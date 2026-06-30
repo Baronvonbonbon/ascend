@@ -398,6 +398,7 @@ export class Player extends Entity {
       if (item.type.kind !== "tool") { this.game.log.add("That isn't a tool you can apply.", "dim"); return false; }
       const id = item.type.id;
       if (id === "horn") return this.game.applyHorn(this) ? this.endTurn() : false;
+      if (id === "trickbag") return this.game.applyTrickbag(this, item) ? this.endTurn() : false;
       if (id === "pickaxe" || id === "scope") {
         this.pendingApply = item;
         this.game.log.add(`${id === "pickaxe" ? "Dig" : "Probe"} in which direction? (a move key, Esc to cancel)`, "sys");

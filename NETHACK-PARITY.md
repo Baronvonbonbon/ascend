@@ -64,8 +64,8 @@ Every adaptation routes through this table so the theming stays coherent.
 | Luck / luckstone | **Fortune** (−13..+13) / a **HODL stone** | ✅ (Phase 8c — sways to-hit/dodge) |
 | Conducts | **vows** (pacifist, illiterate, self-custodian, vegetarian, bankless) | ✅ (Phase 13a — auto-tracked) |
 | Shopkeeper | **the Marketmaker** (`$`) | ✅ |
-| Priest (altar minister) | **the Architect's Acolyte** | ❌ |
-| Vault + guard | **the Treasury** + a **Council Guard** | ❌ |
+| Priest (altar minister) | **a Gavin priest** (tends a temple altar, peaceful) | 🟡 (priest + temple room; no donation/services) |
+| Vault + guard | **a treasury vault** room (dense loot + a locked chest) | 🟡 (vault room; no teleport-in / Council-Guard escort) |
 | Nymph (steals items) | **rug puller** (`r`) | ✅ |
 | Leprechaun (steals gold) | **airdrop farmer** (`l`, snatches gold + blinks away, drops it on death) | ✅ |
 | Mind flayer (brain) | **the Censor-spawn** (telepathy from its corpse) | 🟡 (telepathy intrinsic + demon bestiary; no brain-drain attack) |
@@ -75,7 +75,7 @@ Every adaptation routes through this table so the theming stays coherent.
 | Throne (#sit) | **the Sudo Throne** (`\`) | ✅ (Phase 9a — `s` sit) |
 | Altar | **Gavin's altar** (`_`) | ✅ |
 | Bag of holding | **a multisig vault** (`(`) | ✅ (Phase 11d — `#loot`, +12 slots) |
-| Bag of tricks | **a faucet bag** (spits monsters) | ❌ |
+| Bag of tricks | **a faucet bag** (`a` apply → spits a foe; charged) | ✅ |
 | Loadstone (cursed, can't drop) | **a HODL stone** (cursed = loadstone) | ✅ (Phase 8c — undroppable when cursed) |
 | Gems / glass | **tokens** (real vs worthless airdrops) | ❌ |
 | Light (lamp/candle) | **block explorer** light sources; **the Genesis Candelabrum** | ❌ |
@@ -94,8 +94,8 @@ Every adaptation routes through this table so the theming stays coherent.
 - **`insight.c`** (enlightenment/conduct dump) → **❌**. **Plan:** an "audit report" (`#audit`) listing your attributes, intrinsics, vows, and on-chain stats.
 
 ### B. Dungeon structure
-- **`dungeon.c`, `mklev.c`, `mkroom.c`, `mkmap.c`, `mkmaze.c`, `extralev.c`, `sp_lev.c`/`nhlua.c`** — multi-branch dungeon graph, room/corridor gen, mazes, themed rooms, Lua-scripted **special levels**. → **🟡 (Phases 9/12/14/16/17).** Shipped: a **real branch graph** with the **Mines** (cave branch, Phase 16a) + the **Consensus Vault** (Sokoban prefab, Phase 16b), the **Quest** homeland (Phase 13c), the **Gehennom maze** (EllerMaze, Phase 12e), the **Planes** (per-Plane layouts, Phase 17), the **Mempool** big room (Phase 9d), a **fortress** + concentric generators (Phase 17), and layout kinds cave/labyrinth/grid (Phase 14a). Still ❌: Vlad's Tower, themed special rooms (temple/zoo/morgue/barracks), full hand-built special-level scripting.
-- **`mkroom.c` special rooms** — shop, temple, throne room, zoo, morgue, beehive, barracks, swamp, leprechaun hall, anthole, cockatrice nest. → **🟡** only shops (with the Marketmaker). **Plan:** add temple (altar + Acolyte), throne room (Sudo Throne + Council guards), morgue (undead + bones), "validator barracks", "MEV swamp".
+- **`dungeon.c`, `mklev.c`, `mkroom.c`, `mkmap.c`, `mkmaze.c`, `extralev.c`, `sp_lev.c`/`nhlua.c`** — multi-branch dungeon graph, room/corridor gen, mazes, themed rooms, Lua-scripted **special levels**. → **🟡 (Phases 9/12/14/16/17).** Shipped: a **real branch graph** with the **Mines** (cave branch, Phase 16a) + the **Consensus Vault** (Sokoban prefab, Phase 16b), the **Quest** homeland (Phase 13c), the **Gehennom maze** (EllerMaze, Phase 12e), the **Planes** (per-Plane layouts, Phase 17), the **Mempool** big room (Phase 9d), a **fortress** + concentric generators (Phase 17), and layout kinds cave/labyrinth/grid (Phase 14a). Still ❌: Vlad's Tower, morgue/barracks/swamp special rooms, full hand-built special-level scripting.
+- **`mkroom.c` special rooms** — shop, temple, throne room, zoo, morgue, beehive, barracks, swamp, leprechaun hall, anthole, cockatrice nest. → **🟡.** Shipped: **shops** (the Marketmaker), a **temple** (an altar tended by a peaceful Gavin **priest**), a **zoo** (a packed menagerie guarding loot), and a **treasury vault** (a dense loot room with a locked chest at its heart) — placed via `placeSpecialRoom`. Still ❌: morgue (undead + bones), barracks, swamp/beehive/anthole, leprechaun hall.
 - **`fountain.c`** (fountains & sinks; quaff/dip/wish-from-water-demon/Excalibur) → **✅ faucets (Phase 9a); sinks still ❌.** **faucets** (`{`) — `#quaff` for a random effect (heal, summon a "fountain bot", curse, gem, or — rarely — a *testnet wish*), `#dip` a weapon to draw the lawful artifact. Sinks = "burn sinks" (ring identification by dropping).
 - **`dbridge.c`** drawbridges → **❌** → "consensus bridges" raised/lowered by levers; crush on close.
 - **`vault.c`** vaults + guard → **❌** → **the Treasury**: a sealed 2×2 of PAS, teleport-in only, a **Council Guard** escorts you out (and confiscates if you grabbed loot you can't account for).
@@ -125,7 +125,7 @@ Canonical ~25 trap types (arrow, dart, falling rock, squeaky board, bear, land m
 
 ### F. Prayer, religion, luck — **`pray.c`, `priest.c`, `sit.c`**
 - Alignment record, prayer timeout, "trouble" resolution priority list, godly anger/wrath, sacrifice (corpses on altar → favor, artifacts gifted, crowning, summon minions), altar BUC/conversion, water-blessing, priests, donations. → **✅ (Phase 8c/8d).** Shipped: prayer w/ trouble-priority heal + cooldown + **wrath** for over-praying/sacrilege; **sacrifice** (`O`) for favor + blessed gifts; **ethos/alignment** record; **crowning** (Fellowship induction → title + Fortune + intrinsic + gift); altar BUC. Still ❌: holy/unholy water, the Acolyte NPC, conversion. **Plan (Phase 8):** full prayer/sacrifice loop in the burn-address idiom; crowning = your Architect names you ("the Cypherpunk made Champion").
-- **`attrib.c` Luck, `mkobj.c` luckstone`** Luck (−13..+13) modifies to-hit/damage/RNG; luckstone, gremlins steal Luck, Luck timeouts. → **✅ (Phase 8c).** **Fortune** (−13..+13) sways to-hit/dodge; the **HODL stone** (luckstone, cursed = loadstone). Still ❌: Luck timeouts, gremlin Luck-theft. Unlucky acts (breaking a "consensus mirror", killing your nominator) tank Fortune.
+- **`attrib.c` Luck, `mkobj.c` luckstone`** Luck (−13..+13) modifies to-hit/damage/RNG; luckstone, gremlins steal Luck, Luck timeouts. → **✅ (Phase 8c).** **Fortune** (−13..+13) sways to-hit/dodge; the **HODL stone** (luckstone, cursed = loadstone); a **doubt gremlin** leeches Fortune on a hit. Still ❌: Luck timeouts. Unlucky acts (breaking a "consensus mirror", killing your nominator) tank Fortune.
 
 ### G. Monsters — **`monst.c`, `makemon.c`, `mon.c`, `mondata.c`, `monmove.c`, `dog.c`, `dogmove.c`, `muse.c`, `steal.c`, `mplayer.c`, `worm.c`, `steed.c`**
 - ~400 monsters across classes with attributes, resistances, attacks, speed, size, gen flags. → **🟡** Ascend has ~12 + 2 minibosses + boss + shopkeeper. **Plan (Phase 10):** grow to a few dozen across themed classes: bots/sybils (✅ swarm, tamed), validators/golems, oracles (✅ ranged), whales (✅), rug pullers (✅ thief), censor-imps, 51%-attackers, mind-flayer-equivalent, petrifiers (Freezer/Regulator), dragons ("JAM-era validators" with breath = a `zap` ray), demons/devils (Gehennom), `@` humans (mercenaries → "mercenary nodes", watchmen, soldiers), `;` sea monsters in swamps, were-validators, **monster pickup/use of items** (`muse.c` — drink, zap, throw, wear), **monster casting**, **breeding** (sybils ✅-ish), **the @ pet/steed line**.

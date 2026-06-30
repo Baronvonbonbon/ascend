@@ -1984,6 +1984,10 @@ export class Game {
     else if (a instanceof Monster && d instanceof Player) {
       this.log.add(`${cap(a.name)} hits ${d.name} for ${dmg}.`, "bad", who);
       if (!a.cancelled && a.def.inflict && d.hp > 0 && ROT.RNG.getUniform() < 0.3) this.applyStatus(d, a.def.inflict);
+      if (!a.cancelled && a.def.stealsLuck && d.hp > 0 && d.luck > -13 && ROT.RNG.getUniform() < 0.5) {
+        d.luck = Math.max(-13, d.luck - 1);
+        this.log.add(`${cap(a.name)} leeches your Fortune — doubt creeps in.`, "bad", who);
+      }
     }
     else if (a instanceof Player && d instanceof Player) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg} — friendly fire!`, "bad", who);
     else if (a === this.pet) this.log.add(`Your nominator savages ${d.name} for ${dmg}.`, "good", who);
@@ -2266,6 +2270,7 @@ export class Game {
     const it = this.acting.inventory.add(type);
     if (type.kind === "wand") it.charges = ROT.RNG.getUniformInt(3, 6);
     if (type.id === "marker") it.charges = ROT.RNG.getUniformInt(2, 4); // a contract deployer's gas
+    if (type.id === "trickbag") it.charges = ROT.RNG.getUniformInt(5, 12); // a faucet bag's stored monsters
     if (opts?.enchant) it.enchant = opts.enchant;
     if (opts?.relic) it.relic = true;
     it.buc = opts?.buc ?? rollBuc();
@@ -2389,7 +2394,7 @@ export class Game {
         hit.cancelled = true;
         this.log.add(`${cap(hit.name)} is nullified — its powers fail.`, "good");
       } else if (item.type.id === "wand_probe") {
-        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.stealsGold && "gold thief", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.cancelled && "nullified"].filter(Boolean).join(", ");
+        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.stealsGold && "gold thief", hit.def.stealsLuck && "Fortune leech", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.cancelled && "nullified"].filter(Boolean).join(", ");
         this.log.add(`State-read ${hit.name}: ${hit.hp}/${hit.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       }
     }
@@ -2511,6 +2516,20 @@ export class Game {
     return true;
   }
 
+  /** Upend a faucet bag (bag of tricks) — spit a depth-appropriate foe into an open neighbour. Charged. */
+  applyTrickbag(p: Player, bag: Item): boolean {
+    if (!bag.charges || bag.charges <= 0) { this.log.add("You shake the faucet bag — limp and empty.", "dim"); return true; }
+    const spot = this.adjacentFree(p.x, p.y);
+    if (!spot) { this.log.add("The faucet bag bulges, but there's nowhere for what's inside to land.", "dim"); return false; }
+    bag.charges--;
+    const def = this.pickMonster(p.depth);
+    const m = new Monster(this, def, spot.x, spot.y);
+    this.monsters.push(m); this.scheduler.add(m, true);
+    this.log.add(`You upend the faucet bag — ${def.name} tumbles out!`, "bad");
+    this.draw();
+    return true;
+  }
+
   /** Apply a directional tool (excavator digs walls; state reader probes an adjacent foe). */
   applyTool(item: Item, dx: number, dy: number): boolean {
     const p = this.acting;
@@ -2528,7 +2547,7 @@ export class Game {
     if (item.type.id === "scope") {
       const m = this.monsterAt(p.x + dx, p.y + dy);
       if (!m) { this.log.add("You press the state reader to empty air.", "dim"); return false; }
-      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.stealsGold && "gold thief", m.def.splits && "splits", m.def.corrodes && "corrodes", m.cancelled && "nullified", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
+      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.stealsGold && "gold thief", m.def.stealsLuck && "Fortune leech", m.def.splits && "splits", m.def.corrodes && "corrodes", m.cancelled && "nullified", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
       this.log.add(`State-read ${m.name}: ${m.hp}/${m.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       return true;
     }
