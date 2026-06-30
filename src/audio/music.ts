@@ -117,9 +117,9 @@ export class MusicEngine {
   private bassIdx = 0;               // position in the bassline phrase
   private calmSince = 0;             // ctx time since things last went calm (drives settle-to-ambience)
   private stingerUntil = 0;          // a death/ascend stinger owns the mix until this time
-  // ── tension layer (trills + fast beats + bass) ──
+  // ── tension layer (melodic trills + combat drums + bass, locked to the area bpm) ──
   private nextTrill = 0;
-  private trillTog = false;
+  private trillIdx = 0;
   private nextTensionStep = 0;
   private tensionStepIdx = 0;
   private nextTensionBass = 0;
@@ -327,7 +327,7 @@ export class MusicEngine {
     this.nextStep = this.nextBass = now + 2.4;
     this.stepIdx = this.bassIdx = 0;
     this.nextTrill = this.nextTensionStep = this.nextTensionBass = now;
-    this.trillTog = false; this.tensionStepIdx = this.tensionBassIdx = 0;
+    this.trillIdx = 0; this.tensionStepIdx = this.tensionBassIdx = 0;
     this.nextJam = this.nextChime = this.nextDrip = now + 1;
   }
 
@@ -367,6 +367,7 @@ export class MusicEngine {
     g.gain.setValueAtTime(0, when);
     g.gain.linearRampToValueAtTime(peak, when + 0.02);
     g.gain.exponentialRampToValueAtTime(0.0008, when + dur);
+    g.gain.linearRampToValueAtTime(0, when + dur + 0.04); // settle to true silence before stop — no click
     osc.start(when); osc.stop(when + dur + 0.05);
   }
 
@@ -432,44 +433,59 @@ export class MusicEngine {
     this.scheduleTension(now, horizon);
   }
 
-  /** Tension: a rapid trill shimmer, a quickening drum pulse, and a driving bass — all by danger. */
+  /** Tension: a flowing melodic trill + combat drums + bass, all locked to the area's bpm/scale and
+   *  scaled by danger — so combat music grows out of the level's own groove rather than a generic alarm. */
   private scheduleTension(now: number, horizon: number): void {
     const t = this.active?.def;
     const d = this.danger;
     const stinging = now < this.stingerUntil;
-    this.tensionBus.gain.setTargetAtTime(stinging ? 0 : d * 0.5, now, 0.5);
+    this.tensionBus.gain.setTargetAtTime(stinging ? 0 : d * 0.5, now, 0.6);
     if (stinging || !t || d <= 0.05) { this.nextTrill = this.nextTensionStep = this.nextTensionBass = now; return; }
 
     const root = t.root;
-    // ── trills: a rapid alternation between two close, dissonant pitches; faster + tighter as danger climbs ──
-    const trillGap = 0.22 - d * 0.13; // ~0.22s → ~0.09s
+    const sixteenth = 60 / (t.bpm ?? 110) / 4; // everything rides the zone's tempo grid
+    const scale = this.tensionScale(t);        // a melodic contour from the area's own chord
+
+    // ── melodic trills: a flowing line in the area's scale; subdivision tightens with danger ──
+    const gap = sixteenth * (d > 0.66 ? 1 : d > 0.33 ? 2 : 4); // 16th / 8th / quarter notes
+    const peak = 0.03 + d * 0.04;
     while (this.nextTrill < horizon) {
-      const deg = this.trillTog ? 6 : 7; // a tritone/fifth shimmer
-      this.note(semi(root, deg) * 3, this.nextTrill, trillGap * 1.4, this.tensionBus, "square", 0.03 + d * 0.035, 2200);
-      this.trillTog = !this.trillTog;
-      this.nextTrill += trillGap;
+      const deg = scale[this.trillIdx % scale.length];
+      this.note(semi(root, deg) * 2, this.nextTrill, gap * 0.85, this.tensionBus, "triangle", peak, 2600);
+      if (d > 0.4) this.note(semi(root, deg + 2) * 2, this.nextTrill + sixteenth * 0.5, sixteenth * 0.5, this.tensionBus, "square", peak * 0.7, 2400); // upper-neighbour grace = the trill shimmer
+      this.trillIdx++;
+      this.nextTrill += gap;
     }
-    // ── fast beats: a tension percussion that quickens with danger (8th notes ~120 → ~230 bpm) ──
-    const beat = 60 / (120 + d * 110) / 2;
+
+    // ── combat drums on the SAME 16-step bar as the zone groove, so they lock to the bed ──
     while (this.nextTensionStep < horizon) {
-      const s = this.tensionStepIdx;
-      this.noiseHit(this.nextTensionStep, 0.03, this.tensionBus, 0.05 + d * 0.05, "highpass", 7000, 0.7); // a fast hat every step
-      if (s % 2 === 0) this.kick(this.nextTensionStep, this.tensionBus, 0.16 + d * 0.22);                  // a pulse on the beat
-      if (d > 0.55 && s % 4 === 2) this.noiseHit(this.nextTensionStep, 0.12, this.tensionBus, 0.14, "bandpass", 1900, 0.8); // a snare crack under heavy danger
-      this.tensionStepIdx = (s + 1) % 8;
-      this.nextTensionStep += beat;
+      const s = this.tensionStepIdx, when = this.nextTensionStep;
+      if (s === 0 || s === 8 || (d > 0.5 && (s === 4 || s === 12)) || (d > 0.75 && (s === 6 || s === 14))) this.kick(when, this.tensionBus, 0.18 + d * 0.22);
+      if ((s === 4 || s === 12) && d > 0.4) this.noiseHit(when, 0.12, this.tensionBus, 0.16, "bandpass", 1900, 0.8); // snare backbeat
+      if (s % 2 === 0 || d > 0.6) this.noiseHit(when, 0.03, this.tensionBus, 0.05 + d * 0.04, "highpass", 7600, 0.7); // hats
+      this.tensionStepIdx = (s + 1) % 16;
+      this.nextTensionStep += sixteenth;
     }
-    // ── a driving tension bassline: a low ostinato that pumps once danger is real ──
+
+    // ── a driving tension bass: a root/fifth ostinato on the grid (8th notes) once danger is real ──
     if (d > 0.3) {
-      const fig = [0, 0, 7, 0]; // root-root-fifth-root
+      const fig = [0, 7, 0, 7, 0, 0, 7, 0];
       while (this.nextTensionBass < horizon) {
         let bf = semi(root, fig[this.tensionBassIdx % fig.length]);
         while (bf < 41) bf *= 2; // lift very-low roots into audible bass range
-        this.bassNote(bf, this.nextTensionBass, beat * 0.9, this.tensionBus, 0.16 + d * 0.12);
-        this.tensionBassIdx = (this.tensionBassIdx + 1) % fig.length;
-        this.nextTensionBass += beat;
+        this.bassNote(bf, this.nextTensionBass, sixteenth * 1.8, this.tensionBus, 0.16 + d * 0.12);
+        this.tensionBassIdx++;
+        this.nextTensionBass += sixteenth * 2; // 8th notes
       }
-    } else this.nextTensionBass = now;
+    } else { this.nextTensionBass = now; this.tensionBassIdx = 0; }
+  }
+
+  /** A flowing up-and-back melodic contour drawn from the area's chord tones — the trills sing in
+   *  the level's own harmony (climb to the octave, step back down). */
+  private tensionScale(t: TrackDef): number[] {
+    const ch = t.chord.length ? t.chord : [0, 7];
+    const down = ch.slice(1, -1).reverse(); // avoid repeating the top/bottom on the way back
+    return [...ch, ch[ch.length - 1] + 12, ...down];
   }
 
   /** A water drip — a quick high blip that falls in pitch. */
@@ -482,6 +498,7 @@ export class MusicEngine {
     const g = ctx.createGain(); g.gain.setValueAtTime(0, when);
     g.gain.linearRampToValueAtTime(0.05, when + 0.005);
     g.gain.exponentialRampToValueAtTime(0.0006, when + 0.18);
+    g.gain.linearRampToValueAtTime(0, when + 0.21);
     osc.connect(g).connect(this.active.bus);
     osc.start(when); osc.stop(when + 0.22);
   }
@@ -492,6 +509,7 @@ export class MusicEngine {
     const g = ctx.createGain(); g.gain.setValueAtTime(0, when);
     g.gain.linearRampToValueAtTime(peak, when + 0.01);
     g.gain.exponentialRampToValueAtTime(0.0008, when + 0.3);
+    g.gain.linearRampToValueAtTime(0, when + 0.34);
     osc.connect(g).connect(bus);
     osc.start(when); osc.stop(when + 0.35);
   }
@@ -535,6 +553,7 @@ export class MusicEngine {
     const g = ctx.createGain(); g.gain.setValueAtTime(0, when);
     g.gain.linearRampToValueAtTime(peak, when + 0.004);
     g.gain.exponentialRampToValueAtTime(0.0008, when + 0.22);
+    g.gain.linearRampToValueAtTime(0, when + 0.25);
     osc.connect(g).connect(bus);
     osc.start(when); osc.stop(when + 0.26);
   }
@@ -547,6 +566,7 @@ export class MusicEngine {
     const g = ctx.createGain(); g.gain.setValueAtTime(0, when);
     g.gain.linearRampToValueAtTime(peak, when + 0.002);
     g.gain.exponentialRampToValueAtTime(0.0005, when + dur);
+    g.gain.linearRampToValueAtTime(0, when + dur + 0.02);
     src.connect(f).connect(g).connect(bus);
     src.start(when); src.stop(when + dur + 0.03);
   }
@@ -559,6 +579,7 @@ export class MusicEngine {
     const g = ctx.createGain(); g.gain.setValueAtTime(0, when);
     g.gain.linearRampToValueAtTime(peak, when + 0.012);
     g.gain.exponentialRampToValueAtTime(0.0008, when + dur);
+    g.gain.linearRampToValueAtTime(0, when + dur + 0.02);
     osc.connect(f).connect(g).connect(bus);
     osc.start(when); osc.stop(when + dur + 0.03);
   }
