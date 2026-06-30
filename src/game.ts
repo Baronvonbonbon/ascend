@@ -127,7 +127,13 @@ export class Game {
   archetypeId = "validator";   // the local player's chosen archetype (applied on newGame)
   turn = 0;                    // global turn clock (drives corpse rot)
 
+  private screen!: HTMLElement;                 // the map's container — overlays (chat banner, queue badge) attach here
+  private chatBannerEl: HTMLElement | null = null;
+  private chatBannerTimer: number | null = null;
+
   constructor(screen: HTMLElement, logEl: HTMLElement) {
+    this.screen = screen;
+    this.screen.style.position = this.screen.style.position || "relative"; // positioning context for overlays
     this.display = new ROT.Display({
       width: W, height: H, fontSize: 18,
       fontFamily: '"Courier New", monospace', fg: COLORS.floor, bg: COLORS.bg,
@@ -540,6 +546,7 @@ export class Game {
    *  floor swallows it entirely. The sender always hears its own call in full. */
   sendSignal(from: Player, msg: string): void {
     this.log.add(`You signal: "${msg}"`, "sys", from);
+    if (this.coop && from === this.localPlayer) this.showChatBanner(`You: ${msg}`, true); // confirm my own call
     const R = 14; // earshot radius (Chebyshev)
     for (const to of this.allPlayers()) {
       if (to === from || !to.alive) continue;
@@ -550,7 +557,28 @@ export class Game {
       if (!this.hasLineOfSight(from.x, from.y, to.x, to.y)) keep *= 0.45; // walls muffle it (both on this floor → this.level)
       const degraded = [...msg].map((ch) => (ch === " " ? " " : ROT.RNG.getUniform() < keep ? ch : ".")).join("");
       this.log.add(`Partner signals: "${degraded}"`, "sys", to);
+      if (to === this.localPlayer) this.showChatBanner(`Partner: ${degraded}`, false); // surface the partner's call over the map
     }
+  }
+
+  /** Flash a chat signal as a banner over the top of the map, then fade it. Clean opacity fade in/out. */
+  private showChatBanner(text: string, mine: boolean): void {
+    if (!this.screen) return;
+    if (!this.chatBannerEl) {
+      const b = document.createElement("div");
+      b.style.cssText = "position:absolute;top:8px;left:50%;transform:translateX(-50%);max-width:92%;padding:6px 14px;border-radius:8px;font:600 16px/1.35 'Courier New',monospace;text-align:center;pointer-events:none;opacity:0;transition:opacity .4s ease;z-index:20;white-space:pre-wrap;box-shadow:0 2px 10px #000a;";
+      this.screen.appendChild(b);
+      this.chatBannerEl = b;
+    }
+    const b = this.chatBannerEl;
+    b.textContent = text;
+    b.style.background = mine ? "#13243acc" : "#3a220fcc";
+    b.style.color = mine ? "#8fd0ff" : "#ffcf8a";
+    b.style.border = `1px solid ${mine ? "#3a6fa0" : "#c07a30"}`;
+    b.style.opacity = "0";
+    requestAnimationFrame(() => { if (this.chatBannerEl) this.chatBannerEl.style.opacity = "1"; }); // fade in
+    if (this.chatBannerTimer != null) clearTimeout(this.chatBannerTimer);
+    this.chatBannerTimer = window.setTimeout(() => { if (this.chatBannerEl) this.chatBannerEl.style.opacity = "0"; }, 4200); // fade out
   }
   livingPlayers(): Player[] { return this.allPlayers().filter((p) => p.alive); } // global — for game-over
   /** Living players standing on the floor currently being acted (co-op: floors run independently). */
