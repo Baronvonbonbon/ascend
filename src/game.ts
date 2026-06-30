@@ -2704,6 +2704,47 @@ export class Game {
         this.log.add(e instanceof Player ? `The firebolt scorches ${e.name} for ${d}!` : `The firebolt sears ${e.name} for ${d}.`, e instanceof Player ? "bad" : "good");
         if (e.hp <= 0) { if (e instanceof Monster) this.gainXp(this.acting, e.maxHp); this.kill(e); }
       });
+    } else if (item.type.id === "wand_cold") {
+      this.castRay(this.acting.x, this.acting.y, dx, dy, 9, (e) => {
+        const d = ROT.RNG.getUniformInt(5, 11); e.hp -= d;
+        this.log.add(e instanceof Player ? `A lance of cold rakes ${e.name} for ${d}!` : `A lance of cold freezes ${e.name} for ${d}.`, e instanceof Player ? "bad" : "good");
+        if (e instanceof Monster && e.alive && ROT.RNG.getUniform() < 0.4) { e.speedMod = 0.5; this.scheduler.remove(e); this.scheduler.add(e, true); } // the chill slows it
+        if (e.hp <= 0) { if (e instanceof Monster) this.gainXp(this.acting, e.maxHp); this.kill(e); }
+      });
+    } else if (item.type.id === "wand_lightning") {
+      this.castRay(this.acting.x, this.acting.y, dx, dy, 9, (e) => {
+        const d = ROT.RNG.getUniformInt(7, 13); e.hp -= d;
+        this.log.add(e instanceof Player ? `Lightning forks through ${e.name} for ${d}!` : `Lightning blasts ${e.name} for ${d}.`, e instanceof Player ? "bad" : "good");
+        if (e instanceof Player && e.hp > 0 && ROT.RNG.getUniform() < 0.4) { e.blind = Math.max(e.blind, 8); this.recomputeFOV(); } // the flash blinds you if it caroms back
+        if (e.hp <= 0) { if (e instanceof Monster) this.gainXp(this.acting, e.maxHp); this.kill(e); }
+      });
+    } else if (item.type.id === "wand_missile") {
+      this.castRay(this.acting.x, this.acting.y, dx, dy, 9, (e) => {
+        const d = ROT.RNG.getUniformInt(6, 10); e.hp -= d;
+        this.log.add(e instanceof Player ? `Force missiles batter ${e.name} for ${d}!` : `Force missiles batter ${e.name} for ${d}.`, e instanceof Player ? "bad" : "good");
+        if (e.hp <= 0) { if (e instanceof Monster) this.gainXp(this.acting, e.maxHp); this.kill(e); }
+      });
+    } else if (item.type.id === "wand_open") {
+      const fi = this.level.itemAt(this.acting.x, this.acting.y);
+      if (fi?.chest?.locked) { fi.chest.locked = false; this.log.add("The chest's lock springs open. (o to open)", "good"); }
+      else {
+        let x = this.acting.x, y = this.acting.y, done = false;
+        for (let step = 0; step < 8 && !done; step++) { x += dx; y += dy; const t = this.level.tileAt(x, y); if (t === "doorLocked" || t === "doorClosed") { this.level.tiles[y][x] = "door"; this.recomputeFOV(); this.log.add("A lock clicks — the door swings open.", "good"); done = true; } else if (t === "wall" || t == null) break; }
+        if (!done) this.log.add("The wand of opening finds no lock to spring.", "dim");
+      }
+    } else if (item.type.id === "wand_light") {
+      const R = 6, a = this.acting;
+      for (let yy = a.y - R; yy <= a.y + R; yy++) for (let xx = a.x - R; xx <= a.x + R; xx++) {
+        if (xx >= 0 && yy >= 0 && xx < W && yy < MAP_H && this.level.tileAt(xx, yy) && Math.max(Math.abs(xx - a.x), Math.abs(yy - a.y)) <= R) this.level.lit[yy][xx] = true;
+      }
+      this.recomputeFOV();
+      this.log.add("Brilliant light floods out — the dark recoils.", "good");
+    } else if (item.type.id === "wand_secret") {
+      let found = 0;
+      for (let yy = 0; yy < MAP_H; yy++) for (let xx = 0; xx < W; xx++) if (this.level.tileAt(xx, yy) === "doorHidden") { this.level.tiles[yy][xx] = "doorClosed"; found++; }
+      for (const tr of this.level.traps) if (!tr.revealed) { tr.revealed = true; tr.detected = true; found++; }
+      this.recomputeFOV();
+      this.log.add(found ? `Hidden things shimmer into view — ${found} secret(s) revealed.` : "The wand of scanning finds nothing hidden here.", found ? "sys" : "dim");
     } else {
       let x = this.acting.x, y = this.acting.y;
       let hit: Monster | undefined;
@@ -2718,6 +2759,10 @@ export class Game {
         const strong = item.type.id === "art_compiler";
         const d = strong ? ROT.RNG.getUniformInt(12, 20) : ROT.RNG.getUniformInt(8, 14); hit.hp -= d;
         this.log.add(`${strong ? "The Genesis Compiler discharges raw genesis into" : "A bolt of finality strikes"} ${hit.name} for ${d}.`, "good");
+        if (hit.hp <= 0) { this.gainXp(this.acting, hit.maxHp); this.kill(hit); }
+      } else if (item.type.id === "wand_death") {
+        if (hit.def.boss) { const d = ROT.RNG.getUniformInt(30, 50); hit.hp -= d; this.log.add(`A ray of pure finality tears into ${hit.name} for ${d} — it endures.`, "good"); }
+        else { this.log.add(`A ray of pure finality unwrites ${hit.name} — it is simply gone.`, "good"); hit.hp = 0; }
         if (hit.hp <= 0) { this.gainXp(this.acting, hit.maxHp); this.kill(hit); }
       } else if (item.type.id === "wand_banish") {
         let pos = this.level.randomFloor(), t = 0;

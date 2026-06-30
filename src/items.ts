@@ -114,6 +114,13 @@ export const ITEMS: ItemType[] = [
   { id: "wand_cancel", kind: "wand", name: "a wand of nullification",fname: "a wand of cancellation",  ch: "/", fg: "#a0a0a0", weight: 1 },
   { id: "wand_silence",kind: "wand", name: "a wand of gag order",    fname: "a wand of silence",       ch: "/", fg: "#7a8a90", weight: 2 }, // silences a foe — no casting/summoning
   { id: "wand_probe",  kind: "wand", name: "a wand of state-read",   fname: "a wand of probing",       ch: "/", fg: "#80c0a0", weight: 2 },
+  { id: "wand_cold",   kind: "wand", name: "a wand of cryo-slash",   fname: "a wand of cold",          ch: "/", fg: "#90d0f0", weight: 2 }, // a cold ray (may slow)
+  { id: "wand_lightning", kind: "wand", name: "a wand of shock",     fname: "a wand of lightning",     ch: "/", fg: "#f0f080", weight: 2 }, // a lightning ray (may blind)
+  { id: "wand_missile", kind: "wand", name: "a wand of force",       fname: "a wand of magic missile", ch: "/", fg: "#c0c0f0", weight: 2 }, // a reliable force ray
+  { id: "wand_death",  kind: "wand", name: "a wand of annihilation", fname: "a wand of death",         ch: "/", fg: "#ff3030", weight: 1 }, // unwrites a single foe (bosses endure)
+  { id: "wand_open",   kind: "wand", name: "a wand of unlock",       fname: "a wand of opening",        ch: "/", fg: "#b0a060", weight: 2 }, // unlocks a door/chest
+  { id: "wand_light",  kind: "wand", name: "a wand of floodlight",   fname: "a wand of light",          ch: "/", fg: "#fff0a0", weight: 2 }, // floods the area with light
+  { id: "wand_secret", kind: "wand", name: "a wand of deep scan",    fname: "a wand of secret door detection", ch: "/", fg: "#c0a0e0", weight: 1 }, // reveals hidden doors + traps
   // ── tools ── ( (applied with a)
   { id: "pickaxe", kind: "tool", name: "an excavator",        fname: "a pick-axe",          ch: "(", fg: "#c0a060", weight: 3 }, // reusable dig
   { id: "horn",    kind: "tool", name: "an auditor's horn",   fname: "a unicorn horn",      ch: "(", fg: "#e0e0c0", weight: 2 }, // cures afflictions
