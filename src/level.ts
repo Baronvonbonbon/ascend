@@ -425,6 +425,12 @@ export class Level {
   // ── the Treasury vault (NetHack vault): a sealed cell of gold, reachable only by teleport ──
   vault: { x0: number; y0: number; x1: number; y1: number } | null = null;
   vaultBreach: { x: number; y: number }[] = []; // walls the Council Guard cut to escort you out (resealed after)
+  shop: { x: number; y: number; r: number } | null = null; // the bazaar's region — the bill settles when you leave it
+
+  inShop(x: number, y: number): boolean {
+    const s = this.shop;
+    return !!s && Math.max(Math.abs(x - s.x), Math.abs(y - s.y)) <= s.r;
+  }
 
   inVault(x: number, y: number): boolean {
     const v = this.vault;

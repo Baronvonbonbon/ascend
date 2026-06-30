@@ -27,7 +27,7 @@ status, and plan the missing parts in the Polkadot/web3 idiom.
 > logs, signal chat, and an action queue (see §4). Since then the **full special-attack
 > matrix**, the **light/darkness model**, the **Treasury vault + Council Guard**, **gems/tokens**,
 > **the Validator's Tower**, and much more have landed. The remaining ❌/🟡 below are the
-> genuinely-unbuilt parts (richer spell/ring/wand breadth, the oracle level, the shop bill-ledger,
+> genuinely-unbuilt parts (richer spell/ring/wand breadth, the oracle level,
 > fuller monster item-use, more special rooms).
 
 ---
@@ -134,7 +134,7 @@ Canonical ~25 trap types (arrow, dart, falling rock, squeaky board, bear, land m
 - ~400 monsters across classes with attributes, resistances, attacks, speed, size, gen flags. → **🟡** Ascend has ~12 + 2 minibosses + boss + shopkeeper. **Plan (Phase 10):** grow to a few dozen across themed classes: bots/sybils (✅ swarm, tamed), validators/golems, oracles (✅ ranged), whales (✅), rug pullers (✅ thief), censor-imps, 51%-attackers, mind-flayer-equivalent, petrifiers (Freezer/Regulator), dragons ("JAM-era validators" with breath = a `zap` ray), demons/devils (Gehennom), `@` humans (mercenaries → "mercenary nodes", watchmen, soldiers), `;` sea monsters in swamps, were-validators (✅ lycanthropy), **monster item-use** (`muse.c`) — 🟡 **drink** in: a slashing daemon / cartel enforcer / sovereign daemon **gulps a healing draught when badly hurt** (a limited supply); still ❌ zap/throw/wear — **monster casting** (summon/ranged ✅, gated by silence), **breeding** (sybils ✅), **the @ pet/steed line**.
 - **`steed.c`** riding → **❌** → ride a validator steed (`#ride`).
 - **`were.c`** lycanthropy → **✅ (Phase 8f)** — a were-validator infects on a hit; uncontrolled were-forms until prayer/cleansing cures it (see fork above).
-- **`shk.c`, `shknam.c`** shopkeeper economy: billing, theft anger, "pay before leaving", credit, named shops, services. → **🟡** the Marketmaker guards + turns hostile on theft + direct-wallet pay. **Missing:** the *billing ledger* (carry unpaid items, pay at the door), credit, price-ID, the door-block. **Plan (Phase 9):** a bill ledger so you can browse/loot then settle in one PAS tx at the exit.
+- **`shk.c`, `shknam.c`** shopkeeper economy: billing, theft anger, "pay before leaving", credit, named shops, services. → **✅ (Phase 9h — the bill ledger).** Buy on the spot (`p`), **or pick wares onto your bill** (`,` — they ride your pack marked *unpaid*) and **settle at the door**: step beyond the shop and the Marketmaker auto-pays from your gold — or, if you can't cover it, **names you a thief and turns lethal**. **Drop an unpaid ware back** in the shop to return it (off the bill); **`p`** pays the bill on the spot; unpaid wares **can't be hidden in a bag**, and **slaying the keeper voids the bill** (free loot). Settles even on the stairs so nothing escapes unbilled. Still ⤬/❌: credit, named shops, the gem price-ID (gems sell via `#chat`), shop services.
 - **`priest.c`** temple priests → **❌**. **`mplayer.c`** "player monsters" in the endgame → **❌** → rival adventurers in the deep.
 
 ### H. Food, time, status — **`eat.c`, `timeout.c`, `botl.c`, `decl.c`**

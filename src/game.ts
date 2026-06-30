@@ -2879,9 +2879,9 @@ export class Game {
   }
 
   // ── #loot: the multisig vault (bag of holding) ──
-  /** An item can't be stashed while it's equipped (worn/wielded/on-hand/welded). */
+  /** An item can't be stashed while it's equipped (worn/wielded/on-hand/welded) or unpaid (no hiding the bill). */
   private lootLocked(p: Player, it: Item): boolean {
-    return p.isWelded(it) || it === p.weapon || it === p.ring || it === p.amulet || p.wornArmor.includes(it);
+    return !!it.unpaid || p.isWelded(it) || it === p.weapon || it === p.ring || it === p.amulet || p.wornArmor.includes(it);
   }
 
   lootMenu(vault: Item): void {
@@ -2963,13 +2963,17 @@ export class Game {
       return true;
     }
     if (who.inventory.full) { this.log.add("Your pack is full.", "bad"); return false; }
-    // Lifting an unpaid ware is shoplifting — the Marketmaker takes it personally.
+    // A priced ware with a peaceful keeper goes onto your BILL — carry it, settle at the door (or drop to return).
     if (fi.price) {
       const k = this.shopkeeper();
       if (k && k.peaceful) {
-        k.peaceful = false; k.fg = "#ff5030";
-        this.log.add("You pocket the unpaid ware — the Marketmaker bellows \"THIEF!\" and lunges for you.", "bad");
+        const it = this.giveItem(fi.type, { enchant: fi.enchant, relic: fi.relic, buc: fi.buc, bucKnown: fi.bucKnown });
+        it.unpaid = fi.price;
+        this.level.items = this.level.items.filter((i) => i !== fi);
+        this.log.add(`You add ${this.ident.name(fi.type)} to your bill — ${fi.price} gold, due at the door.`, "sys", who);
+        return true;
       }
+      // no keeper to mind the till → it's free loot (fall through)
     }
     this.giveItem(fi.type, { enchant: fi.enchant, relic: fi.relic, buc: fi.buc, bucKnown: fi.bucKnown });
     this.level.items = this.level.items.filter((i) => i !== fi);
@@ -3024,6 +3028,30 @@ export class Game {
     return this.monsters.find((m) => m.alive && m.def.keeper);
   }
 
+  /** The shop bill-ledger: once you step beyond the shop carrying unpaid wares, the Marketmaker settles
+   *  the bill — it auto-pays if you can afford it, else it's theft and the keeper turns lethal. */
+  checkShopBill(p: Player): void {
+    if (!this.level.shop) return;
+    // still browsing — nothing due yet, unless you're on a stair/portal about to leave the level entirely
+    const leaving = ["stairsDown", "stairsUp", "branchDown", "portal"].includes(this.level.tileAt(p.x, p.y) ?? "");
+    if (this.level.inShop(p.x, p.y) && !leaving) return;
+    const owed = p.inventory.items.filter((it) => it.unpaid);
+    if (!owed.length) return;
+    const k = this.shopkeeper();
+    if (!k || !k.peaceful) { for (const it of owed) it.unpaid = undefined; return; } // no keeper at the till → free
+    const total = owed.reduce((n, it) => n + (it.unpaid ?? 0), 0);
+    if (p.gold >= total) {
+      p.gold -= total;
+      for (const it of owed) it.unpaid = undefined;
+      this.breakConduct(p, "bankless");
+      this.log.add(`The Marketmaker settles your bill at the door — ${total} gold for ${owed.length} ware(s). (${p.gold} left)`, "good", p);
+    } else {
+      k.peaceful = false; k.fg = "#ff5030";
+      this.log.add(`You slip out owing ${total} gold you can't cover — the Marketmaker bellows "THIEF!" and gives chase.`, "bad", p);
+    }
+    this.draw();
+  }
+
   dropItem(item: Item): void {
     const x = this.acting.x, y = this.acting.y;
     // A vault spills its stash onto the floor when set down, so nothing is lost.
@@ -3032,7 +3060,12 @@ export class Game {
       this.log.add(`The vault's ${item.contents.length} stashed item(s) spill out onto the floor.`, "sys");
       item.contents = [];
     }
-    const fi = { x, y, type: item.type, enchant: item.enchant, relic: item.relic, buc: item.buc, bucKnown: item.bucKnown };
+    const fi: FloorItem = { x, y, type: item.type, enchant: item.enchant, relic: item.relic, buc: item.buc, bucKnown: item.bucKnown };
+    // Returning an unpaid ware to the shop floor puts it back on the shelf and clears it from your bill.
+    if (item.unpaid && this.level.inShop(x, y) && this.shopkeeper()) {
+      fi.price = item.unpaid;
+      this.log.add(`You set ${this.ident.name(item.type)} back on the shelf — off your bill.`, "sys");
+    }
     // Gavin's altar reveals an item's sanctity when you set it down upon it.
     if (this.level.tileAt(x, y) === "altar") {
       fi.bucKnown = true;
@@ -3073,8 +3106,9 @@ export class Game {
       const relic = it.relic ? ` +${it.enchant ?? 0} ✦` : "";
       const buc = it.bucKnown && it.buc ? `${it.buc} ` : "";
       const ero = it.erosion ? (["", "rusty ", "corroded ", "very corroded "][it.erosion] ?? "") : (it.proofed ? "audited " : "");
-      const tone = it.bucKnown && it.buc === "cursed" ? "bad" : it.bucKnown && it.buc === "blessed" ? "good" : it.relic ? "sys" : "dim";
-      this.log.add(`  ${inv.letter(i)}) ${buc}${ero}${this.ident.name(it.type)}${relic}${ch}${lbl}${eq}`, tone);
+      const unpaid = it.unpaid ? ` (unpaid, ${it.unpaid} gold)` : "";
+      const tone = it.unpaid ? "bad" : it.bucKnown && it.buc === "cursed" ? "bad" : it.bucKnown && it.buc === "blessed" ? "good" : it.relic ? "sys" : "dim";
+      this.log.add(`  ${inv.letter(i)}) ${buc}${ero}${this.ident.name(it.type)}${relic}${ch}${lbl}${eq}${unpaid}`, tone);
     });
   }
 
@@ -3192,6 +3226,7 @@ export class Game {
     const centers = this.level.roomCenters.slice(1); // not the start room
     if (centers.length === 0) return;
     const c = ROT.RNG.getItem(centers)!;
+    this.level.shop = { x: c.x, y: c.y, r: 3 }; // the shop region — your bill settles when you step beyond it
     const stock = ["ration", "heal", "vest", "sword", "tele", "crumb"]
       .map((id) => ITEMS.find((i) => i.id === id))
       .filter((t): t is ItemType => !!t);
@@ -3225,7 +3260,7 @@ export class Game {
     }
     this.log.add(
       keeper
-        ? "A bazaar glints on this floor — the Marketmaker ($) tends it. Pay with gold (stand on a ware, press p); shoplift and it turns lethal."
+        ? "A bazaar glints on this floor — the Marketmaker ($) tends it. Buy on the spot (p), or pick wares onto your bill (,) and settle at the door. Leave owing more than you hold, and it turns lethal."
         : "A bazaar glints somewhere on this floor — provisions for gold (stand on a ware, press p).",
       "dim",
     );
@@ -3234,7 +3269,20 @@ export class Game {
   async tryBuy(): Promise<void> {
     if (this.busy) return;
     const fi = this.level.itemAt(this.acting.x, this.acting.y);
-    if (!fi || !fi.price) { this.log.add("There is nothing for sale here.", "dim"); return; }
+    if (!fi || !fi.price) {
+      // No ware underfoot — but if you carry an unpaid bill and the keeper's at hand, settle it now.
+      const owed = this.acting.inventory.items.filter((it) => it.unpaid);
+      const k = this.shopkeeper();
+      if (owed.length && k && k.peaceful) {
+        const total = owed.reduce((n, it) => n + (it.unpaid ?? 0), 0);
+        if (this.acting.gold < total) { this.log.add(`Your bill is ${total} gold — you hold only ${this.acting.gold}.`, "bad"); return; }
+        this.acting.gold -= total; for (const it of owed) it.unpaid = undefined;
+        this.breakConduct(this.acting, "bankless");
+        this.log.add(`${this.sub(this.acting)} ${this.verbS(this.acting, "settle")} the bill — ${total} gold for ${owed.length} ware(s). (${this.acting.gold} left)`, "good");
+        this.draw(); return;
+      }
+      this.log.add("There is nothing for sale here.", "dim"); return;
+    }
 
     // Standard wares are bought with in-game gold — instant, no wallet. Works in co-op too:
     // each adventurer spends their own purse (giveItem credits the acting player).
@@ -3280,6 +3328,7 @@ export class Game {
     if (d === this.pet) { this.log.add("Your nominator falls. You descend alone.", "bad"); this.scheduler.remove(this.pet); return; }
     const m = d as Monster;
     for (const pl of this.allPlayers()) if (pl.engulfedBy === m) pl.engulfedBy = null; // a slain trapper releases its victim
+    if (m.def.keeper) for (const pl of this.allPlayers()) for (const it of pl.inventory.items) it.unpaid = undefined; // the till's unguarded — your bill is voided
     const mi = this.monsters.indexOf(m); // splice in place — the array identity is the persisted level's monster list
     if (mi >= 0) this.monsters.splice(mi, 1);
     this.scheduler.remove(m);

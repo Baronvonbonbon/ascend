@@ -1,6 +1,6 @@
 import type { ItemType, Buc } from "./items";
 
-export interface Item { type: ItemType; charges?: number; enchant?: number; relic?: boolean; buc?: Buc; bucKnown?: boolean; erosion?: number; proofed?: boolean; contents?: Item[]; label?: string; lit?: boolean; } // charges for wands; enchant/relic for NFT gear; buc = sanctity; erosion 0–3 = rust/corrosion; proofed = audited (rust-proof); contents = a multisig vault's stash; label = player-given #name
+export interface Item { type: ItemType; charges?: number; enchant?: number; relic?: boolean; buc?: Buc; bucKnown?: boolean; erosion?: number; proofed?: boolean; contents?: Item[]; label?: string; lit?: boolean; unpaid?: number; } // unpaid = gold owed for a shop ware carried on your bill (settled at the door) // charges for wands; enchant/relic for NFT gear; buc = sanctity; erosion 0–3 = rust/corrosion; proofed = audited (rust-proof); contents = a multisig vault's stash; label = player-given #name
 
 /** Letter-indexed pack (a, b, c, …). */
 export class Inventory {
