@@ -184,9 +184,14 @@ Goal: a once-per-turn 60-char message that degrades with distance + line-of-sigh
 - **Planes aren't persisted** (`saveActive` skips `plane > 0`) — a player on a
   plane can't be "left and returned to"; decide whether split-onto-a-plane is
   allowed or the party regroups for the endgame.
-- **Co-op is host-authoritative**; the guest only renders streamed frames, so all
-  of this runs on the host. The guest's input already routes via
-  `handleRemoteInput → coPlayer.feed`.
+- **Netcode (UPDATED): co-op is now peer-authoritative deterministic lockstep**, not
+  host-authoritative. Both clients run the FULL sim from a shared RNG seed and exchange
+  only keystrokes (`onKey` broadcasts + drives `localPlayer`; `remoteInput` feeds the
+  partner's avatar); each renders its own player's view locally and keeps its own log
+  lines. So all the per-player machinery above runs identically on BOTH clients. Any new
+  gameplay randomness MUST go through `ROT.RNG` (never `Math.random`/time) or it desyncs;
+  per-client side effects (wallet/forge/NFT/relic-load) stay solo-gated. See the
+  `feat(coop): peer-authoritative shared world` commit.
 
 ## Test plan (per stage, after 2–4)
 1. Host a game in tab A, join from tab B (the lobby `#lobby` flow).
