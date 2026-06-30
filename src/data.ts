@@ -223,6 +223,7 @@ export interface MonsterDef {
   steals?: boolean;      // a thief — snatches a pack item and flees (the rug pull)
   stealsGold?: boolean;  // an airdrop farmer (leprechaun) — snatches gold and blinks away
   stealsLuck?: boolean;  // a doubt gremlin — leeches your Fortune (Luck) on a hit
+  paralyzes?: boolean;   // a watcher eye (floating eye) — passive, but melee it and its gaze freezes you
   mimic?: boolean;       // a honeypot — sits disguised as loot, strikes when touched
   fearless?: boolean;    // ignores warding engravings (bosses fear no Gray Paper)
   keeper?: boolean;      // a shopkeeper — peaceful until you shoplift, then merciless
@@ -241,6 +242,7 @@ export const MONSTERS: MonsterDef[] = [
   { name: "a rug puller",      fname: "a treasure nymph", ch: "r", fg: "#d08040", hp: 5,  dmg: [3, 6], ai: "chase",  minDepth: 4, weight: 2, speed: 115, steals: true },
   { name: "an airdrop farmer", fname: "a leprechaun",    ch: "l", fg: "#40d040", hp: 6,  dmg: [1, 3], ai: "chase",  minDepth: 3, weight: 2, speed: 120, stealsGold: true },
   { name: "a doubt gremlin",   fname: "a gremlin",       ch: "g", fg: "#5fb0b0", hp: 7,  dmg: [1, 3], ai: "chase",  minDepth: 5, weight: 2, speed: 110, stealsLuck: true },
+  { name: "a watcher eye",     fname: "a floating eye",  ch: "e", fg: "#d8d040", hp: 14, dmg: [0, 0], ai: "chase",  minDepth: 4, weight: 2, speed: 60,  paralyzes: true },
   { name: "a censor imp",      fname: "a confusion imp", ch: "i", fg: "#d05c5c", hp: 8,  dmg: [3, 5], ai: "chase",  minDepth: 4, weight: 2, inflict: "confuse", corpseEffect: "telepathy" },
   { name: "a whale",           fname: "a hill giant",    ch: "O", fg: "#4090c0", hp: 24, dmg: [3, 6], ai: "chase",  minDepth: 5, weight: 2, speed: 60 },
   { name: "an oracle",         fname: "a dark seer",     ch: "o", fg: "#e0c040", hp: 9,  dmg: [3, 6], ai: "chase",  minDepth: 5, weight: 2, ranged: true },

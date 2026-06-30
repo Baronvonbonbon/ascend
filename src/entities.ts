@@ -68,6 +68,7 @@ export class Player extends Entity {
   stoning = 0;         // turns until you freeze solid (petrification) — cure fast
   illness = 0;         // turns until food poisoning kills you — cure fast
   blind = 0;           // turns of blindness — FOV shrinks to your fingertips
+  paralyzed = 0;       // turns frozen by a gaze (floating eye) — you auto-pass, helpless
   intrinsics = new Set<string>(); // poisonResist, petrifyResist, fast (from eating corpses)
   skillXp: Record<string, number> = {};   // landed hits per weapon-skill class (#enhance)
   skillRank: Record<string, number> = {};  // 0 Unskilled · 1 Basic · 2 Skilled · 3 Expert
@@ -176,6 +177,11 @@ export class Player extends Entity {
   act(): Promise<void> {
     this.game.setActive(this.floorKey); // this player's floor is the live context for its turn
     this.game.draw(); // start of the player's turn = monsters have moved
+    // Frozen by a gaze — auto-pass the turn (no input; resolves identically on both lockstep clients).
+    if (this.paralyzed > 0) {
+      if (--this.paralyzed === 0) this.game.log.add(`${this.name === "you" ? "You can move again" : this.name + " can move again"}.`, "good");
+      return new Promise((resolve) => { this.resolveTurn = resolve; this.endTurn(); });
+    }
     return new Promise((resolve) => {
       this.resolveTurn = resolve;
       this.awaiting = true;
@@ -858,6 +864,10 @@ export class Monster extends Entity {
 
     // A peaceful shopkeeper minds its stall — it neither chases nor attacks.
     if (this.peaceful) return;
+
+    // A watcher eye just floats — it never gives chase or strikes; its danger is the gaze it
+    // returns when YOU melee it (handled in attack). Zap it from afar instead.
+    if (this.def.paralyzes) { this.wanderStep(); return; }
 
     // No adventurer shares this floor (co-op split / partner downed) — a free monster just mills
     // about. Checked AFTER the passive states so a sleeper/dormant mimic/shopkeeper still won't move.

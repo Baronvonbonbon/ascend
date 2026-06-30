@@ -2074,6 +2074,11 @@ export class Game {
         if (d.hp <= 0) { this.gainXp(a, d.maxHp); this.kill(d); }
       } else this.log.add("Your off-hand swing goes wide.", "dim", who);
     }
+    // A watcher eye's gaze: melee it and — if it survives the blow — its stare freezes you in place.
+    if (a instanceof Player && d instanceof Monster && d.alive && d.def.paralyzes && a.paralyzed === 0) {
+      a.paralyzed = ROT.RNG.getUniformInt(3, 6);
+      this.log.add(`${cap(d.name)} fixes ${a.name} with its gaze — frozen, helpless!`, "bad", a);
+    }
   }
 
   /** d20 to-hit: nat 20 always lands, nat 1 always misses; else roll + accuracy ≥ 10 + dodge.
@@ -2462,7 +2467,7 @@ export class Game {
         hit.cancelled = true;
         this.log.add(`${cap(hit.name)} is nullified — its powers fail.`, "good");
       } else if (item.type.id === "wand_probe") {
-        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.stealsGold && "gold thief", hit.def.stealsLuck && "Fortune leech", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.cancelled && "nullified"].filter(Boolean).join(", ");
+        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.stealsGold && "gold thief", hit.def.stealsLuck && "Fortune leech", hit.def.paralyzes && "paralyzing gaze", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.cancelled && "nullified"].filter(Boolean).join(", ");
         this.log.add(`State-read ${hit.name}: ${hit.hp}/${hit.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       }
     }
@@ -2574,10 +2579,10 @@ export class Game {
   // ── tools (the `apply` command, Phase 7c) ────────────────────────────────────
   /** Sound an auditor's horn (unicorn horn): clear afflictions + a little mend. Returns false if there's nothing to fix. */
   applyHorn(p: Player): boolean {
-    if (p.poison === 0 && p.confused === 0 && p.stoning === 0 && p.illness === 0 && p.blind === 0 && p.hp >= p.maxHp) {
+    if (p.poison === 0 && p.confused === 0 && p.stoning === 0 && p.illness === 0 && p.blind === 0 && p.paralyzed === 0 && p.hp >= p.maxHp) {
       this.log.add("The auditor's horn finds nothing amiss.", "dim"); return false;
     }
-    p.poison = 0; p.confused = 0; p.stoning = 0; p.illness = 0; p.blind = 0;
+    p.poison = 0; p.confused = 0; p.stoning = 0; p.illness = 0; p.blind = 0; p.paralyzed = 0;
     p.hp = Math.min(p.maxHp, p.hp + ROT.RNG.getUniformInt(2, 6));
     this.recomputeFOV();
     this.log.add(`${this.sub(p)} ${this.verbS(p, "sound")} the auditor's horn — afflictions clear.`, "good");
@@ -2615,7 +2620,7 @@ export class Game {
     if (item.type.id === "scope") {
       const m = this.monsterAt(p.x + dx, p.y + dy);
       if (!m) { this.log.add("You press the state reader to empty air.", "dim"); return false; }
-      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.stealsGold && "gold thief", m.def.stealsLuck && "Fortune leech", m.def.splits && "splits", m.def.corrodes && "corrodes", m.cancelled && "nullified", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
+      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.stealsGold && "gold thief", m.def.stealsLuck && "Fortune leech", m.def.paralyzes && "paralyzing gaze", m.def.splits && "splits", m.def.corrodes && "corrodes", m.cancelled && "nullified", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
       this.log.add(`State-read ${m.name}: ${m.hp}/${m.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       return true;
     }
@@ -3453,6 +3458,7 @@ export class Game {
       `%c{${COLORS.dim}}  Gold %c{${COLORS.gold}}${p.gold}` +
       (this.wallet && !this.coop ? `%c{${COLORS.dim}}  PAS %c{${COLORS.gold}}${p.pas.toFixed(1)}` : "") +
       (hunger ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}${hunger}` : "") +
+      (p.paralyzed > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Para${p.paralyzed}` : "") +
       (p.poison > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Psn` : "") +
       (p.confused > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Cfz` : "") +
       (p.stoning > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Ston${p.stoning}` : "") +
