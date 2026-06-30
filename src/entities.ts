@@ -1043,6 +1043,11 @@ export class Monster extends Entity {
       this.game.monsterZap(this, p);
       return;
     }
+    // mthrowu.c: a thrower hurls a physical projectile (dart/rock) from range — not magic, so silence/cancel don't stop it.
+    if (this.def.throws && !p.stealth && dist >= 2 && dist <= 6 && this.game.level.isVisible(this.x, this.y) && this.game.hasLineOfSight(this.x, this.y, p.x, p.y)) {
+      this.game.monsterThrow(this);
+      return;
+    }
     // Ranged foes (oracles) zap the player from a distance with line-of-sight — a cast, stopped by silence.
     if (!this.cancelled && this.silenced === 0 && this.def.ranged && !p.stealth && dist >= 2 && dist <= 6 && this.game.level.isVisible(this.x, this.y) && this.game.hasLineOfSight(this.x, this.y, p.x, p.y)) {
       this.game.rangedAttack(this);

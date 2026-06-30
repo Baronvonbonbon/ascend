@@ -1916,6 +1916,7 @@ export class Game {
       if (m.def.infects) tags.push("infectious");
       if (m.def.muse) tags.push("self-mending");
       if (m.def.zaps) tags.push("caster");
+      if (m.def.throws) tags.push("thrower");
       if (m.def.diseases) tags.push("sickening");
       if (m.def.seduces) tags.push("seductive");
       if (m.sleepTurns > 0) tags.push("asleep");
@@ -2521,6 +2522,23 @@ export class Game {
     this.log.add(`${cap(m.name)} gulps a draught and vanishes — blinked away!`, "bad", p);
   }
 
+  /** mthrowu.c: a thrower hurls a dart or a rock at the nearest party member (armor half-soaks; a thrown
+   *  dart sometimes clatters to the floor beside you to reclaim — a rock just shatters). */
+  monsterThrow(m: Monster): void {
+    const p = this.nearestPlayer(m.x, m.y);
+    const [lo, hi] = m.attackDmg;
+    let dmg = ROT.RNG.getUniformInt(lo, hi);
+    if (p.ac > 0) dmg = Math.max(1, dmg - Math.floor(p.ac / 2));
+    p.hp -= dmg;
+    const proj = m.def.throws === "rock" ? "a boulder" : "a dart";
+    this.log.add(`${cap(m.name)} hurls ${proj} at ${p.name} for ${dmg}!`, "bad", p);
+    if (m.def.throws === "dart" && p.hp > 0 && ROT.RNG.getUniform() < 0.4) {
+      const spot = this.adjacentFreeFloor(p.x, p.y);
+      if (spot && !this.level.itemAt(spot.x, spot.y)) this.level.items.push({ x: spot.x, y: spot.y, type: itemById("dagger")!, buc: "uncursed", bucKnown: true });
+    }
+    if (p.hp <= 0) this.kill(p);
+  }
+
   rangedAttack(a: Monster): void {
     const p = this.nearestPlayer(a.x, a.y);
     const [lo, hi] = a.attackDmg;
@@ -2898,7 +2916,7 @@ export class Game {
         hit.cancelled = true;
         this.log.add(`${cap(hit.name)} is nullified — its powers fail.`, "good");
       } else if (item.type.id === "wand_probe") {
-        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.stealsGold && "gold thief", hit.def.stealsLuck && "Fortune leech", hit.def.drains && "life-draining", hit.def.engulfs && "engulfing", hit.def.silences && "silencing", hit.def.drainsStat && "mind-draining", hit.def.infects && "infectious", hit.def.muse && "self-mending", hit.def.zaps && "caster", hit.def.diseases && "sickening", hit.def.seduces && "seductive", hit.def.paralyzes && "paralyzing gaze", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.cancelled && "nullified"].filter(Boolean).join(", ");
+        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.stealsGold && "gold thief", hit.def.stealsLuck && "Fortune leech", hit.def.drains && "life-draining", hit.def.engulfs && "engulfing", hit.def.silences && "silencing", hit.def.drainsStat && "mind-draining", hit.def.infects && "infectious", hit.def.muse && "self-mending", hit.def.zaps && "caster", hit.def.throws && "thrower", hit.def.diseases && "sickening", hit.def.seduces && "seductive", hit.def.paralyzes && "paralyzing gaze", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.cancelled && "nullified"].filter(Boolean).join(", ");
         this.log.add(`State-read ${hit.name}: ${hit.hp}/${hit.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       }
     }
@@ -3100,7 +3118,7 @@ export class Game {
     if (item.type.id === "scope") {
       const m = this.monsterAt(p.x + dx, p.y + dy);
       if (!m) { this.log.add("You press the state reader to empty air.", "dim"); return false; }
-      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.stealsGold && "gold thief", m.def.stealsLuck && "Fortune leech", m.def.drains && "life-draining", m.def.engulfs && "engulfing", m.def.silences && "silencing", m.def.drainsStat && "mind-draining", m.def.infects && "infectious", m.def.muse && "self-mending", m.def.zaps && "caster", m.def.diseases && "sickening", m.def.seduces && "seductive", m.def.paralyzes && "paralyzing gaze", m.def.splits && "splits", m.def.corrodes && "corrodes", m.cancelled && "nullified", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
+      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.stealsGold && "gold thief", m.def.stealsLuck && "Fortune leech", m.def.drains && "life-draining", m.def.engulfs && "engulfing", m.def.silences && "silencing", m.def.drainsStat && "mind-draining", m.def.infects && "infectious", m.def.muse && "self-mending", m.def.zaps && "caster", m.def.throws && "thrower", m.def.diseases && "sickening", m.def.seduces && "seductive", m.def.paralyzes && "paralyzing gaze", m.def.splits && "splits", m.def.corrodes && "corrodes", m.cancelled && "nullified", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
       this.log.add(`State-read ${m.name}: ${m.hp}/${m.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       return true;
     }

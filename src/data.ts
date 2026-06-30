@@ -250,6 +250,7 @@ export interface MonsterDef {
   infects?: boolean;     // a werewolf — a hit may infect you with lycanthropy (uncontrolled were-forms)
   muse?: boolean;        // muse.c — gulps a healing draught when badly hurt; cornered, it blinks away
   zaps?: "sleep" | "blind" | "confuse"; // muse.c — zaps a wand-borne debuff at you from range
+  throws?: "dart" | "rock"; // mthrowu.c — hurls a physical projectile at you from range (darts are recoverable)
   diseases?: boolean;    // a plague fly — a hit may make you sick (a deadly illness countdown; cure fast)
   seduces?: boolean;     // a succubus — adjacent, it charms you (a lost turn) and lifts an item, then blinks
   mimic?: boolean;       // a honeypot — sits disguised as loot, strikes when touched
@@ -274,7 +275,8 @@ export const MONSTERS: MonsterDef[] = [
   { name: "a doubt gremlin",   fname: "a gremlin",       ch: "g", fg: "#5fb0b0", hp: 7,  dmg: [1, 3], ai: "chase",  minDepth: 5, weight: 2, speed: 110, stealsLuck: true },
   { name: "a watcher eye",     fname: "a floating eye",  ch: "e", fg: "#d8d040", hp: 14, dmg: [0, 0], ai: "chase",  minDepth: 4, weight: 2, speed: 60,  paralyzes: true },
   { name: "a censor imp",      fname: "a confusion imp", ch: "i", fg: "#d05c5c", hp: 8,  dmg: [3, 5], ai: "chase",  minDepth: 4, weight: 2, inflict: "confuse", corpseEffect: "telepathy" },
-  { name: "a whale",           fname: "a hill giant",    ch: "O", fg: "#4090c0", hp: 24, dmg: [3, 6], ai: "chase",  minDepth: 5, weight: 2, speed: 60 },
+  { name: "a whale",           fname: "a hill giant",    ch: "O", fg: "#4090c0", hp: 24, dmg: [3, 6], ai: "chase",  minDepth: 5, weight: 2, speed: 60, throws: "rock" },
+  { name: "a front-runner",    fname: "a kobold archer", ch: "k", fg: "#c0a050", hp: 7,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 2, speed: 110, throws: "dart" },
   { name: "a dilution wraith",  fname: "a barrow-wight",  ch: "W", fg: "#b6b0d4", hp: 16, dmg: [2, 4], ai: "chase",  minDepth: 6, weight: 2, speed: 90, drains: true, corpseEffect: "levelup" },
   { name: "an oracle",         fname: "a dark seer",     ch: "o", fg: "#e0c040", hp: 9,  dmg: [3, 6], ai: "chase",  minDepth: 5, weight: 2, ranged: true },
   { name: "a liquidity trap",  fname: "a trapper",       ch: "t", fg: "#6ec0a0", hp: 20, dmg: [3, 6], ai: "chase",  minDepth: 6, weight: 2, speed: 80, engulfs: true },
