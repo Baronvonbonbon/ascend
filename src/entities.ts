@@ -158,6 +158,7 @@ export class Player extends Entity {
   quiver: Item | null = null;               // readied missile for the `f`ire command
   private pendingApply: Item | null = null; // a tool awaiting a direction (excavator / state reader)
   private pendingWrite: Item | null = null; // a contract deployer awaiting a scroll choice
+  private pendingWish: Item | null = null;  // a wand of wishing awaiting a wish choice
   private pendingLoot: { vault: Item; mode: "menu" | "in" | "out" } | null = null; // a multisig vault being looted
   private pendingSpell = false;             // choosing a spell to cast
   private pendingCastDir: string | null = null; // a directional spell awaiting a direction
@@ -319,6 +320,7 @@ export class Player extends Entity {
     if (this.pendingThrow) return this.resolveThrowDir(e);
     if (this.pendingApply) return this.resolveApplyDir(e);
     if (this.pendingWrite) return this.resolveWrite(e);
+    if (this.pendingWish) return this.resolveWish(e);
     if (this.pendingLoot) return this.resolveLoot(e);
     if (this.pendingCastDir) return this.resolveCastDir(e);
     if (this.pendingChat) return this.resolveChatDir(e);
@@ -404,6 +406,10 @@ export class Player extends Entity {
     if (!item) { this.game.log.add("No such item.", "dim"); return false; }
     if (verb === "zap") {
       if (item.type.kind !== "wand") { this.game.log.add("That is not a wand.", "dim"); return false; }
+      if (item.type.id === "wand_wish") { // the wand of wishing prompts a wish instead of a direction
+        if (!item.charges || item.charges <= 0) { this.game.log.add("The wand is spent.", "dim"); return false; }
+        this.pendingWish = item; this.game.promptWish(); return false;
+      }
       this.pendingDir = item;
       this.game.log.add("Zap in which direction? (a move key, Esc to cancel)", "sys");
       return false;
@@ -482,6 +488,15 @@ export class Player extends Entity {
     const n = parseInt(e.key, 10);
     if (isNaN(n)) { this.game.log.add("Choose a number from the menu.", "dim"); return false; }
     return this.game.writeScroll(item, n - 1) ? this.endTurn() : false;
+  }
+
+  private resolveWish(e: KeyboardEvent): boolean {
+    const wand = this.pendingWish!;
+    this.pendingWish = null;
+    if (e.key === "Escape") { this.game.log.add("You forgo the wish.", "dim"); return false; }
+    const n = parseInt(e.key, 10);
+    if (isNaN(n)) { this.game.log.add("Choose a number from the menu.", "dim"); return false; }
+    return this.game.grantWish(wand, n - 1) ? this.endTurn() : false;
   }
 
   private resolveLoot(e: KeyboardEvent): boolean {

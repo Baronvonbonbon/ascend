@@ -35,6 +35,11 @@ function keyGlyph(k: string): string { return QUEUE_MOVE_GLYPH[k] ?? (k.length =
 // Gold prices for standard (non-NFT) shop wares, by item kind. NFT gear is priced separately, in PAS.
 const PRICE_GOLD: Record<string, number> = { weapon: 60, armor: 55, potion: 35, scroll: 35, food: 8, ring: 90, wand: 80, tool: 50, spellbook: 70, amulet: 120 };
 const STARTING_GOLD = 25;     // a small purse so the first shop isn't out of reach
+// What a wand of wishing can grant — a curated menu of wish-worthy items (each blessed; gear enchanted).
+const WISHES: { id: string; enchant?: number }[] = [
+  { id: "plate", enchant: 3 }, { id: "sword", enchant: 3 }, { id: "amulet_life" }, { id: "amulet_reflect" },
+  { id: "ring_free" }, { id: "vault" }, { id: "wand_death" }, { id: "wand_cold" },
+];
 const RELIC_IMPORT_CAP = 3;   // up to this many owned NFT relics carried into a run
 
 const W = 80;
@@ -2719,7 +2724,7 @@ export class Game {
   /** Add an item to the pack, rolling wand charges. NFT relics carry enchant + a relic mark; every item gets a BUC. */
   giveItem(type: ItemType, opts?: { enchant?: number; relic?: boolean; buc?: Buc; bucKnown?: boolean }): Item {
     const it = this.acting.inventory.add(type);
-    if (type.kind === "wand") it.charges = ROT.RNG.getUniformInt(3, 6);
+    if (type.kind === "wand") it.charges = type.id === "wand_wish" ? ROT.RNG.getUniformInt(1, 2) : ROT.RNG.getUniformInt(3, 6); // wishes are precious
     if (type.id === "marker") it.charges = ROT.RNG.getUniformInt(2, 4); // a contract deployer's gas
     if (type.id === "trickbag") it.charges = ROT.RNG.getUniformInt(5, 12); // a faucet bag's stored monsters
     if (opts?.enchant) it.enchant = opts.enchant;
@@ -3106,6 +3111,25 @@ export class Game {
   promptWrite(): void {
     const menu = WRITABLE_SCROLLS.map((id, i) => `(${i + 1}) ${itemById(id)?.name ?? id}`).join("  ");
     this.log.add(`Deploy which scroll? ${menu}  (Esc to cancel)`, "sys");
+  }
+
+  /** The wand of wishing's menu of wish-worthy items (each granted blessed; gear at the listed enchant). */
+  promptWish(): void {
+    const menu = WISHES.map((w, i) => { const t = itemById(w.id); return `(${i + 1}) ${t ? this.ident.name(t) : w.id}${w.enchant ? ` +${w.enchant}` : ""}`; }).join("  ");
+    this.log.add(`For what do you wish? ${menu}  (Esc to forgo)`, "sys");
+  }
+
+  /** Grant the chosen wish: a blessed item dropped into the pack; the wand spends a charge, then crumbles. */
+  grantWish(wand: Item, n: number): boolean {
+    if (n < 0 || n >= WISHES.length) { this.log.add("You wish for nothing in particular.", "dim"); return false; }
+    if (this.acting.inventory.full) { this.log.add("Your pack is too full to hold a wish.", "bad"); return false; }
+    const w = WISHES[n], type = itemById(w.id);
+    if (!type) return false;
+    const it = this.giveItem(type, { enchant: w.enchant, buc: "blessed", bucKnown: true });
+    this.log.add(`Reality bends — ${this.ident.name(type)}${w.enchant ? ` +${it.enchant}` : ""} settles into your pack, wished into being.`, "good");
+    wand.charges = (wand.charges ?? 1) - 1;
+    if ((wand.charges ?? 0) <= 0) { this.acting.inventory.remove(wand); this.log.add("The wand of wishing crumbles to dust, its magic spent.", "dim"); }
+    return true;
   }
 
   // ── #loot: the multisig vault (bag of holding) ──
@@ -3585,12 +3609,18 @@ export class Game {
     }
     if (m.def.boss) {
       this.defeatedBosses.add(this.player.depth);
-      // A boss drops a relic-grade prize: an enchanted piece of equipment.
-      const goodies = ITEMS.filter((i) => isGear(i));
-      const prize = ROT.RNG.getItem(goodies)!;
-      const enchant = ROT.RNG.getUniformInt(1, 3);
-      if (!this.level.itemAt(m.x, m.y)) this.level.items.push({ x: m.x, y: m.y, type: prize, enchant, buc: "blessed", bucKnown: true });
-      this.log.add(`${cap(m.name)} falls! It leaves a prize — ${prize.name} +${enchant}. Forge it (F) into a tradeable NFT relic.`, "good");
+      if (ROT.RNG.getUniform() < 0.05 && !this.level.itemAt(m.x, m.y)) {
+        // vanishingly rare: a boss's ash yields the wand of wishing — the ultimate prize.
+        this.level.items.push({ x: m.x, y: m.y, type: itemById("wand_wish")!, buc: "blessed", bucKnown: true });
+        this.log.add(`${cap(m.name)} falls — and from its ash rises a wand of wishing. Vanishingly rare. Take it.`, "good");
+      } else {
+        // A boss drops a relic-grade prize: an enchanted piece of equipment.
+        const goodies = ITEMS.filter((i) => isGear(i));
+        const prize = ROT.RNG.getItem(goodies)!;
+        const enchant = ROT.RNG.getUniformInt(1, 3);
+        if (!this.level.itemAt(m.x, m.y)) this.level.items.push({ x: m.x, y: m.y, type: prize, enchant, buc: "blessed", bucKnown: true });
+        this.log.add(`${cap(m.name)} falls! It leaves a prize — ${prize.name} +${enchant}. Forge it (F) into a tradeable NFT relic.`, "good");
+      }
     } else {
       this.log.add(`${cap(m.name)} is destroyed.`, "good");
     }
@@ -3797,6 +3827,7 @@ export class Game {
       case "m": { const b = branchById("mines"); if (b) this.enterBranch(b); break; }
       case "v": { const b = branchById("vault"); if (b) this.enterBranch(b); else this.log.add("[DEBUG] no Vault branch defined.", "dim"); break; }
       case "t": { const b = branchById("tower"); if (b) this.enterBranch(b); else this.log.add("[DEBUG] no Tower branch defined.", "dim"); break; }
+      case "w": { this.acting = p; this.giveItem(itemById("wand_wish")!, { buc: "blessed", bucKnown: true }); this.log.add("[DEBUG] a wand of wishing drops into your pack (z to wish).", "sys"); this.draw(); break; }
       case "x": { const c = ROT.RNG.getItem(CHAINS)!; if (!this.level.portalAt(p.x, p.y)) this.level.portals.push({ x: p.x, y: p.y, chain: c }); this.level.tiles[p.y][p.x] = "portal"; this.recomputeFOV(); this.draw(); this.log.add(`[DEBUG] XCM portal to ${c.name} under you — press > to enter.`, "sys"); break; }
       case "Q": { if (!this.level.portalAt(p.x, p.y)) this.level.portals.push({ x: p.x, y: p.y, chain: CHAINS[0], quest: true }); this.level.tiles[p.y][p.x] = "portal"; this.recomputeFOV(); this.draw(); this.log.add("[DEBUG] quest portal under you — press > to enter.", "sys"); break; }
       case "g": this.gehennomOpen = true; this.debugWarp(MAX_DEPTH + 1); this.log.add(`[DEBUG] Gehennom opened, warped to depth ${MAX_DEPTH + 1}.`, "sys"); break;

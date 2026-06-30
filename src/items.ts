@@ -121,6 +121,7 @@ export const ITEMS: ItemType[] = [
   { id: "wand_open",   kind: "wand", name: "a wand of unlock",       fname: "a wand of opening",        ch: "/", fg: "#b0a060", weight: 2 }, // unlocks a door/chest
   { id: "wand_light",  kind: "wand", name: "a wand of floodlight",   fname: "a wand of light",          ch: "/", fg: "#fff0a0", weight: 2 }, // floods the area with light
   { id: "wand_secret", kind: "wand", name: "a wand of deep scan",    fname: "a wand of secret door detection", ch: "/", fg: "#c0a0e0", weight: 1 }, // reveals hidden doors + traps
+  { id: "wand_wish",   kind: "wand", name: "a wand of minting",      fname: "a wand of wishing",       ch: "/", fg: "#ffd0ff", weight: 0 }, // the ultimate — wish an item into being; never random-spawns (a rare boss drop)
   // ── tools ── ( (applied with a)
   { id: "pickaxe", kind: "tool", name: "an excavator",        fname: "a pick-axe",          ch: "(", fg: "#c0a060", weight: 3 }, // reusable dig
   { id: "horn",    kind: "tool", name: "an auditor's horn",   fname: "a unicorn horn",      ch: "(", fg: "#e0e0c0", weight: 2 }, // cures afflictions
