@@ -6,9 +6,11 @@
 // back to the bare ambient bed; the groove snaps back when a threat returns.
 //
 // When fully settled (a long calm), a relaxed CHILL IDLE GROOVE takes over — a half-time
-// syncopated bass + light percussion with very sparse zone-keyed chimes (in the dread depths
-// — Foot of the Relay / Gehennom / Sanctum — it turns ominous instead: a lone deep thud, long
-// low bass tones on dissonant intervals, and rare dark chimes) — and the bed
+// syncopated bass + light percussion with very sparse zone-keyed chimes. The dread depths each get
+// their OWN ominous idle, escalating: the Foot of the Relay has a deep pulse; Gehennom is sparser and
+// grinding (irregular thuds, a sub-rumble, looming minor-2nd swells); Moloch's Sanctum is the most
+// oppressive — a slow distant doom-toll heartbeat, a constant dissonant tritone drone, and frequent
+// low looming swells (all hope is lost). And the bed
 // BREATHES: the drone AND the pad swells drop low and fully out for ~30s on a slow ~80s
 // cycle, swelling back — opening space for just the groove + chimes + reverb tails. Distortion (murk + a soured, detuned bed) tracks the VISIBLE
 // THREAT around you (count + proximity, peaking at bosses/swarms) — never depth. A
@@ -165,6 +167,8 @@ export class MusicEngine {
   private chillStepIdx = 0;
   private nextChillBass = 0;
   private chillBassIdx = 0;
+  private chillBar = 0;          // bar counter (for "every other bar" dread gating)
+  private nextChillSwell = 0;    // next ominous low swell (the dread depths)
   private nextChillChime = 0;
   private droneVoices: { gain: GainNode; base: number }[] = []; // the bed's drones — ducked/breathed during calm
   private padVoices: GainNode[] = [];                            // the bed's pad output gains — breathed alongside the drone
@@ -375,7 +379,7 @@ export class MusicEngine {
     this.nextTrill = this.nextTensionStep = this.nextTensionBass = now;
     this.trillIdx = 0; this.tensionStepIdx = this.tensionBassIdx = 0;
     this.nextJam = this.nextChime = this.nextDrip = now + 1;
-    this.nextChillStep = this.nextChillBass = this.nextChillChime = now + 2; this.chillStepIdx = this.chillBassIdx = 0;
+    this.nextChillStep = this.nextChillBass = this.nextChillChime = this.nextChillSwell = now + 2; this.chillStepIdx = this.chillBassIdx = this.chillBar = 0;
     this.dangerActive = false; this.dangerTheme = null;
   }
 
@@ -708,16 +712,28 @@ export class MusicEngine {
   private scheduleChillGroove(t: TrackDef, now: number, horizon: number): void {
     // The dread depths (Foot of the Relay / Gehennom / Sanctum) get an ominous idle: sparser, slower
     // percussion, long low bass tones, and rare dark dissonant chimes — reinforcing the impending dread.
-    const dread = t.area === "relay" || t.area === "gehennom" || t.area === "sanctum";
+    // Three escalating dread profiles for the deep zones, each unique:
+    //   relay    — ominous but with a pulse (a deep downbeat thud + an off-beat tom)
+    //   gehennom — sparser, grinding: irregular thuds, a far sub-rumble, looming minor-2nd swells
+    //   sanctum  — the most oppressive: a slow distant doom-toll heartbeat, a constant dissonant
+    //              tritone/minor-2nd drone, frequent low looming swells. All hope is lost.
+    const relay = t.area === "relay", gehennom = t.area === "gehennom", sanctum = t.area === "sanctum";
+    const dread = relay || gehennom || sanctum;
     const step = 60 / (t.bpm ?? 110) / 4; // the zone's 16th grid
     const bus = this.grooveBus;
     if (this.nextChillStep < now - 1) { this.nextChillStep = now; this.chillStepIdx = 0; }
     while (this.nextChillStep < horizon) {
       const s = this.chillStepIdx, when = this.nextChillStep;
-      if (dread) {
-        // very sparse, deep, slow — a lone heavy thud on the downbeat, an occasional low tom far off the beat
+      if (s === 0) this.chillBar++;
+      if (relay) {
         if (s === 0) this.kick(when, bus, 0.34, true);
-        if (s === 10 && this.chillBassIdx % 2 === 1) this.noiseHit(when, 0.2, bus, 0.1, "bandpass", 900, 0.7);
+        if (s === 10 && this.chillBar % 2 === 1) this.noiseHit(when, 0.2, bus, 0.1, "bandpass", 900, 0.7);
+      } else if (gehennom) {
+        if (s === 0 && this.chillBar % 2 === 0) this.kick(when, bus, 0.3, true);        // a thud only every other bar
+        if (s === 6 && this.chillBar % 4 === 1) this.noiseHit(when, 0.34, bus, 0.09, "lowpass", 190, 0.6); // a far sub-rumble
+      } else if (sanctum) {
+        // a slow, distant heartbeat of doom — a deep toll-and-echo every two bars, nothing else
+        if (s === 0 && this.chillBar % 2 === 0) { this.kick(when, bus, 0.3, true); this.kick(when + step * 1.5, bus, 0.15, true); }
       } else {
         // half-time, laid-back kit: kick on beat 1 + the syncopated "&-of-3"; soft rim on 3; swung shaker
         if (s === 0 || s === 11) this.kick(when, bus, 0.3);
@@ -727,29 +743,57 @@ export class MusicEngine {
       this.chillStepIdx = (s + 1) % 16;
       this.nextChillStep += step;
     }
-    // bass: dread = long sustained low tones on ominous intervals (root → minor 2nd → tritone); else a
-    // sparse syncopated figure. Both in the zone's key, summing to whole bars.
-    const fig: Note[] = dread
-      ? [[0, 16], [1, 8], [0, 16], [6, 8]]
+    // bass: each dread zone its own grind — relay (root → m2 → tritone), gehennom (very long root drone
+    // → m2 → long tritone), sanctum (an unbroken dissonant cluster cycle: root/tritone/m2/tritone). Else
+    // a sparse syncopated figure. All in the zone's key, summing to whole bars.
+    const fig: Note[] = relay ? [[0, 16], [1, 8], [0, 16], [6, 8]]
+      : gehennom ? [[0, 24], [1, 8], [6, 16], [1, 8]]
+      : sanctum ? [[0, 16], [6, 16], [1, 16], [6, 16]]
       : [[0, 3], [REST, 1], [7, 2], [REST, 2], [5, 2], [REST, 1], [0, 3], [REST, 2]];
+    const bassPeak = sanctum ? 0.22 : dread ? 0.2 : 0.18;
     if (this.nextChillBass < now - 1) { this.nextChillBass = now; this.chillBassIdx = 0; }
     while (this.nextChillBass < horizon) {
       const [deg, steps] = fig[this.chillBassIdx % fig.length];
       const dur = steps * step;
-      if (deg !== REST) { let bf = semi(t.root, deg); while (bf < 41) bf *= 2; this.bassNote(bf, this.nextChillBass, dur * (dread ? 0.98 : 0.85), bus, dread ? 0.2 : 0.18); }
+      if (deg !== REST) { let bf = semi(t.root, deg); while (bf < 41) bf *= 2; this.bassNote(bf, this.nextChillBass, dur * (dread ? 0.98 : 0.85), bus, bassPeak); }
       this.nextChillBass += dur;
       this.chillBassIdx = (this.chillBassIdx + 1) % fig.length;
     }
-    // chimes: dread = rare, low + dissonant (a tritone/minor-2nd, an octave down) to unsettle; else bright
-    // zone-keyed bells. Both very sparse, through the area reverb.
+    // ominous low looming swells (gehennom + sanctum) — a dissonant interval that rises and recedes;
+    // sanctum's are more frequent, lower, louder — a constant sense of something vast closing in.
+    if (gehennom || sanctum) {
+      const every = sanctum ? 6 : 11;
+      while (this.nextChillSwell < horizon) {
+        let sf = semi(t.root, sanctum ? 6 : 1); while (sf < 30) sf *= 2; // tritone (sanctum) / minor-2nd (gehennom)
+        this.dreadSwell(sf, this.nextChillSwell, sanctum ? 7 : 5, bus, sanctum ? 0.13 : 0.08);
+        this.nextChillSwell += every + Math.random() * every;
+      }
+    } else this.nextChillSwell = now;
+    // chimes: bright zone-keyed bells normally; in the dread zones, rare low dissonant tolls that grow
+    // rarer and lower with the dread — relay (m2/tritone), gehennom (sparser), sanctum (a lone deep knell).
     const sc = this.tensionScale(t);
+    const chimeProb = sanctum ? 0.22 : gehennom ? 0.25 : relay ? 0.3 : 0.4;
     while (this.nextChillChime < horizon) {
-      if (this.active && Math.random() < (dread ? 0.3 : 0.4)) {
-        if (dread) this.bellNote(semi(t.root, [1, 6, 6, 11][Math.floor(Math.random() * 4)]), this.nextChillChime, 3.6, this.active.bus, 0.035); // low, dissonant
+      if (this.active && Math.random() < chimeProb) {
+        if (sanctum) this.bellNote(semi(t.root, 6), this.nextChillChime, 5.2, this.active.bus, 0.04); // a long, low tritone knell
+        else if (gehennom) this.bellNote(semi(t.root, [1, 6][Math.floor(Math.random() * 2)]), this.nextChillChime, 4.0, this.active.bus, 0.03);
+        else if (relay) this.bellNote(semi(t.root, [1, 6, 6, 11][Math.floor(Math.random() * 4)]), this.nextChillChime, 3.6, this.active.bus, 0.035);
         else this.bellNote(semi(t.root, sc[Math.floor(Math.random() * sc.length)]) * 2, this.nextChillChime, 3.2, this.active.bus, 0.045);
       }
-      this.nextChillChime += (dread ? 7 : 4) + Math.random() * (dread ? 7 : 5); // dread: every 7–14s, rarer
+      this.nextChillChime += (sanctum ? 12 : gehennom ? 9 : relay ? 7 : 4) + Math.random() * (sanctum ? 12 : gehennom ? 9 : relay ? 7 : 5);
     }
+  }
+
+  /** A low, looming swell — a sawtooth through a low filter that rises and recedes; the dread depths' dread. */
+  private dreadSwell(freq: number, when: number, dur: number, bus: GainNode, peak: number): void {
+    const ctx = this.ctx!;
+    const osc = ctx.createOscillator(); osc.type = "sawtooth"; osc.frequency.value = freq;
+    const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 240; f.Q.value = 2;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(peak, when + dur * 0.55); // swell in slowly
+    g.gain.linearRampToValueAtTime(0, when + dur);           // and recede
+    osc.connect(f).connect(g).connect(bus);
+    osc.start(when); osc.stop(when + dur + 0.05);
   }
 
   /** Kick drum — a sine with a fast pitch drop and a punchy decay. `deep` = a lower, longer, heavier
