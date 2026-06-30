@@ -7,8 +7,8 @@
 //
 // When fully settled (a long calm), a relaxed CHILL IDLE GROOVE takes over — a half-time
 // syncopated bass + light percussion with very sparse zone-keyed chimes — and the bed
-// BREATHES: the drone drops low and fully out for ~30s on a slow ~80s cycle (pads keep
-// floating), opening space. Distortion (murk + a soured, detuned bed) tracks the VISIBLE
+// BREATHES: the drone AND the pad swells drop low and fully out for ~30s on a slow ~80s
+// cycle, swelling back — opening space for just the groove + chimes + reverb tails. Distortion (murk + a soured, detuned bed) tracks the VISIBLE
 // THREAT around you (count + proximity, peaking at bosses/swarms) — never depth. A
 // danger-driven TENSION layer picks one of several DANGER THEMES on the rising edge of
 // danger (a boss/swarm forces a heavy theme; the hells may too), then escalates it by
@@ -164,6 +164,7 @@ export class MusicEngine {
   private chillBassIdx = 0;
   private nextChillChime = 0;
   private droneVoices: { gain: GainNode; base: number }[] = []; // the bed's drones — ducked/breathed during calm
+  private padVoices: GainNode[] = [];                            // the bed's pad output gains — breathed alongside the drone
   // ── danger theme (picked on the rising edge of danger, escalated by threat) ──
   private dangerActive = false;
   private dangerTheme: DangerTheme | null = null;
@@ -358,7 +359,8 @@ export class MusicEngine {
     this.droneVoices = [];
     const d1 = this.makeDrone(def, def.root, 0.10, bus); voices.push(d1); this.droneVoices.push({ gain: d1.gain, base: 0.10 });
     const d2 = this.makeDrone(def, semi(def.root, 7), 0.05, bus); voices.push(d2); this.droneVoices.push({ gain: d2.gain, base: 0.05 });
-    // pad chord with slow swells
+    // pad chord with slow swells — each routed through an output gain so the pad can breathe too
+    this.padVoices = [];
     for (const c of def.chord) voices.push(this.makePad(def, semi(def.root, c) * 2, bus));
     this.active = { def, bus, voices };
     this.nextPulse = now + 0.5;
@@ -394,7 +396,9 @@ export class MusicEngine {
     const base = ctx.createConstantSource(); base.offset.value = 0.04;
     lfo.connect(lfoGain).connect(gain.gain);
     base.connect(gain.gain);
-    osc.connect(filt).connect(gain).connect(bus);
+    const out = ctx.createGain(); out.gain.value = 1; // a breath gain, ducked during calm (the swell stays on `gain`)
+    osc.connect(filt).connect(gain).connect(out).connect(bus);
+    this.padVoices.push(out);
     osc.start(); lfo.start(); base.start();
     return { osc, gain, lfo };
   }
@@ -455,11 +459,12 @@ export class MusicEngine {
     if (t && this.active) {
       for (const v of this.active.voices) v.osc.detune.setTargetAtTime(t.detune + warp * 30, now, 1.2); // beating sours the bed near foes
 
-      // ── the bed breathes: in calm the drone drops to a low level, then fully out for ~30s on a slow
-      //    ~80s cycle, swelling back — opening space (the pads keep floating, so it never goes silent). ──
+      // ── the bed breathes: in calm the whole bed (drone + pad swells) drops to a low level, then fully
+      //    out for ~30s on a slow ~80s cycle, swelling back — opening space for the chill groove + chimes. ──
       const calmish = this.danger < 0.2 && !c.bossNear && !c.jamNear;
-      const droneMul = calmish ? ((now / 80) % 1 > 0.62 ? 0 : 0.5) : 1; // ~30s "breath" (drone out) per cycle
-      for (const d of this.droneVoices) d.gain.gain.setTargetAtTime(d.base * droneMul, now, 6);
+      const bedMul = calmish ? ((now / 80) % 1 > 0.62 ? 0 : 0.5) : 1; // ~30s "breath" (bed out) per cycle
+      for (const d of this.droneVoices) d.gain.gain.setTargetAtTime(d.base * bedMul, now, 6);
+      for (const pg of this.padVoices) pg.gain.setTargetAtTime(bedMul, now, 6);
 
       // ── calm → ambience: after ~25s with nothing threatening, the groove ebbs out to the chill idle groove ──
       const calm = this.danger < 0.06 && c.crowd < 0.05 && !c.bossNear && !c.jamNear && warp < 0.06;
