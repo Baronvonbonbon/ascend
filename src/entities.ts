@@ -61,6 +61,7 @@ export class Player extends Entity {
   weapon: Item | null = null;
   wornArmor: Item[] = []; // up to one piece per slot
   ring: Item | null = null;
+  amulet: Item | null = null; // worn around the neck (life-saving / reflection)
   stealth = false;     // ring of privacy — monsters can't track you
   regenFast = false;   // ring of regeneration
   poison = 0;          // turns of damage-over-time remaining
@@ -643,6 +644,18 @@ export class Player extends Entity {
           if (item.buc === "cursed") { item.bucKnown = true; this.game.log.add(`The ${t.name} tightens around your finger. It's cursed!`, "bad"); }
           return this.endTurn();
         }
+        if (t.kind === "amulet" && t.id !== "jam") {
+          if (item === this.amulet) { this.game.log.add("That amulet is already around your neck.", "dim"); return false; }
+          if (this.amulet && this.amulet.buc === "cursed") {
+            this.amulet.bucKnown = true;
+            this.game.log.add(`You can't remove ${ident.name(this.amulet.type)} — it's cursed, clasped to your neck!`, "bad");
+            return this.endTurn();
+          }
+          this.amulet = item;
+          this.game.log.add(`You hang ${ident.name(t)} around your neck.`, "good");
+          if (item.buc === "cursed") { item.bucKnown = true; this.game.log.add(`The ${t.name} clasps shut around your neck. It's cursed!`, "bad"); }
+          return this.endTurn();
+        }
         this.game.log.add("You can't wear that.", "dim"); return false;
       case "eat":
         if (t.kind !== "food") { this.game.log.add("That isn't food.", "dim"); return false; }
@@ -667,9 +680,9 @@ export class Player extends Entity {
         this.inventory.remove(item); this.unequip(item);
         this.game.dropItem(item); this.game.log.add(`You drop ${ident.name(t)}.`); return this.endTurn();
       case "takeoff":
-        if (t.kind !== "armor" || !this.wornArmor.includes(item)) { this.game.log.add("You aren't wearing that.", "dim"); return false; }
+        if (!this.wornArmor.includes(item) && item !== this.ring && item !== this.amulet) { this.game.log.add("You aren't wearing that.", "dim"); return false; }
         if (item.buc === "cursed") { item.bucKnown = true; this.game.log.add(`Your ${ident.name(t)} is welded on — it's cursed. Uncurse it first.`, "bad"); return this.endTurn(); }
-        this.wornArmor = this.wornArmor.filter((a) => a !== item); this.recomputeAC();
+        this.unequip(item);
         this.game.log.add(`You take off ${ident.name(t)}.`); return this.endTurn();
       case "forge":
         void this.game.forge(item); return false; // a direct wallet tx — no game turn
@@ -683,11 +696,12 @@ export class Player extends Entity {
     if (this.quiver === item) this.quiver = null;
     if (this.wornArmor.includes(item)) { this.wornArmor = this.wornArmor.filter((a) => a !== item); this.recomputeAC(); }
     if (this.ring === item) { this.applyRing(item, false); this.ring = null; }
+    if (this.amulet === item) this.amulet = null;
   }
 
   /** A cursed item that's currently equipped is welded — it can't be removed or dropped. */
   isWelded(item: Item): boolean {
-    return item.buc === "cursed" && (item === this.weapon || this.wornArmor.includes(item) || item === this.ring);
+    return item.buc === "cursed" && (item === this.weapon || this.wornArmor.includes(item) || item === this.ring || item === this.amulet);
   }
 
   private tryMove(dx: number, dy: number): boolean {

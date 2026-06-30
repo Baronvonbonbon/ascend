@@ -85,6 +85,9 @@ export const ITEMS: ItemType[] = [
   { id: "cure",   kind: "scroll", name: "a scroll of cleansing",    fname: "a scroll of cleansing",     ch: "?", fg: "#c0e0e0", effect: "cure",     weight: 3 },
   { id: "uncurse",kind: "scroll", name: "a scroll of formal verification", fname: "a scroll of remove curse", ch: "?", fg: "#d0f0c0", effect: "uncurse", weight: 3 },
   { id: "fork",   kind: "scroll", name: "a scroll of hard fork",      fname: "a scroll of polymorph",   ch: "?", fg: "#e090e0", effect: "polyself", weight: 2 },
+  // ── amulets ── " (passive while worn; put on with W, take off with T)
+  { id: "amulet_life",    kind: "amulet", name: "a recovery seed",   fname: "an amulet of life saving", ch: "\"", fg: "#f0d060", weight: 1 }, // crumbles to save you from one lethal blow
+  { id: "amulet_reflect", kind: "amulet", name: "a consensus mirror", fname: "an amulet of reflection",  ch: "\"", fg: "#b0e0e0", weight: 1 }, // rebounds rays/breath back at the source
   // ── rings ── = (passive while worn; put on with W)
   { id: "ring_res",   kind: "ring", name: "a ring of resilience",    fname: "a ring of protection",   ch: "=", fg: "#c0a0e0", weight: 2 },
   { id: "ring_regen", kind: "ring", name: "a ring of regeneration",  fname: "a ring of regeneration", ch: "=", fg: "#a0e0a0", weight: 2 },

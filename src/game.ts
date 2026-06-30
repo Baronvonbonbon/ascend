@@ -1693,7 +1693,8 @@ export class Game {
       "0": "a boulder — walk into it to shove it", "§": "a warding engraving",
       ")": "a weapon", "[": "a piece of armor", "(": "a tool, or a chest",
       "!": "a potion", "?": "a scroll", "=": "a ring", "/": "a wand",
-      "%": "food — or a corpse you can eat (e)", "*": "an amulet or gem",
+      "\"": "an amulet — W to wear it, T to take it off",
+      "%": "food — or a corpse you can eat (e)", "*": "the JAM, a luckstone, or a gem",
       "$": "a pile of gold — step on it to scoop it up",
     };
     const mons = [...MONSTERS, SHOPKEEPER, PRIEST, HONEYPOT, CENSOR, MOLOCH, ...Object.values(MINIBOSSES)].find((m) => m.ch === key);
@@ -2194,11 +2195,21 @@ export class Game {
     else { target.confused = Math.max(target.confused, 5); this.log.add(`${target.name === "you" ? "Your head spins" : target.name + "'s head spins"} — confused!`, "bad", target); }
   }
 
+  /** A worn amulet of reflection rebounds rays/breath back at the source (works even cursed). */
+  private reflects(p: Player): boolean { return p.amulet?.type.id === "amulet_reflect"; }
+
   /** A ranged foe zaps the nearest party member (armor half-soaks; can still inflict status). */
   rangedAttack(a: Monster): void {
     const p = this.nearestPlayer(a.x, a.y);
     const [lo, hi] = a.attackDmg;
     let dmg = ROT.RNG.getUniformInt(lo, hi);
+    if (this.reflects(p)) { // the bolt caroms off the mirror, straight back at the caster
+      p.amulet!.bucKnown = true;
+      a.hp -= dmg;
+      this.log.add(`${cap(a.name)}'s bolt rebounds off ${p.name === "you" ? "your" : p.name + "'s"} mirror — ${dmg} back at it!`, "good", p);
+      if (a.hp <= 0) this.kill(a);
+      return;
+    }
     if (p.ac > 0) dmg = Math.max(1, dmg - Math.floor(p.ac / 2));
     p.hp -= dmg;
     this.log.add(`${cap(a.name)} zaps ${p.name} from afar for ${dmg}!`, "bad", p);
@@ -2216,6 +2227,13 @@ export class Game {
     this.castRay(m.x, m.y, dx, dy, 6, (e) => {
       if (e === m) return;
       const d = ROT.RNG.getUniformInt(Math.floor(max / 2), max);
+      if (e instanceof Player && this.reflects(e)) { // the breath rebounds off the mirror onto the dragon
+        e.amulet!.bucKnown = true;
+        m.hp -= d;
+        this.log.add(`The breath rebounds off ${e.name === "you" ? "your" : e.name + "'s"} mirror, searing ${m.name} for ${d}!`, "good", e);
+        if (m.hp <= 0) this.kill(m);
+        return;
+      }
       e.hp -= d;
       if (e instanceof Player) { this.log.add(`The breath sears ${e.name} for ${d}!`, "bad", e); if (e.hp <= 0) this.killPlayer(e); }
       else if (e instanceof Monster && e.hp <= 0) this.kill(e);
@@ -2278,6 +2296,15 @@ export class Game {
       this.revertPoly(p);
       this.log.add(`${this.sub(p)} ${this.verbS(p, "collapse")} out of the fork.`, "bad", p);
       if (p.hp > 0) return;
+    }
+    // An amulet of life saving spends itself to pull you back from a lethal blow (crumbles, even if cursed).
+    if (p.amulet?.type.id === "amulet_life") {
+      const am = p.amulet;
+      am.bucKnown = true; p.amulet = null; p.inventory.remove(am);
+      p.hp = p.maxHp; p.poison = 0; p.stoning = 0; p.illness = 0; // and the worst afflictions are purged
+      this.log.add(`As you fall, ${this.ident.name(am.type)} flares white-hot and crumbles to dust — your life is wrenched back!`, "good", p);
+      this.draw();
+      return;
     }
     this.downPlayer(p);
   }
@@ -2360,6 +2387,7 @@ export class Game {
     if (p.quiver === it) p.quiver = null;
     if (p.wornArmor.includes(it)) { p.wornArmor = p.wornArmor.filter((a) => a !== it); p.recomputeAC(); }
     if (p.ring === it) { p.applyRing(it, false); p.ring = null; }
+    if (p.amulet === it) p.amulet = null;
     p.inventory.remove(it);
     return it;
   }
@@ -2669,7 +2697,7 @@ export class Game {
   // ── #loot: the multisig vault (bag of holding) ──
   /** An item can't be stashed while it's equipped (worn/wielded/on-hand/welded). */
   private lootLocked(p: Player, it: Item): boolean {
-    return p.isWelded(it) || it === p.weapon || it === p.ring || p.wornArmor.includes(it);
+    return p.isWelded(it) || it === p.weapon || it === p.ring || it === p.amulet || p.wornArmor.includes(it);
   }
 
   lootMenu(vault: Item): void {
@@ -2855,7 +2883,7 @@ export class Game {
     this.log.add(`— ${who.name === "you" ? "Inventory" : who.name + "'s pack"} —`, "sys");
     inv.items.forEach((it, i) => {
       const welded = who.isWelded(it);
-      const eq = welded ? " (welded)" : it === who.weapon ? " (wielded)" : it === who.offhand ? " (off-hand)" : who.wornArmor.includes(it) ? " (worn)" : it === who.ring ? " (on hand)" : it === who.quiver ? " (at the ready)" : "";
+      const eq = welded ? " (welded)" : it === who.weapon ? " (wielded)" : it === who.offhand ? " (off-hand)" : who.wornArmor.includes(it) ? " (worn)" : it === who.ring ? " (on hand)" : it === who.amulet ? " (around your neck)" : it === who.quiver ? " (at the ready)" : "";
       const lbl = it.label ? ` named "${it.label}"` : "";
       const ch = it.charges != null ? ` [${it.charges}]` : it.type.id === "vault" ? ` {${it.contents?.length ?? 0} held}` : "";
       const relic = it.relic ? ` +${it.enchant ?? 0} ✦` : "";
