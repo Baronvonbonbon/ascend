@@ -229,6 +229,7 @@ export interface MonsterDef {
   silences?: boolean;    // a gag wraith — a hit smothers you in silence (no casting; in co-op, no chat)
   drainsStat?: boolean;  // a mind flayer — a hit drains a random attribute (restored by prayer)
   infects?: boolean;     // a werewolf — a hit may infect you with lycanthropy (uncontrolled were-forms)
+  diseases?: boolean;    // a plague fly — a hit may make you sick (a deadly illness countdown; cure fast)
   mimic?: boolean;       // a honeypot — sits disguised as loot, strikes when touched
   fearless?: boolean;    // ignores warding engravings (bosses fear no Gray Paper)
   keeper?: boolean;      // a shopkeeper — peaceful until you shoplift, then merciless
@@ -262,6 +263,7 @@ export const MONSTERS: MonsterDef[] = [
   { name: "a thought leech",   fname: "a mind flayer",   ch: "u", fg: "#b060c0", hp: 20, dmg: [2, 5], ai: "chase",  minDepth: 8, weight: 2, speed: 95, drainsStat: true },
   { name: "a finality dragon", fname: "an ancient dragon", ch: "D", fg: "#ff5040", hp: 34, dmg: [5, 9], ai: "chase",  minDepth: 6, weight: 1, breath: 16, fearless: true },
   { name: "a panic seller",    fname: "a craven goblin", ch: "p", fg: "#d0d060", hp: 5,  dmg: [1, 3], ai: "chase",  minDepth: 2, weight: 3, cowardly: true },
+  { name: "a malware fly",     fname: "a plague fly",    ch: "a", fg: "#9ac070", hp: 5,  dmg: [1, 3], ai: "chase",  minDepth: 4, weight: 2, speed: 120, diseases: true },
   { name: "a relay medic",     fname: "a healer acolyte", ch: "h", fg: "#80e0c0", hp: 10, dmg: [1, 2], ai: "chase",  minDepth: 5, weight: 2, heals: true },
   { name: "a dust gremlin",    fname: "a gremlin",       ch: "g", fg: "#90a070", hp: 4,  dmg: [1, 2], ai: "chase",  minDepth: 2, weight: 3, breeds: true },
   // ── Gehennom demons (Phase 12c) — the Dark Forest's servants of centralization ──
