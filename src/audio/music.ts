@@ -10,7 +10,10 @@
 // their OWN ominous idle, escalating: the Foot of the Relay has a deep pulse; Gehennom is sparser and
 // grinding (irregular thuds, a sub-rumble, looming minor-2nd swells); Moloch's Sanctum is the most
 // oppressive — a slow distant doom-toll heartbeat, a constant dissonant tritone drone, and frequent
-// low looming swells (all hope is lost). And the bed
+// low looming swells (all hope is lost). The Planes float free instead — no drums, no low end, just
+// sparse ascending harp arpeggios + bright high chimes in vast reverb. All state changes (combat ↔
+// idle ↔ explore) crossfade smoothly — the tension layer recedes over ~2s so nothing is ever abrupt.
+// And the bed
 // BREATHES: the drone AND the pad swells drop low and fully out for ~30s on a slow ~80s
 // cycle, swelling back — opening space for just the groove + chimes + reverb tails. Distortion (murk + a soured, detuned bed) tracks the VISIBLE
 // THREAT around you (count + proximity, peaking at bosses/swarms) — never depth. A
@@ -467,15 +470,19 @@ export class MusicEngine {
     if (t && this.active) {
       for (const v of this.active.voices) v.osc.detune.setTargetAtTime(t.detune + warp * 30, now, 1.2); // beating sours the bed near foes
 
+      // On the Planes you always carry the JAM, so jamNear must not block the ethereal idle there.
+      const planesArea = t.area === "planes" || t.area === "genesis";
+      const jamBlocks = c.jamNear && !planesArea;
+
       // ── the bed breathes: in calm the whole bed (drone + pad swells) drops to a low level, then fully
       //    out for ~30s on a slow ~80s cycle, swelling back — opening space for the chill groove + chimes. ──
-      const calmish = this.danger < 0.2 && !c.bossNear && !c.jamNear;
+      const calmish = this.danger < 0.2 && !c.bossNear && !jamBlocks;
       const bedMul = calmish ? ((now / 80) % 1 > 0.62 ? 0 : 0.5) : 1; // ~30s "breath" (bed out) per cycle
       for (const d of this.droneVoices) d.gain.gain.setTargetAtTime(d.base * bedMul, now, 6);
       for (const pg of this.padVoices) pg.gain.setTargetAtTime(bedMul, now, 6);
 
       // ── calm → ambience: after ~25s with nothing threatening, the groove ebbs out to the chill idle groove ──
-      const calm = this.danger < 0.06 && c.crowd < 0.05 && !c.bossNear && !c.jamNear && warp < 0.06;
+      const calm = this.danger < 0.06 && c.crowd < 0.05 && !c.bossNear && !jamBlocks && warp < 0.06;
       if (!calm) this.calmSince = now;
       const settled = now - this.calmSince > 25; // long calm → settle into the idle groove
 
@@ -495,7 +502,7 @@ export class MusicEngine {
         this.scheduleChillGroove(t, now, horizon);
         this.nextStep = this.nextBass = now; this.stepIdx = this.bassIdx = 0; // keep the combat groove re-synced for when threat returns
       } else {
-        this.grooveBus.gain.setTargetAtTime(grooveOn && !stinging ? intensity * 0.5 : 0, now, 1.0);
+        this.grooveBus.gain.setTargetAtTime(grooveOn && !stinging ? intensity * 0.5 : 0, now, 1.4); // ease, never snap
         if (grooveOn && !stinging) this.scheduleGroove(t, now, horizon, intensity);
         else { this.nextStep = this.nextBass = now; this.stepIdx = this.bassIdx = 0; }
         this.nextChillStep = this.nextChillBass = this.nextChillChime = now; this.chillStepIdx = this.chillBassIdx = 0;
@@ -508,7 +515,7 @@ export class MusicEngine {
       } else this.nextPulse = now;
 
       // ── context reactions ──
-      if (c.jamNear) { while (this.nextJam < horizon) { this.pulse(t.root * 0.5, this.nextJam, this.active.bus, 0.16); this.nextJam += 2.4; } } else this.nextJam = now;
+      if (c.jamNear && !planesArea) { while (this.nextJam < horizon) { this.pulse(t.root * 0.5, this.nextJam, this.active.bus, 0.16); this.nextJam += 2.4; } } else this.nextJam = now; // no ominous JAM pulse in the weightless Planes
       if (c.altar) { while (this.nextChime < horizon) { this.note(semi(t.root, 12) * 4, this.nextChime, 2.6, this.active.bus, "sine", 0.05, 4000); this.nextChime += 3.5 + Math.random() * 2.5; } } else this.nextChime = now;
       if (c.faucet) { while (this.nextDrip < horizon) { this.drip(this.nextDrip); this.nextDrip += 0.7 + Math.random() * 1.8; } } else this.nextDrip = now;
     }
@@ -525,12 +532,15 @@ export class MusicEngine {
     const stinging = now < this.stingerUntil;
     // Danger triggers the layer; visible threat (count + proximity), bosses, and crowds ESCALATE it.
     const sev = Math.min(1, Math.max(d, this.c.threat) + (this.c.bossNear ? 0.15 : 0) + this.c.crowd * 0.2);
-    this.tensionBus.gain.setTargetAtTime(stinging ? 0 : Math.min(0.6, sev * 0.5), now, 0.6);
     if (stinging || !t || d <= 0.05) {
+      // combat ebbs — recede the tension layer GENTLY (a slow ~2s fade, quick only for a stinger duck)
+      // so the hand-off back to the idle/explore music is never abrupt.
+      this.tensionBus.gain.setTargetAtTime(0, now, stinging ? 0.15 : 2.0);
       this.nextTrill = this.nextTensionStep = this.nextTensionBass = now;
       this.dangerActive = false; this.dangerTheme = null; // reset so the next fight re-rolls a theme
       return;
     }
+    this.tensionBus.gain.setTargetAtTime(Math.min(0.6, sev * 0.5), now, 0.5); // responsive rise into combat
     // Rising edge → pick a theme. A boss/swarm arriving mid-fight upgrades a light theme to a heavy one.
     if (!this.dangerActive || !this.dangerTheme) { this.dangerActive = true; this.pickDangerTheme(); }
     else if (!this.dangerTheme.heavy && (this.c.bossNear || this.c.crowd > 0.55)) this.pickDangerTheme();
@@ -719,10 +729,12 @@ export class MusicEngine {
     //              tritone/minor-2nd drone, frequent low looming swells. All hope is lost.
     const relay = t.area === "relay", gehennom = t.area === "gehennom", sanctum = t.area === "sanctum";
     const dread = relay || gehennom || sanctum;
+    // The Planes float free of the dungeon: no drums, no low end — pure weightless space (handled below).
+    const planes = t.area === "planes" || t.area === "genesis";
     const step = 60 / (t.bpm ?? 110) / 4; // the zone's 16th grid
     const bus = this.grooveBus;
     if (this.nextChillStep < now - 1) { this.nextChillStep = now; this.chillStepIdx = 0; }
-    while (this.nextChillStep < horizon) {
+    while (!planes && this.nextChillStep < horizon) {
       const s = this.chillStepIdx, when = this.nextChillStep;
       if (s === 0) this.chillBar++;
       if (relay) {
@@ -743,21 +755,39 @@ export class MusicEngine {
       this.chillStepIdx = (s + 1) % 16;
       this.nextChillStep += step;
     }
-    // bass: each dread zone its own grind — relay (root → m2 → tritone), gehennom (very long root drone
-    // → m2 → long tritone), sanctum (an unbroken dissonant cluster cycle: root/tritone/m2/tritone). Else
-    // a sparse syncopated figure. All in the zone's key, summing to whole bars.
-    const fig: Note[] = relay ? [[0, 16], [1, 8], [0, 16], [6, 8]]
-      : gehennom ? [[0, 24], [1, 8], [6, 16], [1, 8]]
-      : sanctum ? [[0, 16], [6, 16], [1, 16], [6, 16]]
-      : [[0, 3], [REST, 1], [7, 2], [REST, 2], [5, 2], [REST, 1], [0, 3], [REST, 2]];
-    const bassPeak = sanctum ? 0.22 : dread ? 0.2 : 0.18;
-    if (this.nextChillBass < now - 1) { this.nextChillBass = now; this.chillBassIdx = 0; }
-    while (this.nextChillBass < horizon) {
-      const [deg, steps] = fig[this.chillBassIdx % fig.length];
-      const dur = steps * step;
-      if (deg !== REST) { let bf = semi(t.root, deg); while (bf < 41) bf *= 2; this.bassNote(bf, this.nextChillBass, dur * (dread ? 0.98 : 0.85), bus, bassPeak); }
-      this.nextChillBass += dur;
-      this.chillBassIdx = (this.chillBassIdx + 1) % fig.length;
+    if (planes) {
+      // no bass — instead, sparse but always-ascending syncopated harp arpeggios (a sense of rising),
+      // drenched in the Planes' big reverb. Lots of empty space between them.
+      if (this.nextChillBass < now - 1) this.nextChillBass = now;
+      while (this.nextChillBass < horizon) {
+        if (this.active && Math.random() < 0.7) {
+          const ch = t.chord.length ? t.chord : [0, 7, 12];
+          const notes = [...ch, ch[ch.length - 1] + 12]; // climb into the octave above
+          let when = this.nextChillBass;
+          for (let i = 0; i < notes.length; i++) {
+            this.harpNote(semi(t.root, notes[i]) * 2, when, 2.6, this.active.bus, 0.038);
+            when += step * (i % 2 === 0 ? 1 : 2); // syncopated spacing — a lilt as it ascends
+          }
+        }
+        this.nextChillBass += 4 + Math.random() * 4; // a fresh arpeggio every ~4–8s, sparse
+      }
+    } else {
+      // bass: each dread zone its own grind — relay (root → m2 → tritone), gehennom (very long root drone
+      // → m2 → long tritone), sanctum (an unbroken dissonant cluster cycle: root/tritone/m2/tritone). Else
+      // a sparse syncopated figure. All in the zone's key, summing to whole bars.
+      const fig: Note[] = relay ? [[0, 16], [1, 8], [0, 16], [6, 8]]
+        : gehennom ? [[0, 24], [1, 8], [6, 16], [1, 8]]
+        : sanctum ? [[0, 16], [6, 16], [1, 16], [6, 16]]
+        : [[0, 3], [REST, 1], [7, 2], [REST, 2], [5, 2], [REST, 1], [0, 3], [REST, 2]];
+      const bassPeak = sanctum ? 0.22 : dread ? 0.2 : 0.18;
+      if (this.nextChillBass < now - 1) { this.nextChillBass = now; this.chillBassIdx = 0; }
+      while (this.nextChillBass < horizon) {
+        const [deg, steps] = fig[this.chillBassIdx % fig.length];
+        const dur = steps * step;
+        if (deg !== REST) { let bf = semi(t.root, deg); while (bf < 41) bf *= 2; this.bassNote(bf, this.nextChillBass, dur * (dread ? 0.98 : 0.85), bus, bassPeak); }
+        this.nextChillBass += dur;
+        this.chillBassIdx = (this.chillBassIdx + 1) % fig.length;
+      }
     }
     // ominous low looming swells (gehennom + sanctum) — a dissonant interval that rises and recedes;
     // sanctum's are more frequent, lower, louder — a constant sense of something vast closing in.
@@ -772,16 +802,33 @@ export class MusicEngine {
     // chimes: bright zone-keyed bells normally; in the dread zones, rare low dissonant tolls that grow
     // rarer and lower with the dread — relay (m2/tritone), gehennom (sparser), sanctum (a lone deep knell).
     const sc = this.tensionScale(t);
-    const chimeProb = sanctum ? 0.22 : gehennom ? 0.25 : relay ? 0.3 : 0.4;
+    const chimeProb = planes ? 0.35 : sanctum ? 0.22 : gehennom ? 0.25 : relay ? 0.3 : 0.4;
     while (this.nextChillChime < horizon) {
       if (this.active && Math.random() < chimeProb) {
-        if (sanctum) this.bellNote(semi(t.root, 6), this.nextChillChime, 5.2, this.active.bus, 0.04); // a long, low tritone knell
+        if (planes) this.bellNote(semi(t.root, [0, 7, 12, 16][Math.floor(Math.random() * 4)]) * 2, this.nextChillChime, 5.5, this.active.bus, 0.04); // bright, high, long — empty space
+        else if (sanctum) this.bellNote(semi(t.root, 6), this.nextChillChime, 5.2, this.active.bus, 0.04); // a long, low tritone knell
         else if (gehennom) this.bellNote(semi(t.root, [1, 6][Math.floor(Math.random() * 2)]), this.nextChillChime, 4.0, this.active.bus, 0.03);
         else if (relay) this.bellNote(semi(t.root, [1, 6, 6, 11][Math.floor(Math.random() * 4)]), this.nextChillChime, 3.6, this.active.bus, 0.035);
         else this.bellNote(semi(t.root, sc[Math.floor(Math.random() * sc.length)]) * 2, this.nextChillChime, 3.2, this.active.bus, 0.045);
       }
-      this.nextChillChime += (sanctum ? 12 : gehennom ? 9 : relay ? 7 : 4) + Math.random() * (sanctum ? 12 : gehennom ? 9 : relay ? 7 : 5);
+      this.nextChillChime += (planes ? 5 : sanctum ? 12 : gehennom ? 9 : relay ? 7 : 4) + Math.random() * (planes ? 6 : sanctum ? 12 : gehennom ? 9 : relay ? 7 : 5);
     }
+  }
+
+  /** A harp pluck — a bright triangle with a quick attack + a long shimmering ring (a glassy upper
+   *  partial), through the area reverb. The Planes' ascending arpeggios. */
+  private harpNote(freq: number, when: number, dur: number, bus: GainNode, peak: number): void {
+    const ctx = this.ctx!;
+    const osc = ctx.createOscillator(); osc.type = "triangle"; osc.frequency.value = freq;
+    const o2 = ctx.createOscillator(); o2.type = "sine"; o2.frequency.value = freq * 3.01; // a glassy partial
+    const o2g = ctx.createGain(); o2g.gain.value = 0.12;
+    const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 3800;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(peak, when + 0.008);            // a quick pluck
+    g.gain.exponentialRampToValueAtTime(0.0006, when + dur);       // a long ring
+    g.gain.linearRampToValueAtTime(0, when + dur + 0.06);
+    osc.connect(f); o2.connect(o2g).connect(f); f.connect(g).connect(bus);
+    osc.start(when); o2.start(when); osc.stop(when + dur + 0.07); o2.stop(when + dur + 0.07);
   }
 
   /** A low, looming swell — a sawtooth through a low filter that rises and recedes; the dread depths' dread. */
