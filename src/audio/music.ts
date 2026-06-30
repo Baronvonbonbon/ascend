@@ -11,7 +11,8 @@
 // cycle, swelling back — opening space for just the groove + chimes + reverb tails. Distortion (murk + a soured, detuned bed) tracks the VISIBLE
 // THREAT around you (count + proximity, peaking at bosses/swarms) — never depth. A
 // danger-driven TENSION layer picks one of several DANGER THEMES on the rising edge of
-// danger (a boss/swarm forces a heavy theme; the hells may too), then escalates it by
+// danger (a boss/swarm forces a heavy theme; the hells may too) — announced by a SWELL
+// INTRO (a rising riser + tonal swell landing on a downbeat impact) — then escalates it by
 // threat — trills tighten, bass enters, kicks fill. HEAVY themes play half-time with a
 // deep kick + heavier sub-bass and spacious trills. Tracks crossfade between areas;
 // stingers (death/ascension) duck everything.
@@ -168,6 +169,7 @@ export class MusicEngine {
   // ── danger theme (picked on the rising edge of danger, escalated by threat) ──
   private dangerActive = false;
   private dangerTheme: DangerTheme | null = null;
+  private lastIntro = 0; // ctx time of the last danger swell-intro (debounces flicker near the threshold)
   private danger = 0;          // 0..1, the tension layer's target
   private c: MusicContext = { threat: 0, danger: 0, bossNear: false, crowd: 0, jamNear: false, faucet: false, altar: false };
   private _enabled = false;
@@ -591,6 +593,46 @@ export class MusicEngine {
     let pick = pool[Math.floor(Math.random() * pool.length)];
     if (pool.length > 1 && this.dangerTheme && pick.id === this.dangerTheme.id) pick = pool[(pool.indexOf(pick) + 1) % pool.length];
     this.dangerTheme = pick;
+    this.playDangerIntro(pick);
+  }
+
+  /** A swell intro when danger appears: a rising riser + tonal swell that crescendos and lands on a
+   *  downbeat impact, handing off to the theme. Heavy themes get a darker, deeper riser + a boom;
+   *  light themes a brighter upward sweep + crash. Routed dry (bypasses the threat murk) so it cuts. */
+  private playDangerIntro(th: DangerTheme): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx, now = ctx.currentTime;
+    if (now - this.lastIntro < 4) return; // don't re-fire on danger flicker
+    this.lastIntro = now;
+    const dur = th.heavy ? 1.5 : 1.05;
+    // a small dry bus (straight to master) + a reverb send, so the swell stays bright under threat
+    const bus = ctx.createGain(); bus.gain.value = 1; bus.connect(this.master);
+    const wet = ctx.createGain(); wet.gain.value = 0.35; bus.connect(wet).connect(this.reverb);
+    // a noise riser sweeping upward (darker/lower for heavy)
+    const src = ctx.createBufferSource(); src.buffer = this.noiseBuf!; src.loop = true;
+    const f = ctx.createBiquadFilter(); f.type = "bandpass"; f.Q.value = 0.8;
+    const lo = th.heavy ? 200 : 500, hi = th.heavy ? 2600 : 6000;
+    f.frequency.setValueAtTime(lo, now); f.frequency.exponentialRampToValueAtTime(hi, now + dur);
+    const ng = ctx.createGain(); ng.gain.setValueAtTime(0, now);
+    ng.gain.linearRampToValueAtTime(th.heavy ? 0.16 : 0.12, now + dur * 0.92); // swell up
+    ng.gain.linearRampToValueAtTime(0, now + dur + 0.15);                       // release as the beat lands
+    src.connect(f).connect(ng).connect(bus);
+    src.start(now); src.stop(now + dur + 0.2);
+    // a tonal swell on the root — rising, tense
+    const root = this.active?.def.root ?? 110;
+    const base = th.heavy ? root : root * 2;
+    const osc = ctx.createOscillator(); osc.type = th.heavy ? "sawtooth" : "triangle";
+    osc.frequency.setValueAtTime(base * 0.94, now); osc.frequency.linearRampToValueAtTime(base, now + dur);
+    const og = ctx.createGain(); og.gain.setValueAtTime(0, now);
+    og.gain.linearRampToValueAtTime(th.heavy ? 0.10 : 0.07, now + dur * 0.9);
+    og.gain.exponentialRampToValueAtTime(0.0006, now + dur + 0.3);
+    og.gain.linearRampToValueAtTime(0, now + dur + 0.34);
+    osc.connect(og).connect(bus);
+    osc.start(now); osc.stop(now + dur + 0.35);
+    // the downbeat impact when it lands — a deep boom (heavy) or a bright crash (light)
+    if (th.heavy) this.kick(now + dur, bus, 0.5, true);
+    else this.noiseHit(now + dur, 0.18, bus, 0.2, "bandpass", 2400, 0.6);
+    window.setTimeout(() => { try { bus.disconnect(); } catch { /* gone */ } }, (dur + 0.6) * 1000);
   }
 
   /** A flowing up-and-back melodic contour drawn from the area's chord tones — the trills sing in
