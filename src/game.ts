@@ -182,6 +182,12 @@ export class Game {
   }
 
   /** Solo restart: pause and return to the Begin Descent menu (skipping the story replay). */
+  /** Options: resize the map font live (ROT re-lays the grid), then redraw if a run is up. */
+  applyFontSize(px: number): void {
+    try { this.display.setOptions({ fontSize: px }); } catch { /* display not ready */ }
+    if (this.player && !this.over) this.draw();
+  }
+
   showStartMenu(): void {
     this.over = true;
     document.getElementById("splash")?.classList.remove("gone");

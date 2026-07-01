@@ -3,7 +3,7 @@ import { initLobby } from "./net/lobby";
 import { loadCounts } from "./net/counter";
 import { readSave } from "./save";
 import { ARCHETYPES, archetypeName, archetypeBlurb, RACES, raceName, raceBlurb, introStory } from "./data";
-import { setFlavor, fp } from "./flavor";
+import { setFlavor, getFlavor, fp } from "./flavor";
 
 const screen = document.getElementById("screen");
 const logEl = document.getElementById("log");
@@ -89,8 +89,9 @@ if (screen && logEl) {
 
   // Name-flavor radios: reflavor the world before the run (banner, story, class/eco labels).
   const syncFlavor = () => {
-    const f = (document.querySelector('input[name="flavor"]:checked') as HTMLInputElement | null)?.value;
-    setFlavor(f === "polkadot" ? "polkadot" : "fantasy");
+    const f = (document.querySelector('input[name="flavor"]:checked') as HTMLInputElement | null)?.value === "polkadot" ? "polkadot" : "fantasy";
+    setFlavor(f);
+    localStorage.setItem("ascend.flavor", f); // persist the naming choice across sessions
     renderSubtitle(); fillSelects(); playStory(true);
   };
   document.querySelectorAll('input[name="flavor"]').forEach((el) => el.addEventListener("change", syncFlavor));
@@ -134,7 +135,7 @@ if (screen && logEl) {
 
   renderSubtitle();
   syncMode();
-  playStory();
+  // (the intro story is kicked off below, after options load, so reduce-motion is honoured)
 
   // Wallet connect + on-chain (PAS) payments are deferred — to be reintroduced in a later update.
 
@@ -174,6 +175,58 @@ if (screen && logEl) {
 
   // ── perpetual global tally (runs braved / fallen) — best-effort, fails silent ──
   void loadCounts();
+
+  // ── options & accessibility (persisted per-device, applied live) ──
+  const LSget = (k: string, d: string) => localStorage.getItem(k) ?? d;
+  const storedFont = parseInt(LSget("ascend.opt.font", "18"), 10) || 18;
+  const storedContrast = LSget("ascend.opt.contrast", "0") === "1";
+  const storedMotion = LSget("ascend.opt.motion", "0") === "1";
+  const storedFlavor = LSget("ascend.flavor", "fantasy") === "polkadot" ? "polkadot" : "fantasy";
+  // apply at boot
+  game.applyFontSize(storedFont);
+  document.body.classList.toggle("opt-contrast", storedContrast);
+  document.body.classList.toggle("opt-reduce-motion", storedMotion);
+  if (storedFlavor === "polkadot") {
+    setFlavor("polkadot");
+    const r = document.querySelector('input[name="flavor"][value="polkadot"]') as HTMLInputElement | null;
+    if (r) r.checked = true;
+    renderSubtitle(); fillSelects();
+  }
+  playStory(storedMotion); // reduce-motion → show the intro at once instead of crawling
+
+  const optModal = document.getElementById("options-modal");
+  if (optModal) {
+    const openO = () => { syncFlavSeg(getFlavor()); optModal.classList.add("open"); };
+    const closeO = () => optModal.classList.remove("open");
+    document.getElementById("options-btn")?.addEventListener("click", openO);
+    document.getElementById("options-close")?.addEventListener("click", closeO);
+    optModal.addEventListener("click", (e) => { if (e.target === optModal) closeO(); });
+    window.addEventListener("keydown", (e) => { if (!optModal.classList.contains("open")) return; if (e.key === "Escape") closeO(); e.stopPropagation(); }, true);
+
+    const vol = document.getElementById("opt-volume") as HTMLInputElement | null;
+    if (vol) { vol.value = String(Math.round(game.music.volume * 100)); vol.addEventListener("input", () => game.music.setVolume(parseInt(vol.value, 10) / 100)); }
+
+    const fontSeg = document.getElementById("opt-font");
+    const syncFont = (px: number) => fontSeg?.querySelectorAll<HTMLButtonElement>("button").forEach((b) => b.classList.toggle("on", b.dataset.px === String(px)));
+    syncFont(storedFont);
+    fontSeg?.querySelectorAll<HTMLButtonElement>("button").forEach((b) => b.addEventListener("click", () => { const px = parseInt(b.dataset.px!, 10); localStorage.setItem("ascend.opt.font", String(px)); game.applyFontSize(px); syncFont(px); }));
+
+    const flavSeg = document.getElementById("opt-flavor");
+    const syncFlavSegImpl = (f: string) => flavSeg?.querySelectorAll<HTMLButtonElement>("button").forEach((b) => b.classList.toggle("on", b.dataset.flavor === f));
+    function syncFlavSeg(f: string) { syncFlavSegImpl(f); }
+    syncFlavSeg(storedFlavor);
+    flavSeg?.querySelectorAll<HTMLButtonElement>("button").forEach((b) => b.addEventListener("click", () => {
+      const f = b.dataset.flavor!;
+      const r = document.querySelector(`input[name="flavor"][value="${f}"]`) as HTMLInputElement | null;
+      if (r) { r.checked = true; syncFlavor(); }
+      syncFlavSeg(f);
+    }));
+
+    const con = document.getElementById("opt-contrast") as HTMLInputElement | null;
+    if (con) { con.checked = storedContrast; con.addEventListener("change", () => { document.body.classList.toggle("opt-contrast", con.checked); localStorage.setItem("ascend.opt.contrast", con.checked ? "1" : "0"); }); }
+    const rm = document.getElementById("opt-reduce-motion") as HTMLInputElement | null;
+    if (rm) { rm.checked = storedMotion; rm.addEventListener("change", () => { document.body.classList.toggle("opt-reduce-motion", rm.checked); localStorage.setItem("ascend.opt.motion", rm.checked ? "1" : "0"); }); }
+  }
 
   // ── co-op chat bar: type + Send (PC keyboard or mobile touch keyboard) ──
   const chatInput = document.getElementById("chat-input") as HTMLInputElement | null;

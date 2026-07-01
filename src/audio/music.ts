@@ -321,13 +321,24 @@ export class MusicEngine {
   private area = "legacy";
   private shuffleUntil = 0;
 
+  private _volume = 1;
   constructor() {
     this._enabled = localStorage.getItem("ascend.audio") === "on";
     this._mode = localStorage.getItem("ascend.audio.mode") || "auto";
+    const v = parseFloat(localStorage.getItem("ascend.audio.vol") ?? "1");
+    this._volume = isNaN(v) ? 1 : Math.max(0, Math.min(1, v));
   }
 
   get enabled(): boolean { return this._enabled; }
   get mode(): string { return this._mode; }
+  get volume(): number { return this._volume; }
+
+  /** Master volume 0..1 (scales the base mix level). Persisted; applied live. */
+  setVolume(v: number): void {
+    this._volume = Math.max(0, Math.min(1, v));
+    localStorage.setItem("ascend.audio.vol", String(this._volume));
+    if (this.master && this.ctx) this.master.gain.setTargetAtTime(0.6 * this._volume, this.ctx.currentTime, 0.08);
+  }
   get trackList(): { id: string; name: string }[] { return BASES.map((t) => ({ id: t.id, name: t.name })); }
 
   /** Resume the context after a user gesture (autoplay policy). */
@@ -405,7 +416,7 @@ export class MusicEngine {
     const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     this.ctx = new Ctor();
     this.master = this.ctx.createGain();
-    this.master.gain.value = 0.6;
+    this.master.gain.value = 0.6 * this._volume;
     this.master.connect(this.ctx.destination);
     // a global lowpass the whole ambient bed passes through — it closes as nearby threat rises (murk)
     this.murk = this.ctx.createBiquadFilter();
