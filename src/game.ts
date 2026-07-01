@@ -3110,6 +3110,31 @@ export class Game {
 
   // ── tools (the `apply` command, Phase 7c) ────────────────────────────────────
   /** Sound an auditor's horn (unicorn horn): clear afflictions + a little mend. Returns false if there's nothing to fix. */
+  /** `a` an indexer (crystal ball) — gaze to reveal every mind on the floor. INT + Fortune + BUC gate
+   *  success; a failed gaze swims and confuses, and a cursed ball dazzles you outright. Reusable. */
+  applyCrystalBall(p: Player, ball: Item): boolean {
+    if (p.blind > 0) { this.log.add("You can't gaze into the indexer — you're blind.", "dim"); return false; }
+    ball.bucKnown = true;
+    const buc = ball.buc ?? "uncursed";
+    const bonus = buc === "blessed" ? 0.2 : buc === "cursed" ? -0.25 : 0;
+    const chance = Math.max(0.1, Math.min(0.95, 0.45 + abilityMod(p.int) * 0.08 + this.luckOf(p) * 0.02 + bonus));
+    if (ROT.RNG.getUniform() < chance) {
+      p.senseTurns = Math.max(p.senseTurns, buc === "blessed" ? 40 : 25);
+      this.recomputeFOV();
+      this.log.add("You gaze into the indexer — every mind on this floor lights up before you.", "good");
+      return true;
+    }
+    if (buc === "cursed") {
+      p.confused = Math.max(p.confused, ROT.RNG.getUniformInt(4, 8));
+      p.blind = Math.max(p.blind, ROT.RNG.getUniformInt(2, 5));
+      this.log.add("The indexer flares with a malign light — dazzled and reeling, you tear your eyes away.", "bad");
+    } else {
+      p.confused = Math.max(p.confused, ROT.RNG.getUniformInt(2, 5));
+      this.log.add("The swirling depths of the indexer dizzy you — you look away, confused.", "bad");
+    }
+    return true;
+  }
+
   applyHorn(p: Player): boolean {
     if (p.poison === 0 && p.confused === 0 && p.stoning === 0 && p.illness === 0 && p.blind === 0 && p.paralyzed === 0 && p.silenced === 0 && p.hp >= p.maxHp) {
       this.log.add("The auditor's horn finds nothing amiss.", "dim"); return false;
