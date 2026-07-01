@@ -3321,6 +3321,23 @@ export class Game {
       this.log.add(`${cap(m.name)} recoils from its reflection in the mirror node and flees!`, "good");
       return true;
     }
+    if (item.type.id === "lockpick") {
+      const chance = Math.max(0.2, Math.min(0.9, 0.45 + abilityMod(p.dex) * 0.08));
+      const tx = p.x + dx, ty = p.y + dy;
+      if (this.level.tileAt(tx, ty) === "doorLocked") {
+        if (ROT.RNG.getUniform() < chance) { this.level.tiles[ty][tx] = "doorClosed"; this.recomputeFOV(); this.log.add("The lock clicks open — push the door to enter.", "good"); }
+        else this.log.add("You probe the lock, but it holds fast. (try again)", "dim");
+        return true;
+      }
+      const chestFi = this.level.itemAt(tx, ty) ?? this.level.itemAt(p.x, p.y);
+      if (chestFi?.chest?.locked) {
+        if (ROT.RNG.getUniform() < chance) { chestFi.chest.locked = false; this.log.add("The chest's lock springs open. (o to open)", "good"); }
+        else this.log.add("You work the chest's lock, but it won't give. (try again)", "dim");
+        return true;
+      }
+      this.log.add("There's no lock that way to pick.", "dim");
+      return false;
+    }
     if (item.type.id === "camera") {
       if ((item.charges ?? 0) <= 0) { this.log.add("The snapshot camera is out of film.", "dim"); return false; }
       item.charges = (item.charges ?? 0) - 1;

@@ -141,6 +141,7 @@ export const ITEMS: ItemType[] = [
   { id: "crystal", kind: "tool", name: "an indexer",           fname: "a crystal ball",      ch: "(", fg: "#b090e0", weight: 2 }, // apply to gaze — INT-gated: reveal every mind on the floor, or gaze too long and reel
   { id: "grease",  kind: "tool", name: "a can of lubricant",    fname: "a can of grease",     ch: "(", fg: "#c8c860", weight: 2 }, // apply to a gear piece — grease it rust-proof (charged)
   { id: "tinopener", kind: "tool", name: "a block decoder",     fname: "a tin opener",        ch: "(", fg: "#b0b0b0", weight: 1 }, // held, it lets you open (eat) sealed tins
+  { id: "lockpick", kind: "tool", name: "a signing key",        fname: "a lock pick",         ch: "(", fg: "#c0c0a0", weight: 1 }, // apply + direction — DEX-gated, pick a locked door/chest (reusable)
   { id: "lamp",    kind: "tool", name: "a block explorer",    fname: "an oil lamp",         ch: "(", fg: "#e0d060", weight: 3 }, // apply to light/douse — full sight in the dark
   { id: "vault",   kind: "tool", name: "a multisig vault",    fname: "a bag of holding",    ch: "(", fg: "#d0c060", weight: 2 }, // bag of holding — #loot to stash beyond the pack
   { id: "trickbag", kind: "tool", name: "a faucet bag",        fname: "a bag of tricks",     ch: "(", fg: "#c060c0", weight: 2 }, // bag of tricks — apply to spit out a monster (charged)
