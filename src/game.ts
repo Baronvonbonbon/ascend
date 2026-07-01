@@ -1851,7 +1851,8 @@ export class Game {
 
   private trapName(k: TrapKind): string {
     return ({ gas: "gas-fee trap", slash: "slashing trap", reorg: "reorg trap", fork: "fork trap", trapdoor: "trapdoor",
-      web: "honeypot web", dart: "front-running dart trap", antimagic: "anti-magic field", statue: "statue trap" } as Record<TrapKind, string>)[k];
+      web: "honeypot web", dart: "front-running dart trap", antimagic: "anti-magic field", statue: "statue trap",
+      fire: "fire trap", rust: "rust trap", bear: "bear trap", landmine: "land mine", rockfall: "falling-rock trap", magic: "magic trap" } as Record<TrapKind, string>)[k];
   }
 
   /** A ring of searching: each turn, a chance to reveal an adjacent hidden trap or door. */
@@ -4214,7 +4215,7 @@ export class Game {
 
   private spawnTraps(): void {
     const count = 2 + Math.floor(this.player.depth * 0.8);
-    const kinds: TrapKind[] = ["gas", "slash", "reorg", "fork", "web", "dart", "antimagic", "statue"];
+    const kinds: TrapKind[] = ["gas", "slash", "reorg", "fork", "web", "dart", "antimagic", "statue", "fire", "rust", "bear", "landmine", "rockfall", "magic"];
     // trapdoors drop you a floor — only on the main relay descent, never where there's no floor below
     if (!this.currentChain && !this.branch && this.player.depth < MAX_DEPTH) kinds.push("trapdoor");
     for (let i = 0; i < count; i++) {
@@ -4279,6 +4280,36 @@ export class Game {
         if (p.hp <= 0) { this.killPlayer(p); return; }
         this.descend(); // fall to the floor below (it draws + recomputes FOV itself)
         return;
+      }
+      case "fire": {
+        if (this.elementResisted(p, "fire")) { this.log.add("A fire trap erupts — the flames wash over you harmlessly!", "good"); break; }
+        const d = ROT.RNG.getUniformInt(4, 10); p.hp -= d;
+        this.log.add(`A fire trap erupts in a column of flame — ${d}!`, "bad"); break;
+      }
+      case "rust": {
+        this.log.add("A rust trap sprays corrosive brine over you!", "bad");
+        this.corrodeArmor(p); break; // corrodes a random unproofed worn piece (no-op if none/proofed)
+      }
+      case "bear": {
+        const d = ROT.RNG.getUniformInt(1, 4); p.hp -= d;
+        if (p.webbed <= 0) p.webbed = ROT.RNG.getUniformInt(2, 5);
+        this.log.add(`A bear trap snaps shut on your leg for ${d} — you're held fast! (move to wrench free)`, "bad"); break;
+      }
+      case "landmine": {
+        const d = ROT.RNG.getUniformInt(8, 16); p.hp -= d;
+        if (!p.freeAction) p.confused = Math.max(p.confused, ROT.RNG.getUniformInt(2, 4));
+        this.log.add(`A land mine detonates beneath you — a thunderclap for ${d}, and your head rings!`, "bad"); break;
+      }
+      case "rockfall": {
+        const d = ROT.RNG.getUniformInt(5, 11); p.hp -= d;
+        this.log.add(`A block plunges from the ceiling and crushes down on you for ${d}!`, "bad"); break;
+      }
+      case "magic": {
+        const r = ROT.RNG.getUniform();
+        if (r < 0.4) { const spot = this.adjacentFree(p.x, p.y); if (spot) { const m = new Monster(this, this.pickMonster(p.depth), spot.x, spot.y); this.monsters.push(m); this.scheduler.add(m, true); } this.log.add("A magic trap flares — something is conjured out of the aether!", "bad"); }
+        else if (r < 0.7) { const drain = Math.min(p.energy, ROT.RNG.getUniformInt(3, 8)); p.energy -= drain; this.log.add(`A magic trap flares and siphons ${drain} energy from you!`, "bad"); }
+        else { let pos = this.level.randomFloor(), t = 0; while (t < 40 && (this.monsterAt(pos.x, pos.y) || this.level.tileAt(pos.x, pos.y) === "stairsDown")) { pos = this.level.randomFloor(); t++; } p.x = pos.x; p.y = pos.y; this.recomputeFOV(); this.log.add("A magic trap flares and flings you across the level!", "bad"); }
+        break;
       }
     }
     if (p.hp <= 0) this.killPlayer(p);
