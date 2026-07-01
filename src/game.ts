@@ -3224,6 +3224,25 @@ export class Game {
       case "cure": this.applyEffect("cure", "blessed"); break;
       case "detect": this.applyEffect("detect_obj"); break;
       case "uncurse": this.applyEffect("uncurse"); break;
+      case "clair": this.applyEffect("clairvoyance", "blessed"); break;
+      case "cryo": {
+        this.castRay(p.x, p.y, dx, dy, 9, (e) => {
+          if (this.elementResisted(e, "cold")) return;
+          const d = ROT.RNG.getUniformInt(6, 12); e.hp -= d;
+          this.log.add(e instanceof Player ? `The cryo-lance rakes ${e.name} for ${d}!` : `The cryo-lance freezes ${e.name} for ${d}.`, e instanceof Player ? "bad" : "good");
+          if (e instanceof Monster && e.alive && ROT.RNG.getUniform() < 0.4) { e.speedMod = 0.5; this.scheduler.remove(e); this.scheduler.add(e, true); }
+          if (e.hp <= 0) { if (e instanceof Monster) this.gainXp(p, e.maxHp); this.kill(e); }
+        });
+        break;
+      }
+      case "charm": {
+        const hit = this.firstMonsterInDir(p, dx, dy);
+        if (!hit) { this.log.add("The delegate spell finds no one to sway.", "dim"); break; }
+        if (hit.def.boss || hit.def.fearless) { this.log.add(`${cap(hit.name)} shrugs off the delegate spell.`, "dim"); break; }
+        hit.peaceful = true; hit.frightened = 0;
+        this.log.add(`${cap(hit.name)} is swayed to your side — it stands down.`, "good");
+        break;
+      }
       case "dig": {
         let x = p.x, y = p.y, dug = 0;
         for (let step = 0; step < 8 && dug < 4; step++) { x += dx; y += dy; if (x < 1 || y < 1 || x >= W - 1 || y >= MAP_H - 1) break; if (this.level.tileAt(x, y) === "wall") { this.level.tiles[y][x] = "floor"; dug++; } }

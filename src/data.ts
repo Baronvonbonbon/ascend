@@ -154,6 +154,9 @@ export const SPELLS: Spell[] = [
   { id: "sleep", name: "stasis field",   fname: "sleep",             cost: 6, dir: true,  school: "enchantment" },
   { id: "turn",  name: "slash the unfinalized", fname: "turn undead", cost: 7, dir: false, school: "clerical" },
   { id: "uncurse", name: "formal verification", fname: "remove curse", cost: 8, dir: false, school: "clerical" },
+  { id: "cryo",  name: "cryo-lance",     fname: "cone of cold",      cost: 8, dir: true,  school: "attack" },
+  { id: "charm", name: "delegate",       fname: "charm monster",     cost: 8, dir: true,  school: "enchantment" },
+  { id: "clair", name: "remote sync",    fname: "clairvoyance",      cost: 7, dir: false, school: "divination" },
 ];
 export function spellById(id: string): Spell | undefined { return SPELLS.find((s) => s.id === id); }
 /** A spell's display name, flavored. */

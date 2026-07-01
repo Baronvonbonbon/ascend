@@ -186,6 +186,9 @@ export const ITEMS: ItemType[] = [
   { id: "book_sleep", kind: "spellbook", name: "a runtime of stasis field",  fname: "a spellbook of sleep",          ch: "+", fg: "#90a0d0", teaches: "sleep",   weight: 2 },
   { id: "book_turn",  kind: "spellbook", name: "a runtime of finality-slashing", fname: "a spellbook of turn undead", ch: "+", fg: "#e0e0c0", teaches: "turn",    weight: 1 },
   { id: "book_uncurse", kind: "spellbook", name: "a runtime of formal verification", fname: "a spellbook of remove curse", ch: "+", fg: "#d0f0c0", teaches: "uncurse", weight: 1 },
+  { id: "book_cryo",  kind: "spellbook", name: "a runtime of cryo-lance",     fname: "a spellbook of cone of cold",  ch: "+", fg: "#90d0f0", teaches: "cryo",  weight: 1 },
+  { id: "book_charm", kind: "spellbook", name: "a runtime of delegate",       fname: "a spellbook of charm monster", ch: "+", fg: "#e0b0d0", teaches: "charm", weight: 1 },
+  { id: "book_clair", kind: "spellbook", name: "a runtime of remote sync",    fname: "a spellbook of clairvoyance",  ch: "+", fg: "#a0d0e0", teaches: "clair", weight: 1 },
 ];
 
 /** Scrolls a contract deployer (magic marker) can inscribe, in menu order. */
