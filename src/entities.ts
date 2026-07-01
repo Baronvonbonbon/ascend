@@ -80,6 +80,7 @@ export class Player extends Entity {
   illness = 0;         // turns until food poisoning kills you — cure fast
   blind = 0;           // turns of blindness — FOV shrinks to your fingertips
   paralyzed = 0;       // turns frozen by a gaze (floating eye) — you auto-pass, helpless
+  webbed = 0;          // turns caught in a honeypot web — struggle (STR) to tear free before you can move
   silenced = 0;        // turns of magical silence — can't cast extrinsics; in co-op, can't be heard (no chat)
   statDrain: Record<string, number> = {}; // attribute points drained by a mind flayer — restored by prayer
   intrinsics = new Set<string>(); // poisonResist, petrifyResist, fast (from eating corpses)
@@ -758,6 +759,13 @@ export class Player extends Entity {
     // Swallowed by a trapper: you can't walk — every move is a thrash to break free (handled in game).
     if (this.engulfedBy && this.engulfedBy.alive) return this.game.struggleEngulf(this) ? this.endTurn() : false;
     if (this.engulfedBy) this.engulfedBy = null; // engulfer died between turns — freed
+    // Caught in a honeypot web: every move is a heave to tear loose (STR decides), not a step.
+    if (this.webbed > 0) {
+      if (ROT.RNG.getUniform() < 0.35 + Math.max(0, this.str - 10) * 0.05) {
+        this.webbed = 0; this.game.log.add("You tear free of the honeypot web.", "good");
+      } else { this.webbed--; this.game.log.add("You struggle against the sticky honeypot web.", "bad"); }
+      return this.endTurn();
+    }
     if (this.confused > 0 && ROT.RNG.getUniform() < 0.6) {
       const d = ROT.RNG.getItem([[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, 1], [-1, 1], [1, -1]] as [number, number][])!;
       dx = d[0]; dy = d[1];

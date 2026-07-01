@@ -409,6 +409,7 @@ export class Game {
     if (p.confused > 0) fx.push(`confused ${p.confused}`);
     if (p.blind > 0) fx.push(`blind ${p.blind}`);
     if (p.silenced > 0) fx.push(`silenced ${p.silenced}`);
+    if (p.webbed > 0) fx.push(`webbed ${p.webbed}`);
     { const dr = ATTRS.filter((a) => (p.statDrain[a] ?? 0) > 0); if (dr.length) fx.push(`drained ${dr.map((a) => ATTR_LABEL[a]).join("/")} (pray to restore)`); }
     if (p.stoning > 0) fx.push(`STONING ${p.stoning}`);
     if (p.illness > 0) fx.push(`ill ${p.illness}`);
@@ -518,7 +519,7 @@ export class Game {
 
   /** Populate a freshly generated level, then place the party and build the schedule. */
   private enterLevel(): void {
-    for (const p of this.allPlayers()) p.engulfedBy = null; // a fresh floor's monsters are rebuilt — no engulfer carries over
+    for (const p of this.allPlayers()) { p.engulfedBy = null; p.webbed = 0; } // a fresh floor's monsters/webs are rebuilt — nothing holds you over
     this.vaultGuard = null; // the Council Guard belongs to the floor we just left
     this.monsters = [];
     if (this.plane > 0) {
@@ -1743,7 +1744,8 @@ export class Game {
   }
 
   private trapName(k: TrapKind): string {
-    return ({ gas: "gas-fee trap", slash: "slashing trap", reorg: "reorg trap", fork: "fork trap", trapdoor: "trapdoor" } as Record<TrapKind, string>)[k];
+    return ({ gas: "gas-fee trap", slash: "slashing trap", reorg: "reorg trap", fork: "fork trap", trapdoor: "trapdoor",
+      web: "honeypot web", dart: "front-running dart trap", antimagic: "anti-magic field", statue: "statue trap" } as Record<TrapKind, string>)[k];
   }
 
   /** A ring of searching: each turn, a chance to reveal an adjacent hidden trap or door. */
@@ -3414,7 +3416,7 @@ export class Game {
       case "teleport": {
         let pos = this.level.randomFloor(), t = 0;
         while (t < 40 && (this.monsterAt(pos.x, pos.y) || this.level.tileAt(pos.x, pos.y) === "stairsDown")) { pos = this.level.randomFloor(); t++; }
-        p.x = pos.x; p.y = pos.y; p.engulfedBy = null; this.recomputeFOV(); // a blink slips you out of a trapper's gut
+        p.x = pos.x; p.y = pos.y; p.engulfedBy = null; p.webbed = 0; this.recomputeFOV(); // a blink slips you out of a trapper's gut / a web
         this.log.add("You blink across the chain.", "sys"); break;
       }
       case "map": {
@@ -3717,7 +3719,7 @@ export class Game {
 
   private spawnTraps(): void {
     const count = 2 + Math.floor(this.player.depth * 0.8);
-    const kinds: TrapKind[] = ["gas", "slash", "reorg", "fork"];
+    const kinds: TrapKind[] = ["gas", "slash", "reorg", "fork", "web", "dart", "antimagic", "statue"];
     // trapdoors drop you a floor — only on the main relay descent, never where there's no floor below
     if (!this.currentChain && !this.branch && this.player.depth < MAX_DEPTH) kinds.push("trapdoor");
     for (let i = 0; i < count; i++) {
@@ -3745,6 +3747,36 @@ export class Game {
         this.log.add("A reorg trap flings you across the level!", "bad"); break;
       }
       case "fork": { this.log.add("A fork trap! Reality splits around you —", "bad"); this.polySelf(p); break; }
+      case "web": {
+        if (p.webbed > 0) { this.log.add("You're already tangled in the honeypot web.", "dim"); break; }
+        p.webbed = ROT.RNG.getUniformInt(3, 6);
+        this.log.add("A honeypot web snares you fast — you're stuck! (move to struggle free)", "bad"); break;
+      }
+      case "dart": {
+        const d = ROT.RNG.getUniformInt(2, 6); p.hp -= d;
+        this.log.add(`A front-running dart darts out ahead of you and stings for ${d}!`, "bad");
+        // an unlucky few are tainted with a poison payload
+        if (!p.ringPoisonRes && !p.intrinsics.has("poisonResist") && ROT.RNG.getUniform() < 0.25) {
+          p.poison += ROT.RNG.getUniformInt(3, 5); this.log.add("The dart was tainted — poison courses through you!", "bad");
+        }
+        break;
+      }
+      case "antimagic": {
+        if (p.energy > 0) {
+          const drained = Math.min(p.energy, ROT.RNG.getUniformInt(3, 8)); p.energy -= drained;
+          this.log.add(`An anti-magic field crackles — ${drained} energy bleeds out of you!`, "bad");
+        } else this.log.add("An anti-magic field crackles around you, but you've no energy to lose.", "dim");
+        break;
+      }
+      case "statue": {
+        const spot = this.adjacentFree(p.x, p.y);
+        if (spot) {
+          const m = new Monster(this, this.pickMonster(p.depth), spot.x, spot.y);
+          this.monsters.push(m); this.scheduler.add(m, true);
+          this.log.add(`A statue trap! A frozen ${m.def.name.replace(/^an? /, "")} shudders to life and lunges!`, "bad");
+        } else this.log.add("A statue trap fires, but there's no room for it to animate.", "dim");
+        break;
+      }
       case "trapdoor": {
         const d = ROT.RNG.getUniformInt(2, 6);
         p.hp -= d;
@@ -4067,6 +4099,7 @@ export class Game {
       (hunger ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}${hunger}` : "") +
       (p.paralyzed > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Para${p.paralyzed}` : "") +
       (p.engulfedBy ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Swallowed` : "") +
+      (p.webbed > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Webbed${p.webbed}` : "") +
       (p.poison > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Psn` : "") +
       (p.confused > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Cfz` : "") +
       (p.stoning > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Ston${p.stoning}` : "") +
