@@ -207,7 +207,28 @@ export class Player extends Entity {
     const ride = this.riding ? 30 : 0;           // a nominator steed quickens your stride
     if (this.polyForm) return Math.max(20, this.polyForm.speed ?? 100) + haste + ride; // move as your fork
     const base = this.intrinsics.has("fast") ? 130 : 100; // intrinsic speed from a fork-daemon corpse
-    return base + haste + ride;
+    return Math.max(20, base + haste + ride - this.encumbrance().speed); // a heavy pack drags your stride
+  }
+
+  /** Carry capacity from Stake-weight (STR) + Resilience (CON) — how much your pack can bear before it drags. */
+  carryCap(): number { return Math.max(40, 60 + (this.str - 10) * 8 + (this.con - 10) * 4); }
+
+  /** Total weight borne — every pack item (equipped gear stays in the pack); a bag of holding's stash is free. */
+  carriedWeight(): number {
+    let w = 0;
+    for (const it of this.inventory.items) w += it.type.id === "vault" ? 2 : it.type.weight ?? 0; // the multisig vault's stash weighs nothing
+    return w;
+  }
+
+  /** NetHack-style encumbrance tiers from load ÷ capacity: a speed drag and a to-hit/dodge penalty. */
+  encumbrance(): { level: string; speed: number; hit: number } {
+    const r = this.carriedWeight() / this.carryCap();
+    if (r < 0.75) return { level: "", speed: 0, hit: 0 };
+    if (r < 1.0) return { level: "Burdened", speed: 10, hit: 0 };
+    if (r < 1.5) return { level: "Stressed", speed: 20, hit: 1 };
+    if (r < 2.0) return { level: "Strained", speed: 30, hit: 2 };
+    if (r < 2.5) return { level: "Overtaxed", speed: 40, hit: 4 };
+    return { level: "Overloaded", speed: 55, hit: 6 };
   }
 
   act(): Promise<void> {

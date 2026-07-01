@@ -398,6 +398,7 @@ export class Game {
     this.log.add(`  ${ethosName(p.ethos)} · epoch ${p.level} · XP ${p.xp}/${this.xpForLevel(p.level + 1)}${p.crowned ? ` · ${fp("Knighted", "Technical Fellowship")} ${p.title}` : ""}.`, "dim");
     this.log.add(`  ${ATTRS.map((a) => `${ATTR_LABEL[a]} ${p[a]}`).join("  ")}`, "dim");
     this.log.add(`  HP ${p.hp}/${p.maxHp}  AC ${p.ac}  En ${p.energy}/${p.maxEnergy}  Speed ${p.getSpeed()}  Fortune ${this.luckOf(p) >= 0 ? "+" : ""}${this.luckOf(p)}.`, "dim");
+    this.log.add(`  Load ${p.carriedWeight()}/${p.carryCap()}${p.encumbrance().level ? ` — ${p.encumbrance().level}` : " — unencumbered"}.`, "dim");
     // weapon skills
     const skills = Object.keys(p.skillXp);
     if (skills.length) this.log.add(`  Skills: ${skills.map((c) => `${SKILL_LABEL[c] ?? c} ${SKILL_RANKS[p.skillRank[c] ?? 0]}`).join(", ")}.`, "dim");
@@ -2543,10 +2544,10 @@ export class Game {
     if (roll === 20) return true;
     if (roll === 1) return false;
     let acc = 0, eva = 0;
-    if (a instanceof Player) acc = a.level + abilityMod(a.dex) + (a.weapon?.enchant ?? 0) + this.skillAccBonus(a) + a.ringAcc - (a.blind > 0 ? 3 : 0) + Math.round(this.luckOf(a) / 3); // weapon mastery + a ring of accuracy + Fortune sway the roll; blind swings miss
+    if (a instanceof Player) acc = a.level + abilityMod(a.dex) + (a.weapon?.enchant ?? 0) + this.skillAccBonus(a) + a.ringAcc - (a.blind > 0 ? 3 : 0) + Math.round(this.luckOf(a) / 3) - a.encumbrance().hit; // weapon mastery + a ring of accuracy + Fortune sway the roll; blind swings miss; a heavy pack fouls the blow
 
     else if (a instanceof Monster) acc = 2 + Math.floor(a.maxHp / 8);
-    if (d instanceof Player) eva = abilityMod(d.dex) + Math.floor(d.level / 3) + Math.floor(d.ac / 2) + Math.round(this.luckOf(d) / 3); // armor is dodge now; Fortune helps you slip
+    if (d instanceof Player) eva = abilityMod(d.dex) + Math.floor(d.level / 3) + Math.floor(d.ac / 2) + Math.round(this.luckOf(d) / 3) - d.encumbrance().hit; // armor is dodge now; Fortune helps you slip; a heavy load makes you easier to hit
     else if (d instanceof Monster) eva = (d.def.speed ? Math.max(0, Math.floor((d.def.speed - 100) / 12)) : 0) + d.worn; // worn armor makes a monster harder to hit too
     return roll + acc >= 10 + eva;
   }
@@ -4570,6 +4571,7 @@ export class Game {
       `%c{${COLORS.dim}}  Gold %c{${COLORS.gold}}${p.gold}` +
       (this.wallet && !this.coop ? `%c{${COLORS.dim}}  PAS %c{${COLORS.gold}}${p.pas.toFixed(1)}` : "") +
       (hunger ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}${hunger}` : "") +
+      (p.encumbrance().level ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}${p.encumbrance().level}` : "") +
       (p.paralyzed > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Para${p.paralyzed}` : "") +
       (p.engulfedBy ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Swallowed` : "") +
       (p.webbed > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Webbed${p.webbed}` : "") +
