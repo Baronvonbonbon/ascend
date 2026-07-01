@@ -1127,6 +1127,9 @@ export class Pet extends Entity {
   leashed = false; // clipped to a leash — it's pulled to your side if it ever strays too far
   nutrition = 800;         // its own hunger clock (dog.c EDOG.hungrytime)
   loyalty = 12;            // tameness 1..20; starve it to 0 and it turns feral
+  // A seeded PERSONALITY (rolled at spawn from the run's RNG, so it's deterministic / co-op-safe).
+  // Every pet — the starting nominator and any tamed beast — gets its own temperament.
+  profile = { aggression: 0.5, fetch: 0.5, appetite: 0.5, wander: 0.5 };
   carrying: FloorItem | null = null; // an object it fetched, to lay at your feet (apport)
   def: MonsterDef | null = null;     // set when a tamed wild beast — drives its look & name
   private starveWarned = false;
@@ -1136,9 +1139,18 @@ export class Pet extends Entity {
     this.ch = "d"; this.fg = "#80d080"; this.name = fp("your hound", "your nominator");
     this.hp = this.maxHp = 14;
     this.attackDmg = [2, 4];
+    this.profile = { aggression: ROT.RNG.getUniform(), fetch: ROT.RNG.getUniform(), appetite: ROT.RNG.getUniform(), wander: ROT.RNG.getUniform() };
   }
 
   getSpeed(): number { return 110; } // keeps pace with you
+
+  /** A one-word read on its temperament (for farlook), from the dominant trait. */
+  temperament(): string {
+    const p = this.profile;
+    const traits: [number, string][] = [[p.aggression, p.aggression > 0.5 ? "bold" : "timid"], [p.fetch, "fetching"], [p.appetite, "greedy"], [p.wander, "restless"]];
+    if (p.aggression < 0.28) return "timid";
+    return traits.filter(([v]) => v > 0.62).sort((a, b) => b[0] - a[0])[0]?.[1] ?? "steady";
+  }
 
   /** Re-skin this pet as a tamed creature's species (name, glyph, vitality). */
   adopt(def: MonsterDef): void {

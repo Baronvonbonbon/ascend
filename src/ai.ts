@@ -393,13 +393,13 @@ function petFollowStep(game: Game, pet: Pet, ownerX: number, ownerY: number): vo
 }
 
 export const PET_BEHAVIORS: Behavior<Pet>[] = [
-  // NEW — self-preservation: nearly dead with a foe bearing down, it breaks off and
-  // falls back to your side rather than trading its last hit points away.
+  // NEW — self-preservation, tuned by temperament: a bold hound trades down to a sliver before
+  // breaking off; a timid one bolts to your side early. Nearly-dead-with-a-foe still overrides.
   { name: "retreat",
     score: (g, s) => {
-      if (s.hp > s.maxHp * 0.25) return 0;
-      const foe = petQuarry(g, s, 3);
-      return foe ? 1 : 0;
+      const fleeAt = 0.15 + (1 - s.profile.aggression) * 0.32; // bold ~0.15 · timid ~0.47
+      if (s.hp > s.maxHp * fleeAt) return 0;
+      return petQuarry(g, s, 3) ? 1 : 0;
     },
     act: (g, s, c) => { const foe = petQuarry(g, s, 3)!; fleeStep(g, s, foe.x, foe.y); if (cheb(s.x, s.y, c.p.x, c.p.y) > 1) stepToward(g, s, c.p.x, c.p.y); } },
 
@@ -412,9 +412,10 @@ export const PET_BEHAVIORS: Behavior<Pet>[] = [
   // underfoot, or pad over to the nearest one it can reach (petEdibleAt skips petrifying meat).
   { name: "eat",
     score: (g, s, c) => {
-      if (s.nutrition >= 250) return 0;
+      const hungryAt = 150 + s.profile.appetite * 260; // greedy pets forage sooner (up to ~410), light eaters wait
+      if (s.nutrition >= hungryAt) return 0;
       if (g.petEdibleAt(s.x, s.y)) return 1;
-      const near = g.petNearestEdible(s.x, s.y, 4);
+      const near = g.petNearestEdible(s.x, s.y, 3 + Math.round(s.profile.appetite * 3)); // greedy → roams farther for food
       if (!near) return 0;
       c.forage = near;
       return 1;
@@ -428,7 +429,8 @@ export const PET_BEHAVIORS: Behavior<Pet>[] = [
   // chase won't drag it dangerously far from you.
   { name: "hunt",
     score: (g, s, c) => {
-      const q = petQuarry(g, s, PET_HUNT_RANGE);
+      const range = 2 + Math.round(s.profile.aggression * (PET_HUNT_RANGE - 1)); // bold → ranges far (up to 6); timid → only pounces on the near (2)
+      const q = petQuarry(g, s, range);
       if (!q) return 0;
       if (cheb(s.x, s.y, c.p.x, c.p.y) >= PET_LEASH_SLACK) return 0; // too far from you already
       c.quarry = q;
@@ -472,7 +474,7 @@ export const PET_BEHAVIORS: Behavior<Pet>[] = [
       if (s.nutrition < 250) return 0;                   // too hungry to play
       if (cheb(s.x, s.y, c.p.x, c.p.y) > 3) return 0;    // stay close
       const it = g.petFetchableNear(s.x, s.y, 2);
-      if (!it || ROT.RNG.getUniform() < 0.7) return 0;   // only now and then
+      if (!it || ROT.RNG.getUniform() > 0.15 + s.profile.fetch * 0.65) return 0; // a keen fetcher grabs ~4/5; an aloof one rarely bothers
       c.fetch = it;
       return 1;
     },
@@ -493,5 +495,5 @@ export const PET_BEHAVIORS: Behavior<Pet>[] = [
 
   // At your heel with all quiet — mill in place now and then so it reads as alive.
   { name: "idle", score: () => 1,
-    act: (g, s, c) => { if (ROT.RNG.getUniform() < 0.3) { const bx = s.x, by = s.y; wanderStep(g, s); if (cheb(s.x, s.y, c.p.x, c.p.y) > 2) { s.x = bx; s.y = by; } } } },
+    act: (g, s, c) => { if (ROT.RNG.getUniform() < 0.1 + s.profile.wander * 0.5) { const bx = s.x, by = s.y; wanderStep(g, s); if (cheb(s.x, s.y, c.p.x, c.p.y) > 2) { s.x = bx; s.y = by; } } } }, // restless pets mill more
 ];

@@ -265,10 +265,9 @@ export class Game {
       this.genesisAltars = meta.genesisAltars as typeof this.genesisAltars;
       this.altarEthos = new Map(meta.altarEthos as [string, Ethos][]);
 
-      // Identification appearances first (a throwaway shuffle), then pin the RNG to the saved state.
+      // Identification appearances (a throwaway shuffle; the map is restored below).
       this.appearances = new Appearances();
       this.appearances.restore(data.appearances as [string, number][]);
-      ROT.RNG.setState(data.rng as Parameters<typeof ROT.RNG.setState>[0]);
 
       this.player = this.restorePlayer(data.player as Record<string, unknown>);
       this.acting = this.player;
@@ -285,6 +284,10 @@ export class Game {
       const active = this.slots.get(this.activeKey);
       if (!active) return false;
       this.level = active.level; this.monsters = active.monsters;
+
+      // Pin the RNG to the saved state LAST — after every entity was constructed (pet profiles / mimic
+      // disguises consume RNG on build), so the live stream resumes exactly where it was saved.
+      ROT.RNG.setState(data.rng as Parameters<typeof ROT.RNG.setState>[0]);
 
       this.downed = new Set();
       const dn = meta.downed as [boolean, boolean];
@@ -2356,7 +2359,7 @@ export class Game {
       const hb = pet.nutrition <= 0 ? "starving" : pet.nutrition < 60 ? "weak with hunger" : pet.nutrition < 250 ? "hungry" : pet.nutrition > 1000 ? "well-fed" : "fed";
       const lb = pet.loyalty >= 16 ? "devoted" : pet.loyalty >= 10 ? "loyal" : pet.loyalty >= 5 ? "wary" : "restive";
       const carry = pet.carrying ? `, carrying ${this.ident.name(pet.carrying.type)}` : "";
-      this.log.add(`You see ${pet.name} — ${lb}, ${hb}${carry}.`, "sys");
+      this.log.add(`You see ${pet.name} — ${pet.temperament()}, ${lb}, ${hb}${carry}.`, "sys");
       return;
     }
     const m = this.monsterAt(x, y);
