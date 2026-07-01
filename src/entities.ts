@@ -771,6 +771,10 @@ export class Player extends Entity {
   private doVerb(verb: Verb, item: Item): boolean {
     const t = item.type;
     const ident = this.game.ident;
+    // Handless polymorph forms can't manipulate gear (wield/wear/take off/off-hand/apply tools).
+    if (this.handless() && (verb === "wield" || verb === "wear" || verb === "takeoff" || verb === "offhand" || (verb === "apply" && t.kind === "tool"))) {
+      this.game.log.add(`Your ${this.polyForm!.name.replace(/^an? /, "")} form has no hands for that.`, "dim"); return false;
+    }
     switch (verb) {
       case "wield":
         if (t.kind !== "weapon") { this.game.log.add("That is not a weapon.", "dim"); return false; }
@@ -876,6 +880,9 @@ export class Player extends Entity {
     if (this.ring === item) { this.applyRing(item, false); this.ring = null; }
     if (this.amulet === item) this.amulet = null;
   }
+
+  /** While polymorphed into a non-humanoid form you've no hands to wield, wear, or work tools. */
+  handless(): boolean { return !!this.polyForm && !"@h".includes(this.polyForm.ch); }
 
   /** A cursed item that's currently equipped is welded — it can't be removed or dropped. */
   isWelded(item: Item): boolean {
