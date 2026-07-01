@@ -71,6 +71,7 @@ export const ITEMS: ItemType[] = [
   { id: "gloves", kind: "armor",  name: "relay gauntlets",     fname: "leather gauntlets",   ch: "[", fg: "#c0a070", ac: 1, slot: "gloves", weight: 2 },
   { id: "boots",  kind: "armor",  name: "sync boots",          fname: "leather boots",       ch: "[", fg: "#a08060", ac: 1, slot: "boots",  weight: 2 },
   { id: "shield", kind: "armor",  name: "a firewall shield",   fname: "a kite shield",       ch: "[", fg: "#90a0c0", ac: 2, slot: "shield", weight: 3 },
+  { id: "oilcloak", kind: "armor", name: "an oilskin cloak",   fname: "an oilskin cloak",    ch: "[", fg: "#c0b080", ac: 1, slot: "cloak",  weight: 2 }, // inherently rust/acid-proof (spawns proofed)
   // ── food ── %
   { id: "ration", kind: "food",   name: "a ration of cycles",  fname: "a food ration",       ch: "%", fg: "#c0a050", nutrition: 600, weight: 5 },
   { id: "crumb",  kind: "food",   name: "a stale block",       fname: "a stale crust",       ch: "%", fg: "#8a7a40", nutrition: 220, weight: 4 },

@@ -2917,6 +2917,7 @@ export class Game {
     if (type.id === "camera") it.charges = ROT.RNG.getUniformInt(3, 6); // a snapshot camera's film
     if (type.id === "grease") it.charges = ROT.RNG.getUniformInt(3, 6); // a can of lubricant's uses
     if (type.id === "tinkit") it.charges = ROT.RNG.getUniformInt(3, 6); // a cold-storage kit's uses
+    if (type.id === "oilcloak") it.proofed = true; // an oilskin cloak is inherently rust/acid-proof
     if (opts?.enchant) it.enchant = opts.enchant;
     if (opts?.relic) it.relic = true;
     it.buc = opts?.buc ?? rollBuc();
