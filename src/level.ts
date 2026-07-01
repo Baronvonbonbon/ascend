@@ -22,6 +22,8 @@ export class Level {
   items: FloorItem[] = [];
   graves: { x: number; y: number; label: string }[] = []; // bones of fallen heroes
   drawbridges: { x: number; y: number }[] = []; // consensus-bridge spans a lever raises/lowers (dbridge.c)
+  coopTuned = 1;       // co-op: how many players this floor's monster budget was populated for
+  coopSoloBudget = 0;  // co-op: the solo (1-player) monster count this floor was sized from — for reinforcement math
   traps: Trap[] = [];
   engravings: Engraving[] = []; // Gray-Paper wards scratched in the dust
   boulders: { x: number; y: number }[] = []; // pushable blocks (Sokoban-flavor)

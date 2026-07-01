@@ -562,6 +562,28 @@ export class Game {
     }
     this.placeParty();
     this.rebuildSchedule();
+    this.checkReinforcements(); // a follower regrouping onto a solo-tuned floor draws fresh foes
+  }
+
+  /** Co-op: when a player joins an already-generated floor that now holds more adventurers than it was
+   *  sized for (a race-ahead regroup), a top-up wave converges — restoring solo-per-player pressure.
+   *  Deterministic in lockstep (driven by the arriving player's broadcast move). */
+  private checkReinforcements(): void {
+    if (!this.coop) return;
+    const occ = this.playersHere().length;
+    if (occ <= this.level.coopTuned) return;
+    const extra = Math.round(this.level.coopSoloBudget * 0.7 * (occ - this.level.coopTuned));
+    this.level.coopTuned = occ; // it's now sized for the larger party (don't re-trigger)
+    let spawned = 0;
+    for (let i = 0; i < extra && this.monsters.length < 48; i++) {
+      let pos = this.level.randomFloor(), tries = 0;
+      while (tries < 40 && (this.level.tileAt(pos.x, pos.y) !== "floor" || this.monsterAt(pos.x, pos.y) || this.level.inVault(pos.x, pos.y) ||
+             this.playersHere().some((p) => Math.max(Math.abs(pos.x - p.x), Math.abs(pos.y - p.y)) <= 3))) { // never right on top of an adventurer
+        pos = this.level.randomFloor(); tries++;
+      }
+      if (this.level.tileAt(pos.x, pos.y) === "floor") { const m = new Monster(this, this.pickMonster(this.acting.depth), pos.x, pos.y); this.monsters.push(m); this.scheduler.add(m, true); spawned++; }
+    }
+    if (spawned) this.log.add(`The regrouped party draws fresh foes out of the dark — ${spawned} converge.`, "bad", "both");
   }
 
   /** Populate a freshly generated level, then place the party and build the schedule. */
@@ -4347,6 +4369,8 @@ export class Game {
     // lower (44→40) now that monster HP/damage scale with depth, so deep floors press without grinding.
     const soloCount = Math.min(40, Math.round((4 + this.player.depth * 1.2) * diff) + (this.player.depth >= 18 ? 4 : 0) + (this.level.kind === "bigroom" ? 12 : 0));
     // Co-op: more threats so two adventurers ganging up on a shared floor still feel solo pressure.
+    this.level.coopSoloBudget = soloCount;
+    this.level.coopTuned = this.coop && this.nextFloorShared ? this.livingPlayers().length : 1; // the party size it's sized for
     const count = Math.round(soloCount * this.coopFactor());
     for (let i = 0; i < count; i++) {
       const def = this.pickMonster(poolDepth);
