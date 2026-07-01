@@ -245,6 +245,32 @@ const GRAY_PAPER_P = [
 /** The opening prophecy, flavored. */
 export function grayPaper(): string[] { return getFlavor() === "fantasy" ? GRAY_PAPER_F : GRAY_PAPER_P; }
 
+/** The scrolling splash intro — flavor-aware (fantasy vs Polkadot). Blank strings are beats/pauses. */
+export function introStory(): string[] {
+  return [
+    fp("In the age before the long dark, one relic kept the realm in accord —",
+       "Before the fork of ages, one ledger kept the chains in consensus —"),
+    fp("the Amulet of Yendor, the heart of all order.",
+       "the JAM, the beating heart of the relay."),
+    "",
+    fp("It was torn from the light and dragged down into the deep,",
+       "It was seized and dragged down into the deep,"),
+    fp("where the dungeon coiled into endless, treacherous halls.",
+       "where the relay shattered into endless, treacherous floors."),
+    "",
+    fp("The old powers festered below, jealous of the surface world.",
+       "The legacy stack festered below, jealous of the light."),
+    fp("One by one, heroes descended. None returned.",
+       "One by one, validators descended. None returned."),
+    "",
+    fp("Now the lot falls to you — and the hound that pads at your heel.",
+       "Now the lot falls to you — and the nominator that pads at your heel."),
+    "",
+    fp("Descend. Reclaim the Amulet. Climb back into the sun.",
+       "Descend. Recover the JAM. Ascend."),
+  ];
+}
+
 export interface MonsterDef {
   name: string;        // polkadot flavor
   fname?: string;      // fantasy flavor (the default skin)

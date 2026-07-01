@@ -1,7 +1,8 @@
 import { Game } from "./game";
 import { initLobby } from "./net/lobby";
 import { loadCounts } from "./net/counter";
-import { ARCHETYPES, archetypeName, archetypeBlurb, RACES, raceName, raceBlurb } from "./data";
+import { ARCHETYPES, archetypeName, archetypeBlurb, RACES, raceName, raceBlurb, introStory } from "./data";
+import { setFlavor, fp } from "./flavor";
 
 const screen = document.getElementById("screen");
 const logEl = document.getElementById("log");
@@ -10,27 +11,102 @@ if (screen && logEl) {
   initLobby(game); // co-op (P2P) lobby — Stage 1: connection + channel self-test
 
   const archetype = document.getElementById("archetype") as HTMLSelectElement | null;
-  if (archetype) {
-    archetype.innerHTML = ""; // build the class options from the data (fantasy names by default)
-    for (const a of ARCHETYPES) {
-      const opt = document.createElement("option");
-      opt.value = a.id; opt.textContent = `${archetypeName(a)} — ${archetypeBlurb(a)}`;
-      archetype.appendChild(opt);
-    }
-    game.archetypeId = archetype.value;
-    archetype.onchange = () => { game.archetypeId = archetype.value; };
-  }
   const race = document.getElementById("race") as HTMLSelectElement | null;
-  if (race) {
-    race.innerHTML = ""; // the ecosystem/race options (a stat tweak + intrinsic on top of the class)
-    for (const r of RACES) {
-      const opt = document.createElement("option");
-      opt.value = r.id; opt.textContent = `${raceName(r)} — ${raceBlurb(r)}`;
-      race.appendChild(opt);
+  // Class/Ecosystem option labels are flavor-aware, so we can rebuild them when names toggle
+  // (keeping the current pick). onchange keeps the game's selected ids in sync.
+  const fillSelects = () => {
+    if (archetype) {
+      const keep = game.archetypeId || archetype.value;
+      archetype.innerHTML = "";
+      for (const a of ARCHETYPES) {
+        const opt = document.createElement("option");
+        opt.value = a.id; opt.textContent = `${archetypeName(a)} — ${archetypeBlurb(a)}`;
+        archetype.appendChild(opt);
+      }
+      if (keep) archetype.value = keep;
+      game.archetypeId = archetype.value;
+      archetype.onchange = () => { game.archetypeId = archetype.value; };
     }
-    game.raceId = race.value;
-    race.onchange = () => { game.raceId = race.value; };
-  }
+    if (race) {
+      const keep = game.raceId || race.value;
+      race.innerHTML = "";
+      for (const r of RACES) {
+        const opt = document.createElement("option");
+        opt.value = r.id; opt.textContent = `${raceName(r)} — ${raceBlurb(r)}`;
+        race.appendChild(opt);
+      }
+      if (keep) race.value = keep;
+      game.raceId = race.value;
+      race.onchange = () => { game.raceId = race.value; };
+    }
+  };
+  fillSelects();
+
+  // ── start splash: banner subtitle, auto-scrolling story, mode/flavor, Begin Descent ──
+  const subtitle = document.getElementById("splash-subtitle");
+  const titleSub = document.getElementById("title-sub");
+  const storyInner = document.getElementById("splash-story-inner");
+  const beginBtn = document.getElementById("begin-btn") as HTMLButtonElement | null;
+  const coopSetup = document.getElementById("coop-setup");
+  let storyTimers: number[] = [];
+
+  const renderSubtitle = () => {
+    const s = fp("— a descent to reclaim the Amulet —", "— a descent to recover the JAM —");
+    if (subtitle) subtitle.textContent = s;
+    if (titleSub) titleSub.textContent = fp("— reclaim the Amulet of Yendor", "— descend to recover the JAM");
+  };
+
+  // Reveal the intro line-by-line with a gentle fade + upward drift. `instant` shows it all at
+  // once (used when returning to the menu after death — no re-watching the whole crawl).
+  const playStory = (instant = false) => {
+    if (!storyInner) return;
+    storyTimers.forEach(clearTimeout); storyTimers = [];
+    storyInner.innerHTML = "";
+    const lines = introStory();
+    lines.forEach((text, i) => {
+      const div = document.createElement("div");
+      div.className = "story-line" + (text === "" ? " blank" : "");
+      div.textContent = text;
+      storyInner.appendChild(div);
+      if (instant) { div.classList.add("show"); return; }
+      storyTimers.push(window.setTimeout(() => {
+        div.classList.add("show");
+        // Once the crawl outgrows the masked window, drift the block upward to keep the newest line in view.
+        storyInner.style.transform = `translateY(-${Math.max(0, i - 7) * 22}px)`;
+      }, 500 + i * 850));
+    });
+    if (instant) storyInner.style.transform = "translateY(0)";
+  };
+
+  // Mode radios: Solo shows the Begin button; Co-op reveals the P2P lobby (its connect starts the run).
+  const syncMode = () => {
+    const coop = (document.querySelector('input[name="mode"]:checked') as HTMLInputElement | null)?.value === "coop";
+    if (coopSetup) coopSetup.hidden = !coop;
+    if (beginBtn) beginBtn.hidden = coop;
+  };
+  document.querySelectorAll('input[name="mode"]').forEach((el) => el.addEventListener("change", syncMode));
+
+  // Name-flavor radios: reflavor the world before the run (banner, story, class/eco labels).
+  const syncFlavor = () => {
+    const f = (document.querySelector('input[name="flavor"]:checked') as HTMLInputElement | null)?.value;
+    setFlavor(f === "polkadot" ? "polkadot" : "fantasy");
+    renderSubtitle(); fillSelects(); playStory(true);
+  };
+  document.querySelectorAll('input[name="flavor"]').forEach((el) => el.addEventListener("change", syncFlavor));
+
+  // Begin Descent (solo): lock in the picks and drop into the dungeon. newGame() hides the splash.
+  beginBtn?.addEventListener("click", () => {
+    if (archetype) game.archetypeId = archetype.value;
+    if (race) game.raceId = race.value;
+    game.newGame();
+  });
+
+  // Returning from a death (solo): re-arm the menu with the story already shown.
+  document.addEventListener("ascend:menu", () => { syncMode(); playStory(true); });
+
+  renderSubtitle();
+  syncMode();
+  playStory();
 
   // Wallet connect + on-chain (PAS) payments are deferred — to be reintroduced in a later update.
 

@@ -168,8 +168,23 @@ export class Game {
     screen.appendChild(this.display.getContainer()!);
     this.log = new Log(logEl);
     window.addEventListener("keydown", (e) => this.onKey(e));
-    this.newGame();
+    // The run no longer auto-starts: main.ts shows the splash, and newGame() runs when the
+    // player clicks "Begin Descent" (solo) or a co-op peer connects.
     if (DEBUG) this.installMobileDebug(); // ── DEBUG (remove for release) ──
+  }
+
+  /** Hide the start splash and reveal the live game — called once a run begins. */
+  private revealGame(): void {
+    document.getElementById("splash")?.classList.add("gone");
+    document.body.classList.add("in-game");
+  }
+
+  /** Solo restart: pause and return to the Begin Descent menu (skipping the story replay). */
+  showStartMenu(): void {
+    this.over = true;
+    document.getElementById("splash")?.classList.remove("gone");
+    document.body.classList.remove("in-game");
+    document.dispatchEvent(new CustomEvent("ascend:menu")); // let main.ts re-arm the menu (story collapsed)
   }
 
   // ── lifecycle ──────────────────────────────────────────────────────────────
@@ -228,6 +243,7 @@ export class Game {
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
     void bumpGames(); // a fresh run joins the perpetual global tally
+    this.revealGame(); // drop the splash — we're descending now
     void this.fetchLeaderboard();
     if (this.wallet && !this.coop) void this.loadRelics(); // carry owned NFT gear into the new run (solo only — per-wallet gear would desync a shared co-op world)
   }
@@ -4844,7 +4860,7 @@ export class Game {
   /** Restart: the host reseeds + tells the guest; solo just rerolls. */
   private restartRun(): void {
     if (this.netRole === "host") { const seed = this.freshSeed(); this.peer?.send({ t: "restart", seed, archetype: this.archetypeId }); this.newGame(seed); }
-    else this.newGame();
+    else this.showStartMenu(); // solo: back to the Begin Descent menu to re-pick class/mode
   }
 
   // ── input + render ───────────────────────────────────────────────────────
@@ -4986,6 +5002,7 @@ export class Game {
   }
 
   private onKey(e: KeyboardEvent): void {
+    if (!this.player) return; // no run yet — the start splash is up; ignore game keys
     if (e.ctrlKey || e.metaKey || e.altKey) return; // let browser shortcuts (refresh, copy, devtools) through
     const ae = document.activeElement; // typing in a text field (chat box, lobby paste) must not drive the game
     if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA")) return;

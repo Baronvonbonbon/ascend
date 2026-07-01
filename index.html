@@ -53,13 +53,45 @@
       .ctrl-group dt { color: var(--gold); font-size: 12px; white-space: nowrap; }
       .ctrl-group dd { color: var(--dim); font-size: 12px; margin: 0; line-height: 1.35; }
       kbd { font-family: inherit; background: #1c1c20; border: 1px solid #3a361f; border-radius: 3px; padding: 0 4px; color: var(--gold); }
+
+      /* ── start splash (banner + auto-scroll story + Begin Descent setup) ── */
+      #splash { position: fixed; inset: 0; z-index: 40; overflow-y: auto; padding: 20px 12px 40px;
+        background: radial-gradient(1200px 500px at 50% -8%, #171712 0%, #0a0a0c 60%);
+        display: flex; align-items: flex-start; justify-content: center; }
+      #splash.gone { display: none; }
+      body.in-game #splash { display: none; }
+      #splash-inner { max-width: 740px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+      #splash-banner { color: var(--gold); font-size: clamp(6px, 2.15vw, 13px); line-height: 1.05; white-space: pre;
+        margin: 6px 0 0; overflow-x: auto; max-width: 100%; text-shadow: 0 0 14px rgba(224,185,77,0.25); }
+      #splash-subtitle { color: var(--dim); font-size: 13px; letter-spacing: 1.5px; text-transform: lowercase; }
+      #splash-story { height: 176px; width: 100%; max-width: 620px; overflow: hidden;
+        -webkit-mask-image: linear-gradient(180deg, transparent, #000 22%, #000 78%, transparent); mask-image: linear-gradient(180deg, transparent, #000 22%, #000 78%, transparent); }
+      #splash-story-inner { display: flex; flex-direction: column; gap: 3px; padding: 8px 0; transition: transform 0.9s ease; }
+      .story-line { color: #cfc9b2; font-size: 13.5px; line-height: 1.5; text-align: center; opacity: 0;
+        transform: translateY(8px); transition: opacity 0.9s ease, transform 0.9s ease; }
+      .story-line.show { opacity: 1; transform: none; }
+      .story-line.blank { height: 9px; }
+      #splash-setup { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%; max-width: 560px;
+        border-top: 1px solid #24221a; padding-top: 16px; }
+      .setup-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; color: var(--dim); font-size: 13px; }
+      .setup-field { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); }
+      .setup-field select { font-family: inherit; font-size: 13px; color: var(--ink); background: #16161a; border: 1px solid #3a361f; border-radius: 4px; padding: 5px 8px; }
+      .setup-lab { color: var(--dim); }
+      .setup-sep { color: #3a361f; }
+      .pill { display: inline-flex; align-items: center; gap: 5px; color: var(--ink); cursor: pointer; }
+      #coop-setup { width: 100%; }
+      #coop-setup[hidden] { display: none; }
+      #begin-btn { font-family: inherit; font-size: 16px; font-weight: bold; letter-spacing: 0.5px; color: #0a0a0c;
+        background: var(--gold); border: none; border-radius: 6px; padding: 11px 30px; cursor: pointer; touch-action: manipulation;
+        box-shadow: 0 0 18px rgba(224,185,77,0.3); transition: background 0.15s, transform 0.05s; }
+      #begin-btn:hover { background: #f0d878; }
+      #begin-btn:active { transform: translateY(1px); }
+      #begin-btn[hidden] { display: none; }
+      .setup-hint { color: var(--dim); font-size: 11px; text-align: center; }
       #wallet { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--dim); flex-wrap: wrap; justify-content: center; }
       #connect { font-family: inherit; font-size: 12px; background: #1c1c20; color: var(--gold);
         border: 1px solid var(--gold); border-radius: 4px; padding: 4px 10px; cursor: pointer; }
       #connect:hover { background: #262620; }
-      #charbar { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--dim); flex-wrap: wrap; justify-content: center; }
-      #charbar select { font-family: inherit; font-size: 12px; color: var(--ink); background: #1c1c20; border: 1px solid #3a361f; border-radius: 4px; padding: 3px 8px; }
-      #charbar .hint { color: var(--dim); }
       #audiobar { display: flex; align-items: center; gap: 8px; font-size: 12px; justify-content: center; }
       #audiobar button, #audiobar select { font-family: inherit; font-size: 12px; color: var(--gold); background: #1c1c20; border: 1px solid #3a361f; border-radius: 4px; padding: 3px 8px; cursor: pointer; }
       #audiobar button.on { color: #76c66a; border-color: #2f6a28; }
@@ -105,17 +137,69 @@
   </head>
   <body>
     <div id="app">
-      <div id="title">⛓ ASCEND <small>— descend to recover the JAM</small>
+      <!-- ── start splash: stylized banner + auto-scrolling intro + Begin Descent setup ── -->
+      <div id="splash">
+        <div id="splash-inner">
+<pre id="splash-banner" aria-label="ASCEND">
+ █████╗ ███████╗ ██████╗███████╗███╗   ██╗██████╗
+██╔══██╗██╔════╝██╔════╝██╔════╝████╗  ██║██╔══██╗
+███████║███████╗██║     █████╗  ██╔██╗ ██║██║  ██║
+██╔══██║╚════██║██║     ██╔══╝  ██║╚██╗██║██║  ██║
+██║  ██║███████║╚██████╗███████╗██║ ╚████║██████╔╝
+╚═╝  ╚═╝╚══════╝ ╚═════╝╚══════╝╚═╝  ╚═══╝╚═════╝ </pre>
+          <div id="splash-subtitle">— a descent to recover the JAM —</div>
+          <div id="splash-story"><div id="splash-story-inner"></div></div>
+          <div id="splash-setup">
+            <div class="setup-row">
+              <label class="setup-field">Class <select id="archetype"></select></label>
+              <label class="setup-field">Ecosystem <select id="race"></select></label>
+            </div>
+            <div class="setup-row">
+              <span class="setup-lab">Mode</span>
+              <label class="pill"><input type="radio" name="mode" value="solo" checked> Solo</label>
+              <label class="pill"><input type="radio" name="mode" value="coop"> Co-op</label>
+              <span class="setup-sep">·</span>
+              <span class="setup-lab">Names</span>
+              <label class="pill"><input type="radio" name="flavor" value="fantasy" checked> Fantasy</label>
+              <label class="pill"><input type="radio" name="flavor" value="polkadot"> Polkadot</label>
+            </div>
+            <div id="coop-setup" hidden>
+              <div id="lobby">
+                <div class="lobby-row">
+                  <span id="lobby-mode-label">Co-op (P2P) — one player Hosts, the other Joins:</span>
+                  <button id="lobby-host" type="button">Host</button>
+                  <button id="lobby-join" type="button">Join</button>
+                  <span id="lobby-status"></span>
+                </div>
+                <p class="lobby-note">🔒 Direct browser-to-browser (WebRTC, DTLS-encrypted — no server sees your game). Only play with people you trust: your partner sees your IP address, and the link is only as safe as the channel you swap the offer/answer codes over. Exchange those codes over a trusted, end-to-end-encrypted channel (not a public post).</p>
+                <div id="lobby-host-pane" class="lobby-pane" hidden>
+                  <label>1) Send this <b>offer code</b> to your partner:</label>
+                  <textarea id="lobby-offer" readonly rows="2"></textarea>
+                  <div class="lobby-row"><button id="lobby-copy-offer" type="button">Copy offer</button></div>
+                  <label>2) Paste their <b>answer code</b>, then connect:</label>
+                  <textarea id="lobby-answer-in" rows="2"></textarea>
+                  <div class="lobby-row"><button id="lobby-connect" type="button">Connect</button></div>
+                </div>
+                <div id="lobby-join-pane" class="lobby-pane" hidden>
+                  <label>1) Paste the host's <b>offer code</b>:</label>
+                  <textarea id="lobby-offer-in" rows="2"></textarea>
+                  <div class="lobby-row"><button id="lobby-gen-answer" type="button">Generate answer</button></div>
+                  <label>2) Send this <b>answer code</b> back to the host:</label>
+                  <textarea id="lobby-answer" readonly rows="2"></textarea>
+                  <div class="lobby-row"><button id="lobby-copy-answer" type="button">Copy answer</button></div>
+                </div>
+              </div>
+            </div>
+            <button id="begin-btn" type="button">Begin Descent ▸</button>
+            <div class="setup-hint">Once below: press <b>R</b> to return here · <b>@</b> character sheet · <b>? Controls</b> for the full key list</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="title">⛓ ASCEND <small id="title-sub">— descend to recover the JAM</small>
         <button id="help-btn" type="button" title="Controls & how to play">? Controls</button>
       </div>
       <div id="stats" title="A perpetual, global tally across all players">⚔ — runs braved · ☠ — fallen in the dungeon</div>
-      <div id="charbar">
-        <span>Class:</span>
-        <select id="archetype"></select>
-        <span>Ecosystem:</span>
-        <select id="race"></select>
-        <span class="hint">press <b>R</b> to (re)start as this · <b>@</b> sheet</span>
-      </div>
       <div id="audiobar">
         <button id="music-toggle" title="Toggle music">♪ Music: off</button>
         <select id="music-pick" title="Soundtrack">
@@ -124,31 +208,6 @@
         </select>
       </div>
       <!-- Wallet connect + on-chain payments are deferred — to be reintroduced in a later update. -->
-      <div id="lobby">
-        <div class="lobby-row">
-          <span id="lobby-mode-label">Co-op (P2P):</span>
-          <button id="lobby-host" type="button">Host</button>
-          <button id="lobby-join" type="button">Join</button>
-          <span id="lobby-status"></span>
-        </div>
-        <p class="lobby-note">🔒 Direct browser-to-browser (WebRTC, DTLS-encrypted — no server sees your game). Only play with people you trust: your partner sees your IP address, and the link is only as safe as the channel you swap the offer/answer codes over. Exchange those codes over a trusted, end-to-end-encrypted channel (not a public post).</p>
-        <div id="lobby-host-pane" class="lobby-pane" hidden>
-          <label>1) Send this <b>offer code</b> to your partner:</label>
-          <textarea id="lobby-offer" readonly rows="2"></textarea>
-          <div class="lobby-row"><button id="lobby-copy-offer" type="button">Copy offer</button></div>
-          <label>2) Paste their <b>answer code</b>, then connect:</label>
-          <textarea id="lobby-answer-in" rows="2"></textarea>
-          <div class="lobby-row"><button id="lobby-connect" type="button">Connect</button></div>
-        </div>
-        <div id="lobby-join-pane" class="lobby-pane" hidden>
-          <label>1) Paste the host's <b>offer code</b>:</label>
-          <textarea id="lobby-offer-in" rows="2"></textarea>
-          <div class="lobby-row"><button id="lobby-gen-answer" type="button">Generate answer</button></div>
-          <label>2) Send this <b>answer code</b> back to the host:</label>
-          <textarea id="lobby-answer" readonly rows="2"></textarea>
-          <div class="lobby-row"><button id="lobby-copy-answer" type="button">Copy answer</button></div>
-        </div>
-      </div>
       <div id="screen"></div>
       <div id="log"></div>
       <div id="chatbar" hidden>
