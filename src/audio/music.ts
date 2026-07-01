@@ -288,6 +288,8 @@ export class MusicEngine {
   private gIntensity = 0;            // explore drive, sampled at each bar line (density steps cleanly)
   private gExplore = 0;              // live explore drive (sampled into gIntensity at the bar line)
   private curIdle = 0;               // which of the zone's idle grooves is current
+  private idleBarsHeld = 0;          // bars the current idle variant has run (drives the periodic re-roll)
+  private idleReroll = 5;            // switch to a fresh variant after this many bars (re-randomised each time)
   private curBar: ResolvedBar | null = null; // the resolved pattern the clock plays this bar
   private calmSince = 0;             // ctx time since things last went calm (drives settle-to-ambience)
   private stingerUntil = 0;          // a death/ascend stinger owns the mix until this time
@@ -526,6 +528,7 @@ export class MusicEngine {
     this.gNext = now + 2.4; this.gStep = 0; this.gBar = 0; this.gBarLen = 16; this.curBar = null;
     this.gState = "off"; this.gPending = null; this.gFillArmed = this.gFilling = false; this.gIntensity = this.gExplore = 0;
     this.curIdle = Math.floor(Math.random() * 5); // a fresh zone → its idle groove is re-rolled when calm settles
+    this.idleBarsHeld = 0; this.idleReroll = 4 + Math.floor(Math.random() * 3);
     this.nextTrill = this.nextTensionStep = this.nextTensionBass = now;
     this.trillIdx = 0; this.tensionStepIdx = this.tensionBassIdx = 0;
     this.nextJam = this.nextChime = this.nextDrip = now + 1;
@@ -871,16 +874,25 @@ export class MusicEngine {
   private enterBar(t: TrackDef, when: number): void {
     this.gBar++;
     if (this.gPending !== null && this.gPending !== this.gState) {
-      if (this.gPending === "idle" && this.gState !== "idle") { const n = (IDLE[t.area] ?? IDLE.legacy).length; this.curIdle = Math.floor(Math.random() * n); }
+      if (this.gPending === "idle" && this.gState !== "idle") { const n = (IDLE[t.area] ?? IDLE.legacy).length; this.curIdle = Math.floor(Math.random() * n); this.idleBarsHeld = 0; this.idleReroll = 4 + Math.floor(Math.random() * 3); }
       this.gState = this.gPending; this.gPending = null;
       if (this.gState !== "off") this.fillCrash(t, when); // an impact greets the new section's downbeat
+    }
+    // ── the "groove inject": during a long idle, roll to a DIFFERENT variant every few bars, so the
+    //    bass/percussion pattern itself changes instead of looping one short cell forever. ──
+    let switched = false;
+    if (this.gState === "idle" && ++this.idleBarsHeld >= this.idleReroll) {
+      const gs = IDLE[t.area] ?? IDLE.legacy;
+      if (gs.length > 1) { let n = this.curIdle; while (n === this.curIdle) n = Math.floor(Math.random() * gs.length); this.curIdle = n; }
+      this.idleBarsHeld = 0; this.idleReroll = 4 + Math.floor(Math.random() * 3); // next section: 4–6 bars
+      switched = true;
     }
     this.gIntensity = this.gExplore; // sample explore density for the whole bar (clean, per-bar steps)
     this.gFilling = false;
     this.curBar = this.resolveBar(t);
     this.gBarLen = this.curBar?.steps ?? (this.gState === "idle" ? this.idleSteps(t) : 16);
-    // Every few idle cycles, drop a complementary ACCENT JAM over the bar to break the loop's monotony.
-    if (this.gState === "idle" && this.gBar > 2 && Math.random() < 0.28) this.renderIdleAccent(t, when);
+    // an accent lick lands on a groove switch (announces the change) and, occasionally, mid-section for spice
+    if (this.gState === "idle" && this.gBar > 2 && (switched || Math.random() < 0.2)) this.renderIdleAccent(t, when);
   }
 
   /** A short, complementary lick laid over an idle bar now and then — bright & syncopated in the
@@ -898,8 +910,10 @@ export class MusicEngine {
     spots.forEach((s, i) => {
       const deg = pool[(i + Math.floor(Math.random() * pool.length)) % pool.length];
       const w = when + s * step;
-      if (dread) this.note(semi(t.root, deg), w, step * 3, bus, "sine", 0.04, 900);                             // low, consonant, breathes
-      else this.note(semi(t.root, deg) * 2, w, step * 1.6, bus, i % 2 ? "square" : "triangle", 0.045, 2600);    // a bright syncopated lick
+      // octave-up in both cases so it actually reads over the bed (the dread root was sub-audible before);
+      // dread stays warm/consonant (triangle, softer top), exploration stays bright & syncopated.
+      if (dread) this.note(semi(t.root, deg) * 2, w, step * 2.4, bus, "triangle", 0.05, 1400);
+      else this.note(semi(t.root, deg) * 2, w, step * 1.6, bus, i % 2 ? "square" : "triangle", 0.05, 2600);
     });
   }
 
