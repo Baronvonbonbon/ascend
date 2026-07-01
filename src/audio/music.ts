@@ -13,8 +13,11 @@
 // the Relay keeps a deep pulse, Gehennom is sparser + grinding (thuds every other bar, looming
 // minor-2nd swells), Moloch's Sanctum is the most oppressive (a slow doom-toll, a dissonant tritone
 // drone, frequent low swells). The Planes float free — no drums/low-end, just ascending harp
-// arpeggios + bright high chimes in vast reverb. All state changes (combat ↔
-// idle ↔ explore) crossfade smoothly — the tension layer recedes over ~2s so nothing is ever abrupt.
+// arpeggios + bright high chimes in vast reverb. The groove runs on ONE continuous bar clock:
+// explore↔idle sections swap only on a bar line, bridged by the zone's own tune-specific FILL (a
+// drum roll + a bass/lead turnaround, the `FILLS` table), so the grid never resets mid-bar and
+// returns don't clutter. Combat stays reactive — it cuts in fast on a snare pickup while the tension
+// layer rises; when it clears, the groove resumes at the next downbeat. Everything still crossfades.
 // And the bed
 // BREATHES: the drone AND the pad swells drop low and fully out for ~30s on a slow ~80s
 // cycle, swelling back — opening space for just the groove + chimes + reverb tails. Distortion (murk + a soured, detuned bed) tracks the VISIBLE
@@ -220,6 +223,30 @@ const IDLE: Record<string, IdleGroove[]> = {
   ],
 };
 
+// ── transition fills ─────────────────────────────────────────────────────────
+// A one-beat lead-in rendered over the FINAL quarter of the outgoing bar, easing one section into the
+// next. Each zone gets a characteristic fill so the seam sounds composed, not abrupt. `snare`/`kick`
+// are 16th offsets (0..3) within that final beat; `turn`/`lead` are scale degrees walked across the
+// beat toward the coming downbeat; `crash` lands an impact on it; `deep` renders it dark (dread zones).
+interface Fill {
+  snare?: number[]; kick?: number[]; hatBuild?: boolean; turn?: number[]; lead?: number[]; crash?: boolean; deep?: boolean;
+}
+const FILLS: Record<string, Fill> = {
+  legacy:    { snare: [2, 3], hatBuild: true, turn: [5, 7], crash: true },
+  parachain: { snare: [1, 2, 3], lead: [7, 9, 12], turn: [7, 5], crash: true },   // bright turnaround
+  kusama:    { snare: [0, 1, 2, 3], kick: [0], turn: [6, 3], crash: true },        // busy 16th roll, dark walk
+  mempool:   { snare: [0, 2, 3], kick: [0, 2], hatBuild: true, turn: [10, 7], crash: true }, // driving
+  elsewhere: { snare: [1, 3], lead: [8, 4, 0], turn: [4, 0], crash: true },
+  relay:     { snare: [2, 3], kick: [0], turn: [7, 0], deep: true },               // deep, slow
+  gehennom:  { snare: [0, 2], kick: [0], turn: [1, 6], deep: true, crash: true },  // grinding tom fall
+  sanctum:   { kick: [0], turn: [6, 1, 0], deep: true },                            // doom-walk, no snare
+  planes:    { lead: [7, 12, 16], crash: true },                                    // ethereal rise, no drums
+  genesis:   { lead: [4, 7, 11], hatBuild: true, crash: true },
+};
+
+// The pattern the unified groove clock plays for the current bar (resolved from the section + zone).
+interface ResolvedBar { mode: "explore" | "idle"; steps: number; kick: Set<number>; snare: Set<number>; hat: Set<number>; bass: Map<number, { freq: number; dur: number }>; deep: boolean; barGate: number; }
+
 interface Voice { osc: OscillatorNode; gain: GainNode; lfo?: OscillatorNode; }
 interface ActiveTrack { def: TrackDef; bus: GainNode; voices: Voice[]; }
 
@@ -247,12 +274,21 @@ export class MusicEngine {
   private noiseBuf: AudioBuffer | null = null;
   private timer: number | null = null;
   private nextPulse = 0;
-  // ── groove layer (drums + bass) ──
+  // ── unified groove layer: ONE continuous 16th clock; sections (explore / idle) swap only on bar
+  //    lines, bridged by a tune-specific fill — nothing resets mid-bar, so returns never clutter ──
   private grooveBus!: GainNode;      // drums + bass — dry, punchy, bypasses the threat murk
-  private nextStep = 0;              // next 16th-note drum step time
-  private stepIdx = 0;               // 0..15 position in the bar
-  private nextBass = 0;              // next bass onset time
-  private bassIdx = 0;               // position in the bassline phrase
+  private gState: "off" | "explore" | "idle" = "off";
+  private gPending: "off" | "explore" | "idle" | null = null; // queued section, applied at the next bar line
+  private gNext = 0;                 // next 16th step time (never yanked back mid-bar)
+  private gStep = 0;                 // step within the current bar
+  private gBarLen = 16;              // current section's bar length in 16ths
+  private gBar = 0;                  // continuous bar counter (drives the dread bar-gate)
+  private gFillArmed = false;        // a swap is queued → render the fill through this bar's final beat
+  private gFilling = false;          // the fill has taken over the final beat → suppress normal hits
+  private gIntensity = 0;            // explore drive, sampled at each bar line (density steps cleanly)
+  private gExplore = 0;              // live explore drive (sampled into gIntensity at the bar line)
+  private curIdle = 0;               // which of the zone's idle grooves is current
+  private curBar: ResolvedBar | null = null; // the resolved pattern the clock plays this bar
   private calmSince = 0;             // ctx time since things last went calm (drives settle-to-ambience)
   private stingerUntil = 0;          // a death/ascend stinger owns the mix until this time
   // ── tension layer (melodic trills + combat drums + bass, locked to the area bpm) ──
@@ -266,16 +302,10 @@ export class MusicEngine {
   private nextChime = 0;
   private nextDrip = 0;
   private ebbPhase = Math.random() * Math.PI * 2;
-  // ── idle chill groove (settled state): one of the zone's five grooves, re-rolled each time idle engages ──
-  private idleVariant = 0;       // which of the current zone's 5 idle grooves is playing
-  private inIdle = false;        // are we currently in the settled idle state (for edge-triggered re-roll)
-  private nextChillStep = 0;
-  private chillStepIdx = 0;
-  private nextChillBass = 0;
-  private chillBassIdx = 0;
-  private chillBar = 0;          // bar counter (for "every other bar" dread gating)
+  // ── idle ambient extras (non-rhythmic loose timers): swells / chimes / harp arps ──
   private nextChillSwell = 0;    // next ominous low swell (the dread depths)
   private nextChillChime = 0;
+  private nextArp = 0;           // Planes / Genesis ascending arpeggios
   private droneVoices: { gain: GainNode; base: number }[] = []; // the bed's drones — ducked/breathed during calm
   private padVoices: GainNode[] = [];                            // the bed's pad output gains — breathed alongside the drone
   // ── danger theme (picked on the rising edge of danger, escalated by threat) ──
@@ -480,13 +510,13 @@ export class MusicEngine {
     this.nextPulse = now + 0.5;
     this.calmSince = now;
     // the groove enters a bar or two after the bed (so a zone fades up ambient first, then finds its beat)
-    this.nextStep = this.nextBass = now + 2.4;
-    this.stepIdx = this.bassIdx = 0;
+    this.gNext = now + 2.4; this.gStep = 0; this.gBar = 0; this.gBarLen = 16; this.curBar = null;
+    this.gState = "off"; this.gPending = null; this.gFillArmed = this.gFilling = false; this.gIntensity = this.gExplore = 0;
+    this.curIdle = Math.floor(Math.random() * 5); // a fresh zone → its idle groove is re-rolled when calm settles
     this.nextTrill = this.nextTensionStep = this.nextTensionBass = now;
     this.trillIdx = 0; this.tensionStepIdx = this.tensionBassIdx = 0;
     this.nextJam = this.nextChime = this.nextDrip = now + 1;
-    this.nextChillStep = this.nextChillBass = this.nextChillChime = this.nextChillSwell = now + 2; this.chillStepIdx = this.chillBassIdx = this.chillBar = 0;
-    this.inIdle = false; this.idleVariant = Math.floor(Math.random() * 5); // a fresh zone → re-roll its idle groove when calm settles
+    this.nextChillChime = this.nextChillSwell = this.nextArp = now + 2;
     this.dangerActive = false; this.dangerTheme = null;
   }
 
@@ -600,28 +630,18 @@ export class MusicEngine {
       const grooveOn = intensity > 0.12;
       const stinging = now < this.stingerUntil;
 
-      if (settled && !stinging) {
-        // ── idle: one of this zone's five grooves (re-rolled each time idle engages) over the breathing bed ──
-        if (!this.inIdle) { // edge into idle → pick a fresh groove and start its cell clean
-          this.inIdle = true;
-          const n = (IDLE[t.area] ?? IDLE.legacy).length;
-          this.idleVariant = Math.floor(Math.random() * n);
-          this.chillBar = 0; this.chillStepIdx = this.chillBassIdx = 0;
-          this.nextChillStep = this.nextChillBass = this.nextChillChime = this.nextChillSwell = now;
-        }
-        this.grooveBus.gain.setTargetAtTime(0.34, now, 2.6);
-        this.scheduleChillGroove(t, now, horizon);
-        this.nextStep = this.nextBass = now; this.stepIdx = this.bassIdx = 0; // keep the combat groove re-synced for when threat returns
-      } else {
-        this.inIdle = false;
-        this.grooveBus.gain.setTargetAtTime(grooveOn && !stinging ? intensity * 0.5 : 0, now, 1.4); // ease, never snap
-        if (grooveOn && !stinging) this.scheduleGroove(t, now, horizon, intensity);
-        else { this.nextStep = this.nextBass = now; this.stepIdx = this.bassIdx = 0; }
-        this.nextChillStep = this.nextChillBass = this.nextChillChime = now; this.chillStepIdx = this.chillBassIdx = 0;
-      }
+      // ── the groove layer runs ONE continuous clock; the desired SECTION (idle vs explore vs
+      //    silence) is requested here but only SWAPPED on a bar line, bridged by a fill (below). ──
+      const want: "off" | "explore" | "idle" = stinging ? "off" : settled ? "idle" : grooveOn ? "explore" : "off";
+      this.gExplore = intensity;
+      this.scheduleGrooveLayer(t, now, horizon, want);
 
-      // low pulse / heartbeat — only when neither groove is playing (not during the chill idle groove)
-      if (t.pulseBpm > 0 && !grooveOn && !(settled && !stinging)) {
+      // idle ambient extras (dread swells / chimes / harp arps) ride alongside the idle section only
+      if (this.gState === "idle") this.scheduleIdleExtras(t, now, horizon);
+      else { this.nextChillChime = this.nextChillSwell = this.nextArp = now; }
+
+      // low pulse / heartbeat — only in the truly-silent groove gaps (the "off" section)
+      if (t.pulseBpm > 0 && this.gState === "off") {
         const beat = 60 / t.pulseBpm;
         while (this.nextPulse < horizon) { this.pulse(t.root * 0.5, this.nextPulse, this.active.bus, 0.18); this.nextPulse += beat; }
       } else this.nextPulse = now;
@@ -653,8 +673,14 @@ export class MusicEngine {
       return;
     }
     this.tensionBus.gain.setTargetAtTime(Math.min(0.6, sev * 0.5), now, 0.5); // responsive rise into combat
-    // Rising edge → pick a theme. A boss/swarm arriving mid-fight upgrades a light theme to a heavy one.
-    if (!this.dangerActive || !this.dangerTheme) { this.dangerActive = true; this.pickDangerTheme(); }
+    // Rising edge → pick a theme + a FAST pickup fill (combat stays reactive even though idle/explore
+    // swaps wait for the bar line). A boss/swarm arriving mid-fight upgrades a light theme to a heavy one.
+    if (!this.dangerActive || !this.dangerTheme) {
+      this.dangerActive = true; this.pickDangerTheme();
+      const sx = 60 / (t.bpm ?? 110) / 4;
+      for (let i = 0; i < 3; i++) this.noiseHit(now + i * sx, 0.09, this.tensionBus, 0.1 + i * 0.05, "bandpass", 1600 + i * 300, 0.8); // a snare rush…
+      this.noiseHit(now + 3 * sx, 0.5, this.tensionBus, 0.12, "highpass", 5000, 0.5); // …crashing into the fight
+    }
     else if (!this.dangerTheme.heavy && (this.c.bossNear || this.c.crowd > 0.55)) this.pickDangerTheme();
     const th = this.dangerTheme!;
 
@@ -798,61 +824,141 @@ export class MusicEngine {
   }
 
   /** Schedule one batch of drum steps + bass onsets, locked to the zone's BPM, fading with intensity. */
-  private scheduleGroove(t: TrackDef, now: number, horizon: number, intensity: number): void {
-    const bpm = t.bpm ?? 110;
-    const step = 60 / bpm / 4; // a 16th note
-    if (this.nextStep < now - 1) { this.nextStep = now; this.stepIdx = 0; } // re-sync after a stall (backgrounded tab)
-    while (this.nextStep < horizon) {
-      const s = this.stepIdx, bus = this.grooveBus, when = this.nextStep;
-      // kick: 0 & 8 always; 4 & 12 once driving; syncopated 6 & 14 when intense
-      if (s === 0 || s === 8 || (intensity > 0.5 && (s === 4 || s === 12)) || (intensity > 0.72 && (s === 6 || s === 14))) this.kick(when, bus, 0.5);
-      // snare backbeat
-      if ((s === 4 || s === 12) && intensity > 0.32) this.noiseHit(when, 0.14, bus, 0.2, "bandpass", 1850, 0.8);
-      // hats: offbeats first, then every step when intense; a touch louder on the & of the beat
-      if (intensity > 0.2 && (s % 2 === 0 || intensity > 0.6)) this.noiseHit(when, 0.035, bus, s % 4 === 2 ? 0.1 : 0.06, "highpass", 8200, 0.7);
-      this.nextStep += step;
-      this.stepIdx = (this.stepIdx + 1) % 16;
-    }
-    // the bassline fades in a notch above the drums; loops its own phrase locked to the same grid
-    if (intensity > 0.38 && t.bass && t.bass.length) {
-      if (this.nextBass < now - 1) { this.nextBass = now; this.bassIdx = 0; }
-      while (this.nextBass < horizon) {
-        const [deg, steps] = t.bass[this.bassIdx % t.bass.length];
-        const dur = steps * step;
-        let bf = semi(t.root, deg);
-        while (bf < 41) bf *= 2; // lift very-low roots (Gehennom/Sanctum at 27.5Hz) into audible bass range
-        if (deg !== REST) this.bassNote(bf, this.nextBass, Math.min(dur * 0.92, dur), this.grooveBus, 0.26 * Math.min(1, intensity * 1.2));
-        this.nextBass += dur;
-        this.bassIdx = (this.bassIdx + 1) % t.bass.length;
+  /** The unified groove layer. ONE continuous 16th clock plays the current SECTION (explore kit or an
+   *  idle groove). A change of section is deferred to the next bar line and bridged by the zone's fill,
+   *  so the grid never resets mid-bar — no clutter on returns, and the meters stay locked. */
+  private scheduleGrooveLayer(t: TrackDef, now: number, horizon: number, want: "off" | "explore" | "idle"): void {
+    const step = 60 / (t.bpm ?? 110) / 4; // the zone's 16th grid
+    if (this.gNext < now - 1) { this.gNext = now; this.gStep = 0; this.gFilling = false; } // resync after a stall
+
+    // Queue a section change — applied on the next downbeat, announced by a fill across this bar.
+    if (want !== this.gState) { if (this.gPending !== want) { this.gPending = want; this.gFillArmed = true; } }
+    else this.gPending = null; // desire matched again mid-bar → cancel the pending swap
+
+    // Gain tracks the CURRENTLY-playing section; it eases to the new level with the pattern at the bar line.
+    const target = this.gState === "idle" ? 0.34 : this.gState === "explore" ? Math.max(0.12, this.gIntensity * 0.5) : 0;
+    this.grooveBus.gain.setTargetAtTime(target, now, 1.3);
+
+    while (this.gNext < horizon) {
+      const s = this.gStep, when = this.gNext;
+      if (s === 0) this.enterBar(t, when);
+      // Announce a queued swap: render the fill across this bar's final beat (4 sixteenths).
+      if (this.gFillArmed && this.gState !== "off" && s === this.gBarLen - 4) {
+        this.renderFill(t, when, step); this.gFilling = true; this.gFillArmed = false;
       }
-    } else { this.nextBass = now; this.bassIdx = 0; }
+      if (!this.gFilling && this.curBar) this.playBarStep(s, when, step);
+      this.gStep = (s + 1) % this.gBarLen;
+      this.gNext += step;
+    }
   }
 
-  /** The idle texture: play this zone's currently-selected idle groove (`idleVariant`). Each groove is
-   *  a self-contained rhythm cell of `steps` sixteenths, so meters roam beyond 4/4. Exploration =
-   *  bright kit + syncopated bass; the dread trio = deep thuds + dissonant m2/tritone bass + low tolls +
-   *  looming swells (escalating per zone); the Planes = ascending harp arps + bright chimes (no
-   *  drums/bass). Drums/bass run the groove bus; chimes/arps ring through the area reverb. */
-  private scheduleChillGroove(t: TrackDef, now: number, horizon: number): void {
-    const grooves = IDLE[t.area] ?? IDLE.legacy;
-    const g = grooves[this.idleVariant % grooves.length];
-    const step = 60 / (t.bpm ?? 110) / 4; // the zone's 16th grid
+  /** At each bar line: apply a queued section swap (welcomed by a downbeat impact), then resolve the bar. */
+  private enterBar(t: TrackDef, when: number): void {
+    this.gBar++;
+    if (this.gPending !== null && this.gPending !== this.gState) {
+      if (this.gPending === "idle" && this.gState !== "idle") { const n = (IDLE[t.area] ?? IDLE.legacy).length; this.curIdle = Math.floor(Math.random() * n); }
+      this.gState = this.gPending; this.gPending = null;
+      if (this.gState !== "off") this.fillCrash(t, when); // an impact greets the new section's downbeat
+    }
+    this.gIntensity = this.gExplore; // sample explore density for the whole bar (clean, per-bar steps)
+    this.gFilling = false;
+    this.curBar = this.resolveBar(t);
+    this.gBarLen = this.curBar?.steps ?? (this.gState === "idle" ? this.idleSteps(t) : 16);
+  }
+
+  private idleSteps(t: TrackDef): number { const gs = IDLE[t.area] ?? IDLE.legacy; return gs[this.curIdle % gs.length].steps; }
+
+  /** Resolve the current section into a playable bar: the chosen idle groove, or an explore kit built
+   *  from the zone + the sampled intensity. null = silence ("off", and the drumless Planes/Genesis arps). */
+  private resolveBar(t: TrackDef): ResolvedBar | null {
+    if (this.gState === "idle") {
+      const gs = IDLE[t.area] ?? IDLE.legacy;
+      const g = gs[this.curIdle % gs.length];
+      if (g.arp) return null; // Planes/Genesis carry the idle with arps (scheduleIdleExtras), no kit
+      return { mode: "idle", steps: g.steps, kick: new Set(g.kick ?? []), snare: new Set(g.snare ?? []), hat: new Set(g.hat ?? []), bass: this.bassOnsets(t, g.bass), deep: !!g.deep, barGate: g.barGate ?? 0 };
+    }
+    if (this.gState === "explore") {
+      const I = this.gIntensity;
+      const kick = new Set<number>([0, 8]);
+      if (I > 0.5) { kick.add(4); kick.add(12); }
+      if (I > 0.72) { kick.add(6); kick.add(14); }
+      const snare = new Set<number>(I > 0.32 ? [4, 12] : []);
+      const hat = new Set<number>();
+      if (I > 0.2) for (let s = 0; s < 16; s++) if (s % 2 === 0 || I > 0.6) hat.add(s);
+      return { mode: "explore", steps: 16, kick, snare, hat, bass: I > 0.38 ? this.bassOnsets(t, t.bass) : new Map(), deep: false, barGate: 0 };
+    }
+    return null;
+  }
+
+  /** Bass onsets for a bar: step position → { freq, durSteps }. Durations sum to the bar, so it re-locks. */
+  private bassOnsets(t: TrackDef, bass: Note[]): Map<number, { freq: number; dur: number }> {
+    const m = new Map<number, { freq: number; dur: number }>();
+    let pos = 0;
+    for (const [deg, steps] of bass) {
+      if (deg !== REST) { let bf = semi(t.root, deg); while (bf < 41) bf *= 2; m.set(pos, { freq: bf, dur: steps }); }
+      pos += steps;
+    }
+    return m;
+  }
+
+  /** Play one step of the resolved bar (kick / snare / hat / bass), honouring the sparse-dread bar-gate. */
+  private playBarStep(s: number, when: number, step: number): void {
+    const b = this.curBar!, bus = this.grooveBus, deep = b.deep, ex = b.mode === "explore";
+    const gated = b.barGate > 0 && this.gBar % b.barGate !== 0; // sparse dread: only every Nth bar
+    if (!gated) {
+      if (b.kick.has(s)) this.kick(when, bus, ex ? 0.5 : 0.32, deep);
+      if (b.snare.has(s)) {
+        if (deep) this.noiseHit(when, 0.22, bus, 0.1, "lowpass", 260, 0.7);
+        else this.noiseHit(when, ex ? 0.14 : 0.12, bus, ex ? 0.2 : 0.12, "bandpass", ex ? 1850 : 1750, 0.8);
+      }
+      if (b.hat.has(s)) this.noiseHit(when, ex ? 0.035 : 0.04, bus, s % 4 === 2 ? (ex ? 0.1 : 0.06) : (ex ? 0.06 : 0.045), "highpass", ex ? 8200 : 7200, 0.7);
+    }
+    const bn = b.bass.get(s);
+    if (bn) {
+      const peak = ex ? 0.26 * Math.min(1, this.gIntensity * 1.2) : deep ? 0.2 : 0.18;
+      this.bassNote(bn.freq, when, bn.dur * step * (deep ? 0.98 : 0.85), bus, peak);
+    }
+  }
+
+  /** Render the zone's transition fill across the outgoing bar's final beat — a tune-specific drum roll
+   *  plus a short bass/lead turnaround that leads the ear into the next section. */
+  private renderFill(t: TrackDef, beatStart: number, step: number): void {
+    const f = FILLS[t.area] ?? FILLS.legacy, bus = this.grooveBus;
+    if (f.snare) f.snare.forEach((o, i) => {
+      const w = beatStart + o * step;
+      if (f.deep) this.noiseHit(w, 0.2, bus, 0.09 + i * 0.02, "lowpass", 240 - i * 22, 0.7);      // descending toms
+      else this.noiseHit(w, 0.1, bus, 0.09 + i * 0.03, "bandpass", 1700 + i * 260, 0.8);          // a tightening roll
+    });
+    if (f.kick) f.kick.forEach((o) => this.kick(beatStart + o * step, bus, f.deep ? 0.34 : 0.5, !!f.deep));
+    if (f.hatBuild) for (let i = 0; i < 8; i++) this.noiseHit(beatStart + i * step * 0.5, 0.03, bus, 0.04 + i * 0.008, "highpass", 8000, 0.7);
+    if (f.turn) { const n = Math.max(1, f.turn.length); f.turn.forEach((deg, i) => { let bf = semi(t.root, deg); while (bf < 41) bf *= 2; this.bassNote(bf, beatStart + i * step * (4 / n), step * 1.6, bus, 0.22); }); }
+    if (f.lead && this.active) { const n = Math.max(1, f.lead.length); f.lead.forEach((deg, i) => this.note(semi(t.root, deg) * 2, beatStart + i * step * (4 / n), step * 1.4, this.active!.bus, "triangle", 0.05, 3200)); }
+  }
+
+  /** A bright cymbal (or dark boom in the dread zones) welcoming the new section's downbeat. */
+  private fillCrash(t: TrackDef, when: number): void {
+    const f = FILLS[t.area] ?? FILLS.legacy;
+    if (!f.crash) return;
+    if (f.deep) this.noiseHit(when, 0.5, this.grooveBus, 0.14, "lowpass", 340, 0.6);
+    else this.noiseHit(when, 0.6, this.grooveBus, 0.09, "highpass", 5200, 0.5);
+  }
+
+  /** Idle ambience off the beat grid: dread low swells, chimes/tolls, and the Planes/Genesis harp arps.
+   *  These ride loosely over whichever idle groove the clock is playing. */
+  private scheduleIdleExtras(t: TrackDef, now: number, horizon: number): void {
+    const gs = IDLE[t.area] ?? IDLE.legacy;
+    const g = gs[this.curIdle % gs.length];
+    const step = 60 / (t.bpm ?? 110) / 4;
     const bus = this.grooveBus;
 
-    // ── the Planes: no drums/bass — ascending harp arpeggios + bright chimes, lots of empty space ──
+    // ── the Planes / Genesis: ascending harp arpeggios + bright chimes, lots of empty space ──
     if (g.arp) {
-      if (this.nextChillBass < now - 1) this.nextChillBass = now;
-      while (this.nextChillBass < horizon) {
-        if (this.active && Math.random() < 0.72) {
-          let when = this.nextChillBass;
-          for (let i = 0; i < g.arp.length; i++) {
-            this.harpNote(semi(t.root, g.arp[i]) * 2, when, 2.6, this.active.bus, 0.038);
-            when += step * (i % 2 === 0 ? 1 : 2); // syncopated lilt as it ascends
-          }
-        }
-        this.nextChillBass += (g.arpEvery ?? 5) + Math.random() * (g.arpEvery ?? 5);
+      if (this.nextArp < now - 1) this.nextArp = now;
+      while (this.nextArp < horizon) {
+        if (this.active && Math.random() < 0.72) { let w = this.nextArp; for (let i = 0; i < g.arp.length; i++) { this.harpNote(semi(t.root, g.arp[i]) * 2, w, 2.6, this.active.bus, 0.038); w += step * (i % 2 === 0 ? 1 : 2); } }
+        this.nextArp += (g.arpEvery ?? 5) + Math.random() * (g.arpEvery ?? 5);
       }
-      this.nextChillStep = this.nextChillSwell = now;
+      this.nextChillSwell = now;
       const pd = g.chimeDegs ?? [0, 7, 12, 16];
       while (this.nextChillChime < horizon) {
         if (this.active && Math.random() < 0.35) this.bellNote(semi(t.root, pd[Math.floor(Math.random() * pd.length)]) * 2, this.nextChillChime, 5.5, this.active.bus, 0.04);
@@ -860,34 +966,7 @@ export class MusicEngine {
       }
       return;
     }
-
-    // ── drum zones (exploration + the dread trio): the groove's own kit on its own `steps` grid ──
-    const deep = !!g.deep;
-    if (this.nextChillStep < now - 1) { this.nextChillStep = now; this.chillStepIdx = 0; }
-    while (this.nextChillStep < horizon) {
-      const s = this.chillStepIdx, when = this.nextChillStep;
-      if (s === 0) this.chillBar++;
-      if (!g.barGate || this.chillBar % g.barGate === 0) { // sparse dread: fire the kit only every Nth bar
-        if (g.kick && g.kick.includes(s)) this.kick(when, bus, 0.32, deep);
-        if (g.snare && g.snare.includes(s)) this.noiseHit(when, deep ? 0.22 : 0.12, bus, deep ? 0.1 : 0.12, deep ? "lowpass" : "bandpass", deep ? 260 : 1750, 0.7);
-        if (g.hat && g.hat.includes(s)) this.noiseHit(when, 0.04, bus, s % 4 === 2 ? 0.06 : 0.045, "highpass", 7200, 0.7);
-      }
-      this.chillStepIdx = (s + 1) % g.steps;
-      this.nextChillStep += step;
-    }
-
-    // ── the bass figure (durations sum to the bar, so it re-locks each cell) ──
-    const bassPeak = deep ? 0.2 : 0.18;
-    if (g.bass.length) {
-      if (this.nextChillBass < now - 1) { this.nextChillBass = now; this.chillBassIdx = 0; }
-      while (this.nextChillBass < horizon) {
-        const [deg, steps] = g.bass[this.chillBassIdx % g.bass.length];
-        const dur = steps * step;
-        if (deg !== REST) { let bf = semi(t.root, deg); while (bf < 41) bf *= 2; this.bassNote(bf, this.nextChillBass, dur * (deep ? 0.98 : 0.85), bus, bassPeak); }
-        this.nextChillBass += dur;
-        this.chillBassIdx = (this.chillBassIdx + 1) % g.bass.length;
-      }
-    } else this.nextChillBass = now;
+    this.nextArp = now;
 
     // ── looming low swells (the dread grooves that declare a cadence); frequent ones ring longer ──
     if (g.swellEvery) {
