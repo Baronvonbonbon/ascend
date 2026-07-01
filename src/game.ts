@@ -382,7 +382,7 @@ export class Game {
     this.log.add(`— ${p.name === "you" ? "You" : p.name}, ${p.title ? p.title + " " : ""}${raceName(raceById(p.race))} ${archetypeName(archetypeById(p.archetype))} · ${ethosName(p.ethos)} · epoch ${p.level} —`, "sys");
     this.log.add(`  ${ATTRS.map((a) => `${ATTR_LABEL[a]} ${p[a]}`).join("  ")}`, "dim");
     this.log.add(`  HP ${p.hp}/${p.maxHp}  AC ${p.ac}  Fortune ${this.luckOf(p) >= 0 ? "+" : ""}${this.luckOf(p)}  XP ${p.xp}/${this.xpForLevel(p.level + 1)}`, "dim");
-    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", drainResist: "drain resist", fast: "fast", telepathy: "telepathy" } as Record<string, string>)[i] ?? i);
+    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", drainResist: "drain resist", fireResist: "fire resist", coldResist: "cold resist", shockResist: "shock resist", fast: "fast", telepathy: "telepathy" } as Record<string, string>)[i] ?? i);
     if (intr.length) this.log.add(`  Intrinsics: ${intr.join(", ")}.`, "good");
     if (p.spells.size) this.log.add(`  Energy ${p.energy}/${p.maxEnergy}. ${fp("Spells", "Extrinsics")}: ${[...p.spells].map((id) => { const s = spellById(id); return s ? spellName(s) : id; }).join(", ")}. (Z to cast)`, "sys");
     this.log.add(`  ${fp("Alignment", "Ethos")}: ${ethosName(p.ethos)}, favor ${p.favor}${p.crowned ? ` — ${fp("Knighted", "Technical Fellowship")} ${p.title}` : ""}.`, "dim");
@@ -403,7 +403,7 @@ export class Game {
     const skills = Object.keys(p.skillXp);
     if (skills.length) this.log.add(`  Skills: ${skills.map((c) => `${SKILL_LABEL[c] ?? c} ${SKILL_RANKS[p.skillRank[c] ?? 0]}`).join(", ")}.`, "dim");
     // intrinsics + spells
-    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", drainResist: "drain resist", fast: "fast", telepathy: "telepathy" } as Record<string, string>)[i] ?? i);
+    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", drainResist: "drain resist", fireResist: "fire resist", coldResist: "cold resist", shockResist: "shock resist", fast: "fast", telepathy: "telepathy" } as Record<string, string>)[i] ?? i);
     if (intr.length) this.log.add(`  Intrinsics: ${intr.join(", ")}.`, "good");
     if (p.spells.size) this.log.add(`  Extrinsics: ${[...p.spells].map((id) => spellById(id)?.name ?? id).join(", ")}.`, "dim");
     // active afflictions / timeouts
@@ -2740,6 +2740,7 @@ export class Game {
         if (m.hp <= 0) this.kill(m);
         return;
       }
+      if (this.elementResisted(e, "fire")) return; // a fire-resistant target shrugs off the searing breath
       e.hp -= d;
       if (e instanceof Player) { this.log.add(`The breath sears ${e.name} for ${d}!`, "bad", e); if (e.hp <= 0) this.killPlayer(e); }
       else if (e instanceof Monster && e.hp <= 0) this.kill(e);
@@ -2993,12 +2994,14 @@ export class Game {
     } else if (item.type.id === "wand_fire") {
       // A bouncing fire ray — it sears everything in its path, including you if it caroms back.
       this.castRay(this.acting.x, this.acting.y, dx, dy, 9, (e) => {
+        if (this.elementResisted(e, "fire")) return;
         const d = ROT.RNG.getUniformInt(6, 12); e.hp -= d;
         this.log.add(e instanceof Player ? `The firebolt scorches ${e.name} for ${d}!` : `The firebolt sears ${e.name} for ${d}.`, e instanceof Player ? "bad" : "good");
         if (e.hp <= 0) { if (e instanceof Monster) this.gainXp(this.acting, e.maxHp); this.kill(e); }
       });
     } else if (item.type.id === "wand_cold") {
       this.castRay(this.acting.x, this.acting.y, dx, dy, 9, (e) => {
+        if (this.elementResisted(e, "cold")) return;
         const d = ROT.RNG.getUniformInt(5, 11); e.hp -= d;
         this.log.add(e instanceof Player ? `A lance of cold rakes ${e.name} for ${d}!` : `A lance of cold freezes ${e.name} for ${d}.`, e instanceof Player ? "bad" : "good");
         if (e instanceof Monster && e.alive && ROT.RNG.getUniform() < 0.4) { e.speedMod = 0.5; this.scheduler.remove(e); this.scheduler.add(e, true); } // the chill slows it
@@ -3006,6 +3009,7 @@ export class Game {
       });
     } else if (item.type.id === "wand_lightning") {
       this.castRay(this.acting.x, this.acting.y, dx, dy, 9, (e) => {
+        if (this.elementResisted(e, "shock")) return;
         const d = ROT.RNG.getUniformInt(7, 13); e.hp -= d;
         this.log.add(e instanceof Player ? `Lightning forks through ${e.name} for ${d}!` : `Lightning blasts ${e.name} for ${d}.`, e instanceof Player ? "bad" : "good");
         if (e instanceof Player && e.hp > 0 && ROT.RNG.getUniform() < 0.4) { e.blind = Math.max(e.blind, 8); this.recomputeFOV(); } // the flash blinds you if it caroms back
@@ -3113,6 +3117,17 @@ export class Game {
 
   /** Trace a ray that bounces off walls, calling onHit for each entity (monster or player)
    *  it passes through — so a careless shot down a short corridor can carom back onto you. */
+  /** A resistant player takes no elemental (fire/cold/shock) damage — a full shrug, with a note. */
+  private elementResisted(e: Entity, element: "fire" | "cold" | "shock"): boolean {
+    const key = element === "fire" ? "fireResist" : element === "cold" ? "coldResist" : "shockResist";
+    if (e instanceof Player && e.intrinsics.has(key)) {
+      const what = element === "fire" ? "The flames wash over you harmlessly" : element === "cold" ? "The killing cold cannot touch you" : "The current earths itself through you harmlessly";
+      this.log.add(`${what} — ${element} resistance!`, "good", e);
+      return true;
+    }
+    return false;
+  }
+
   private castRay(sx: number, sy: number, dx: number, dy: number, range: number, onHit: (e: Entity) => void): void {
     let x = sx, y = sy;
     for (let step = 0; step < range; step++) {
@@ -3186,6 +3201,7 @@ export class Game {
       case "haste": { p.hasteTurns = Math.max(p.hasteTurns, 20); this.scheduler.remove(p); this.scheduler.add(p, true); this.log.add(`${this.sub(p)} ${this.verbS(p, "overclock")}! (haste)`, "good"); break; }
       case "fireball": {
         this.castRay(p.x, p.y, dx, dy, 8, (e) => {
+          if (this.elementResisted(e, "fire")) return;
           const d = ROT.RNG.getUniformInt(7, 14); e.hp -= d;
           this.log.add(e instanceof Player ? `The fireball scorches ${e.name} for ${d}!` : `The fireball engulfs ${e.name} for ${d}.`, e instanceof Player ? "bad" : "good");
           if (e.hp <= 0) { if (e instanceof Monster) this.gainXp(p, e.maxHp); this.kill(e); }
@@ -3714,6 +3730,12 @@ export class Game {
       this.gainXp(p, Math.max(10, this.xpForLevel(p.level + 1) - p.xp + 1), false); // the wight's hoarded vitality flows back
       this.log.add("Stolen vitality floods back into you — you feel experienced!", "good");
       if (!p.intrinsics.has("drainResist") && ROT.RNG.getUniform() < 0.33) { p.intrinsics.add("drainResist"); this.log.add("Your spirit anchors — draining can't take hold. (drain resistance)", "good"); }
+    } else if (def.corpseEffect === "fire") {
+      if (!p.intrinsics.has("fireResist") && ROT.RNG.getUniform() < 0.5) { p.intrinsics.add("fireResist"); this.log.add("A furnace-heat settles in your core — fire resistance!", "good"); }
+    } else if (def.corpseEffect === "cold") {
+      if (!p.intrinsics.has("coldResist") && ROT.RNG.getUniform() < 0.5) { p.intrinsics.add("coldResist"); this.log.add("A deep chill you no longer feel — cold resistance!", "good"); }
+    } else if (def.corpseEffect === "shock") {
+      if (!p.intrinsics.has("shockResist") && ROT.RNG.getUniform() < 0.5) { p.intrinsics.add("shockResist"); this.log.add("Static crackles off you harmlessly — shock resistance!", "good"); }
     } else if (rotten && !(p.intrinsics.has("poisonResist") || p.ringPoisonRes) && ROT.RNG.getUniform() < 0.5) {
       p.illness = 8;
       this.log.add("That was rotten — a bad block churns in you. (cure it before it's fatal)", "bad");

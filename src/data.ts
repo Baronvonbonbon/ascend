@@ -261,7 +261,7 @@ export interface MonsterDef {
   cowardly?: boolean;    // flees once badly hurt
   heals?: boolean;       // a medic — mends wounded allies instead of fighting
   breeds?: boolean;      // multiplies when a pair of its kind is adjacent
-  corpseEffect?: "poisonous" | "petrify" | "speed" | "telepathy" | "levelup"; // what eating its corpse does
+  corpseEffect?: "poisonous" | "petrify" | "speed" | "telepathy" | "levelup" | "fire" | "cold" | "shock"; // what eating its corpse does
   corrodes?: boolean;    // its touch rusts/corrodes a worn armor piece
   drains?: boolean;      // a barrow-wight (wraith) — its touch saps an epoch (XP level); eat its corpse to regain one
   steals?: boolean;      // a thief — snatches a pack item and flees (the rug pull)
@@ -307,14 +307,14 @@ export const MONSTERS: MonsterDef[] = [
   { name: "a liquidity trap",  fname: "a trapper",       ch: "t", fg: "#6ec0a0", hp: 20, dmg: [3, 6], ai: "chase",  minDepth: 6, weight: 2, speed: 80, engulfs: true },
   { name: "a 51% attacker",    fname: "a berserker",     ch: "A", fg: "#e05050", hp: 16, dmg: [4, 8], ai: "chase",  minDepth: 6, weight: 2, speed: 110, inflict: "confuse" },
   { name: "a gag enforcer",    fname: "a silence wraith", ch: "q", fg: "#8090a0", hp: 18, dmg: [2, 4], ai: "chase",  minDepth: 7, weight: 2, speed: 95, silences: true },
-  { name: "a MEV bot",         fname: "a giant bat",     ch: "b", fg: "#80c060", hp: 6,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 3, speed: 135 },
+  { name: "a MEV bot",         fname: "a giant bat",     ch: "b", fg: "#80c060", hp: 6,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 3, speed: 135, corpseEffect: "shock" },
   { name: "a slashing daemon", fname: "a giant serpent", ch: "S", fg: "#e06060", hp: 14, dmg: [4, 8], ai: "chase",  minDepth: 5, weight: 2, muse: true },
   { name: "a darkpool eel",    fname: "an eel",          ch: ";", fg: "#40a080", hp: 14, dmg: [4, 9], ai: "chase",  minDepth: 5, weight: 2, speed: 110 },
   { name: "a were-validator",  fname: "a werewolf",      ch: "d", fg: "#c08040", hp: 18, dmg: [3, 6], ai: "chase",  minDepth: 6, weight: 2, speed: 110, infects: true },
   { name: "a sudo conjurer",   fname: "a summoner cultist", ch: "&", fg: "#c080e0", hp: 16, dmg: [2, 4], ai: "chase",  minDepth: 6, weight: 2, summons: true },
   { name: "a hex caster",      fname: "a sorcerer",      ch: "H", fg: "#b060d0", hp: 18, dmg: [3, 6], ai: "chase",  minDepth: 7, weight: 2, zaps: "sleep" },
   { name: "a thought leech",   fname: "a mind flayer",   ch: "u", fg: "#b060c0", hp: 20, dmg: [2, 5], ai: "chase",  minDepth: 8, weight: 2, speed: 95, drainsStat: true },
-  { name: "a finality dragon", fname: "an ancient dragon", ch: "D", fg: "#ff5040", hp: 34, dmg: [5, 9], ai: "chase",  minDepth: 6, weight: 1, breath: 16, fearless: true },
+  { name: "a finality dragon", fname: "an ancient dragon", ch: "D", fg: "#ff5040", hp: 34, dmg: [5, 9], ai: "chase",  minDepth: 6, weight: 1, breath: 16, fearless: true, corpseEffect: "fire" },
   { name: "a panic seller",    fname: "a craven goblin", ch: "p", fg: "#d0d060", hp: 5,  dmg: [1, 3], ai: "chase",  minDepth: 2, weight: 3, cowardly: true },
   { name: "a mercenary node",  fname: "a soldier",       ch: "@", fg: "#a0a070", hp: 16, dmg: [3, 7], ai: "chase",  minDepth: 4, weight: 2, wears: true },
   { name: "a malware fly",     fname: "a plague fly",    ch: "a", fg: "#9ac070", hp: 5,  dmg: [1, 3], ai: "chase",  minDepth: 4, weight: 2, speed: 120, diseases: true },
@@ -329,7 +329,7 @@ export const MONSTERS: MonsterDef[] = [
   { name: "a censorship demon",  fname: "a hellfire demon", ch: "X", fg: "#e03030", hp: 30, dmg: [5, 9], ai: "chase", minDepth: 10, weight: 2, breath: 14, fearless: true },
   // ── deep Gehennom (Phase 18) — the back half of the descent gets fresh terrors, not just scaled-up shallows ──
   { name: "a cartel enforcer",   fname: "an iron enforcer",   ch: "B", fg: "#d06030", hp: 34, dmg: [6, 10], ai: "chase", minDepth: 13, weight: 2, corrodes: true, speed: 85, muse: true },
-  { name: "a darkpool kraken",   fname: "a deepwater horror", ch: "Y", fg: "#5060c0", hp: 30, dmg: [5, 9],  ai: "chase", minDepth: 15, weight: 2, ranged: true, inflict: "confuse" },
+  { name: "a darkpool kraken",   fname: "a deepwater horror", ch: "Y", fg: "#5060c0", hp: 30, dmg: [5, 9],  ai: "chase", minDepth: 15, weight: 2, ranged: true, inflict: "confuse", corpseEffect: "cold" },
   { name: "a sovereign daemon",  fname: "an arch-lich",       ch: "Z", fg: "#e02020", hp: 42, dmg: [6, 11], ai: "chase", minDepth: 17, weight: 1, summons: true, fearless: true, muse: true, zaps: "blind" },
   // ── rival adventurers (mplayer.c) — other ascendants who came for the JAM and never left; deep only ──
   { name: "a rogue validator",   fname: "a rogue",            ch: "@", fg: "#c0b070", hp: 40, dmg: [6, 11], ai: "chase", minDepth: 20, weight: 1, steals: true, muse: true, speed: 110 },
