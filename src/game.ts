@@ -3205,6 +3205,28 @@ export class Game {
     return true;
   }
 
+  /** Which pack items a scroll of charging can top up: wands and the charged tools. */
+  canCharge(it: Item): boolean {
+    return it.type.kind === "wand" || it.type.id === "marker" || it.type.id === "trickbag";
+  }
+
+  /** Read a scroll of gas top-up onto a chosen wand/tool. Blessed adds more; cursed drains it. */
+  chargeItem(buc: Buc, target: Item): boolean {
+    if (!this.canCharge(target)) { this.log.add(`${this.ident.name(target.type)} holds no charge to top up.`, "dim"); return true; }
+    const cur = target.charges ?? 0;
+    if (buc === "cursed") {
+      target.charges = Math.max(0, cur - ROT.RNG.getUniformInt(1, 2));
+      this.log.add(`A cursed surge saps ${this.ident.name(target.type)} — now [${target.charges}].`, "bad");
+      if ((target.charges ?? 0) <= 0 && target.type.kind === "wand") { this.acting.inventory.remove(target); this.log.add(`The ${target.type.name} crumbles to dust, drained dry.`, "dim"); }
+      return true;
+    }
+    // The wand of wishing is too potent to top up freely — a single grudging charge at most.
+    const gain = target.type.id === "wand_wish" ? 1 : buc === "blessed" ? ROT.RNG.getUniformInt(4, 6) : ROT.RNG.getUniformInt(2, 4);
+    target.charges = cur + gain;
+    this.log.add(`${cap(this.ident.name(target.type))} thrums with fresh charge — now [${target.charges}].`, "good");
+    return true;
+  }
+
   // ── #loot: the multisig vault (bag of holding) ──
   /** An item can't be stashed while it's equipped (worn/wielded/on-hand/welded) or unpaid (no hiding the bill). */
   private lootLocked(p: Player, it: Item): boolean {

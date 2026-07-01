@@ -5,7 +5,7 @@ import { fp } from "./flavor";
 import { Inventory, Item } from "./inventory";
 import { bucDelta, ITEMS, ItemType, ArmorSlot, Idents } from "./items";
 
-type Verb = "wield" | "wear" | "takeoff" | "quaff" | "read" | "eat" | "drop" | "zap" | "throw" | "forge" | "apply" | "quiver" | "name" | "offhand" | "dip";
+type Verb = "wield" | "wear" | "takeoff" | "quaff" | "read" | "eat" | "drop" | "zap" | "throw" | "forge" | "apply" | "quiver" | "name" | "offhand" | "dip" | "charge";
 const VERB_PROMPT: Record<Verb, string> = {
   wield: "Wield which weapon?", wear: "Wear/put on which item?",
   quaff: "Quaff which potion?", read: "Read which scroll?",
@@ -15,6 +15,7 @@ const VERB_PROMPT: Record<Verb, string> = {
   quiver: "Ready which item in your quiver?",
   name: "Name which item?", offhand: "Wield which weapon in your off-hand?",
   dip: "Dip which item into the water?",
+  charge: "Charge which wand or tool?",
 };
 
 export abstract class Entity {
@@ -172,6 +173,7 @@ export class Player extends Entity {
   private pendingClose = false;             // close (C) — choosing a door direction
   private pendingKick = false;              // kick (K) — choosing a direction
   private pendingName: Item | null = null;  // name (N) — the item being labelled
+  private pendingCharge: Item | null = null; // charging scroll (read) — remembers its BUC for the target choice
   private nameBuf = "";                     // accumulating typed text for #name
   signalledThisTurn = false;                // co-op chat rate limit: one message per your own turn (reset in endTurn)
   private castMenu: string[] = [];          // spell ids in the current cast menu order
@@ -408,9 +410,11 @@ export class Player extends Entity {
   private resolveSelection(e: KeyboardEvent): boolean {
     const verb = this.pending!;
     this.pending = null;
+    const chargeScroll = this.pendingCharge; this.pendingCharge = null; // consume the remembered charging scroll this resolution
     if (e.key === "Escape") { this.game.log.add("Never mind.", "dim"); return false; }
     const item = /^[a-z]$/.test(e.key) ? this.inventory.byLetter(e.key) : undefined;
     if (!item) { this.game.log.add("No such item.", "dim"); return false; }
+    if (verb === "charge") return this.game.chargeItem(chargeScroll?.buc ?? "uncursed", item) ? this.endTurn() : false;
     if (verb === "zap") {
       if (item.type.kind !== "wand") { this.game.log.add("That is not a wand.", "dim"); return false; }
       if (item.type.id === "wand_wish") { // the wand of wishing prompts a wish instead of a direction
@@ -731,6 +735,14 @@ export class Player extends Entity {
         this.game.breakConduct(this, "illiterate"); // reading a scroll ends Illiterate
         ident.learn(t); this.game.log.add(`You read ${t.name}.`);
         this.inventory.remove(item); this.unequip(item);
+        // A scroll of charging needs a target — pick a wand or a charged tool to top up (the scroll is already spent).
+        if (t.effect === "charge") {
+          if (!this.inventory.items.some((it) => this.game.canCharge(it))) { this.game.log.add("Its magic finds nothing to charge, and dissipates.", "dim"); return this.endTurn(); }
+          this.pendingCharge = item; this.pending = "charge";
+          this.game.log.add(`${VERB_PROMPT.charge} (a-${this.inventory.letter(this.inventory.items.length - 1)}, Esc to cancel)`, "sys");
+          this.game.showInventory();
+          return false;
+        }
         this.game.applyEffect(t.effect!, item.buc); return this.endTurn();
       case "drop":
         if (t.id === "hodlstone" && item.buc === "cursed") { item.bucKnown = true; this.game.log.add(`The ${t.name} won't leave your pack — a cursed loadstone!`, "bad"); return this.endTurn(); }
