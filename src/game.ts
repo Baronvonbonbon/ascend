@@ -1563,7 +1563,7 @@ export class Game {
   /** A barracks: a garrison of armed mercenary nodes (the @ soldier line), with weapons + armor strewn about. */
   private makeBarracks(open: { x: number; y: number }[]): void {
     const soldier = MONSTERS.find((m) => m.fname === "a soldier") ?? this.pickMonster(this.player.depth);
-    const gear = ITEMS.filter((i) => i.kind === "weapon" || i.kind === "armor");
+    const gear = this.gearPool(this.player.depth);
     let n = 0;
     for (const p of open) {
       const r = ROT.RNG.getUniform();
@@ -1628,7 +1628,7 @@ export class Game {
       const r = ROT.RNG.getUniform();
       if (r < 0.3 && this.level.tileAt(p.x, p.y) === "floor" && !this.level.itemAt(p.x, p.y) && !(p.x === this.player.x && p.y === this.player.y)) this.level.tiles[p.y][p.x] = "water"; // a bog pool
       else if (r < 0.5) { this.monsters.push(new Monster(this, ROT.RNG.getUniform() < 0.55 ? eel : serpent, p.x, p.y)); beasts++; }
-      else if (r < 0.62 && !this.level.itemAt(p.x, p.y)) this.level.items.push({ x: p.x, y: p.y, type: pickItemType(), buc: rollBuc() });
+      else if (r < 0.62 && !this.level.itemAt(p.x, p.y)) this.level.items.push({ x: p.x, y: p.y, type: pickItemType(this.player.depth), buc: rollBuc() });
     }
     if (beasts) this.log.add("A dank, brackish reek wells through the wall — a drowned swamp, its bog pools (}) churning with eels and serpents.", "bad");
     // A consensus bridge across a bog pool, worked by a lever beside it (dbridge.c).
@@ -1670,7 +1670,7 @@ export class Game {
     for (const p of open) {
       const r = ROT.RNG.getUniform();
       if (r < 0.55) { this.monsters.push(new Monster(this, this.pickMonster(this.player.depth), p.x, p.y)); beasts++; }
-      else if (r < 0.8) this.level.items.push({ x: p.x, y: p.y, type: pickItemType(), buc: rollBuc() });
+      else if (r < 0.8) this.level.items.push({ x: p.x, y: p.y, type: pickItemType(this.player.depth), buc: rollBuc() });
     }
     if (beasts) this.log.add("A foul racket leaks through a doorway — a packed menagerie of the legacy stack, hoarding loot.", "bad");
   }
@@ -1681,7 +1681,7 @@ export class Game {
     for (const p of open) {
       if (p.x === center.x && p.y === center.y) continue;
       if (ROT.RNG.getUniform() < 0.45) {
-        const type = ROT.RNG.getUniform() < 0.3 ? ROT.RNG.getItem(ITEMS.filter((i) => isGear(i)))! : pickItemType();
+        const type = ROT.RNG.getUniform() < 0.3 ? ROT.RNG.getItem(this.gearPool(this.player.depth))! : pickItemType(this.player.depth);
         this.level.items.push({ x: p.x, y: p.y, type, buc: rollBuc() }); dropped++;
       }
     }
@@ -1873,7 +1873,7 @@ export class Game {
     const spots = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]];
     let dropped = 0, si = 0;
     for (let k = 0; k < n; k++) {
-      const type = ROT.RNG.getUniform() < 0.15 ? itemById("hodlstone")! : pickItemType();
+      const type = ROT.RNG.getUniform() < 0.15 ? itemById("hodlstone")! : pickItemType(this.acting.depth);
       while (si < spots.length) {
         const [dx, dy] = spots[si++];
         const x = p.x + dx, y = p.y + dy;
@@ -2275,7 +2275,7 @@ export class Game {
     p.luck = Math.min(13, p.luck + 3);
     p.intrinsics.add("poisonResist");
     if (!this.level.itemAt(p.x, p.y)) {
-      const prize = ROT.RNG.getItem(ITEMS.filter((i) => isGear(i)))!;
+      const prize = ROT.RNG.getItem(this.gearPool(this.acting.depth))!;
       this.level.items.push({ x: p.x, y: p.y, type: prize, enchant: 3, buc: "blessed", bucKnown: true });
       this.log.add(`A blessed ${prize.name} +3 manifests at your feet — your crowning gift.`, "good");
     }
@@ -2354,7 +2354,7 @@ export class Game {
     this.maybeCrown(p);
     const r = ROT.RNG.getUniform();
     if (r < 0.06 && !this.level.itemAt(p.x, p.y)) {
-      const prize = ROT.RNG.getItem(ITEMS.filter((i) => isGear(i)))!;
+      const prize = ROT.RNG.getItem(this.gearPool(this.acting.depth))!;
       this.level.items.push({ x: p.x, y: p.y, type: prize, enchant: ROT.RNG.getUniformInt(1, 2), buc: "blessed", bucKnown: true });
       this.log.add(`✦ Gavin bestows a gift upon the altar — a blessed ${prize.name}!`, "sys");
     } else if (r < 0.22) {
@@ -2904,7 +2904,7 @@ export class Game {
     const loot = this.currentChain?.loot ?? 1;
     const count = Math.round((3 + this.player.depth * 0.7) * loot);
     for (let i = 0; i < count; i++) {
-      const type = pickItemType();
+      const type = pickItemType(this.player.depth);
       let pos = this.level.randomFloor();
       let tries = 0;
       while (
@@ -4300,7 +4300,7 @@ export class Game {
         this.log.add(`${cap(m.name)} falls — and from its ash rises a wand of wishing. Vanishingly rare. Take it.`, "good");
       } else {
         // A boss drops a relic-grade prize: an enchanted piece of equipment.
-        const goodies = ITEMS.filter((i) => isGear(i));
+        const goodies = this.gearPool(this.player.depth);
         const prize = ROT.RNG.getItem(goodies)!;
         const enchant = ROT.RNG.getUniformInt(1, 3);
         if (!this.level.itemAt(m.x, m.y)) this.level.items.push({ x: m.x, y: m.y, type: prize, enchant, buc: "blessed", bucKnown: true });
@@ -4349,6 +4349,11 @@ export class Game {
     return pool[0];
   }
 
+  /** Random-gear pool: real weapons/armor (never the weight-0 unique artifacts), gated to this depth. */
+  private gearPool(depth = 99): ItemType[] {
+    return ITEMS.filter((i) => isGear(i) && i.weight > 0 && (i.minDepth ?? 0) <= depth);
+  }
+
   monsterAt(x: number, y: number): Monster | undefined {
     return this.monsters.find((m) => m.alive && m.x === x && m.y === y);
   }
@@ -4373,11 +4378,28 @@ export class Game {
     return false;
   }
 
+  /** Trap table: weight + earliest depth. Mild/harmless traps are common and shallow; the punishing
+   *  ones (land mine, magic, rolling boulder, level-teleport) are rare and gated deep, so a fresh
+   *  20-HP adventurer can't be one-shot in the first few floors. */
+  private static readonly TRAP_TABLE: { kind: TrapKind; weight: number; minDepth: number }[] = [
+    { kind: "gas", weight: 4, minDepth: 1 }, { kind: "dart", weight: 3, minDepth: 1 }, { kind: "squeak", weight: 3, minDepth: 1 },
+    { kind: "web", weight: 3, minDepth: 2 }, { kind: "slash", weight: 3, minDepth: 2 }, { kind: "reorg", weight: 2, minDepth: 2 },
+    { kind: "bear", weight: 2, minDepth: 3 }, { kind: "rust", weight: 2, minDepth: 3 }, { kind: "antimagic", weight: 2, minDepth: 3 }, { kind: "spikepit", weight: 2, minDepth: 3 },
+    { kind: "fire", weight: 2, minDepth: 4 }, { kind: "rockfall", weight: 2, minDepth: 4 }, { kind: "statue", weight: 2, minDepth: 5 },
+    { kind: "fork", weight: 1, minDepth: 5 }, { kind: "boulder", weight: 1, minDepth: 6 }, { kind: "magic", weight: 1, minDepth: 7 },
+    { kind: "landmine", weight: 1, minDepth: 8 },
+  ];
+
   private spawnTraps(): void {
     const count = 2 + Math.floor(this.player.depth * 0.8);
-    const kinds: TrapKind[] = ["gas", "slash", "reorg", "fork", "web", "dart", "antimagic", "statue", "fire", "rust", "bear", "landmine", "rockfall", "magic", "squeak", "spikepit", "boulder"];
+    const pool = Game.TRAP_TABLE.filter((t) => t.minDepth <= this.player.depth).map((t) => ({ ...t }));
     // trapdoors drop you a floor — only on the main relay descent, never where there's no floor below
-    if (!this.currentChain && !this.branch && this.player.depth < MAX_DEPTH) { kinds.push("trapdoor"); if (this.player.maxDepthReached >= 3) kinds.push("leveltp"); }
+    if (!this.currentChain && !this.branch && this.player.depth < MAX_DEPTH) {
+      pool.push({ kind: "trapdoor", weight: 2, minDepth: 1 });
+      if (this.player.maxDepthReached >= 4) pool.push({ kind: "leveltp", weight: 1, minDepth: 4 });
+    }
+    const totW = pool.reduce((s, t) => s + t.weight, 0);
+    const pick = (): TrapKind => { let r = ROT.RNG.getUniform() * totW; for (const t of pool) { r -= t.weight; if (r <= 0) return t.kind; } return pool[0].kind; };
     for (let i = 0; i < count; i++) {
       let pos = this.level.randomFloor();
       let tries = 0;
@@ -4386,7 +4408,7 @@ export class Game {
         pos = this.level.randomFloor(); tries++;
       }
       if (this.level.tileAt(pos.x, pos.y) === "floor")
-        this.level.traps.push({ x: pos.x, y: pos.y, kind: ROT.RNG.getItem(kinds)!, revealed: false });
+        this.level.traps.push({ x: pos.x, y: pos.y, kind: pick(), revealed: false });
     }
   }
 

@@ -52,6 +52,7 @@ export interface ItemType {
   skill?: string;          // weapon skill class (#enhance) — "blade" / "blunt"
   value?: number;          // gem — gold value when sold to the Marketmaker (worthless glass ≈ 0)
   weight: number;          // spawn weight
+  minDepth?: number;       // earliest depth this can random-spawn (powerful items stay out of the shallows)
 }
 
 export type EffectId = "heal" | "harm" | "strength" | "teleport" | "map" | "identify" | "enchant" | "cure" | "uncurse" | "blind" | "polyself" | "detect_obj" | "detect_trap" | "water" | "charge" | "scare" | "gold" | "clairvoyance" | "speed" | "gainlevel" | "enlighten" | "taming" | "fireburst" | "genocide";
@@ -64,7 +65,7 @@ export const ITEMS: ItemType[] = [
   { id: "whip",   kind: "weapon", name: "a slashing whip",     fname: "a bullwhip",          ch: ")", fg: "#a08050", dmg: [1, 4], skill: "blade", weight: 2 },
   { id: "shortsword", kind: "weapon", name: "a light client blade", fname: "a short sword",   ch: ")", fg: "#cfd6c0", dmg: [2, 5], skill: "blade", weight: 3 },
   { id: "spear",  kind: "weapon", name: "a sharding spear",     fname: "a spear",             ch: ")", fg: "#c0c0a0", dmg: [3, 6], skill: "blade", weight: 3 },
-  { id: "battleaxe", kind: "weapon", name: "a fork axe",        fname: "a battle-axe",        ch: ")", fg: "#d08060", dmg: [4, 10], skill: "blade", weight: 5 },
+  { id: "battleaxe", kind: "weapon", name: "a fork axe",        fname: "a battle-axe",        ch: ")", fg: "#d08060", dmg: [4, 10], skill: "blade", weight: 2, minDepth: 6 },
   { id: "quarterstaff", kind: "weapon", name: "a governance staff", fname: "a quarterstaff",  ch: ")", fg: "#b0906a", dmg: [3, 7], skill: "blunt", weight: 4 },
   { id: "flail",  kind: "weapon", name: "a slashing flail",     fname: "a morning star",      ch: ")", fg: "#c0a080", dmg: [4, 8], skill: "blunt", weight: 4 },
   // ── armor ── [ (seven slots — wear one of each)
@@ -77,9 +78,9 @@ export const ITEMS: ItemType[] = [
   { id: "boots",  kind: "armor",  name: "sync boots",          fname: "leather boots",       ch: "[", fg: "#a08060", ac: 1, slot: "boots",  weight: 2 },
   { id: "shield", kind: "armor",  name: "a firewall shield",   fname: "a kite shield",       ch: "[", fg: "#90a0c0", ac: 2, slot: "shield", weight: 3 },
   { id: "oilcloak", kind: "armor", name: "an oilskin cloak",   fname: "an oilskin cloak",    ch: "[", fg: "#c0b080", ac: 1, slot: "cloak",  weight: 2 }, // inherently rust/acid-proof (spawns proofed)
-  { id: "scale_red",  kind: "armor", name: "red validator scale",  fname: "red dragon scale mail",  ch: "[", fg: "#e05040", ac: 3, slot: "body", weight: 2 }, // fire resistance while worn
-  { id: "scale_white",kind: "armor", name: "white validator scale", fname: "white dragon scale mail", ch: "[", fg: "#c0e0f0", ac: 3, slot: "body", weight: 2 }, // cold resistance while worn
-  { id: "scale_blue", kind: "armor", name: "blue validator scale", fname: "blue dragon scale mail", ch: "[", fg: "#6080f0", ac: 3, slot: "body", weight: 2 }, // shock resistance while worn
+  { id: "scale_red",  kind: "armor", name: "red validator scale",  fname: "red dragon scale mail",  ch: "[", fg: "#e05040", ac: 3, slot: "body", weight: 1, minDepth: 10 }, // fire resistance while worn
+  { id: "scale_white",kind: "armor", name: "white validator scale", fname: "white dragon scale mail", ch: "[", fg: "#c0e0f0", ac: 3, slot: "body", weight: 1, minDepth: 10 }, // cold resistance while worn
+  { id: "scale_blue", kind: "armor", name: "blue validator scale", fname: "blue dragon scale mail", ch: "[", fg: "#6080f0", ac: 3, slot: "body", weight: 1, minDepth: 10 }, // shock resistance while worn
   // ── food ── %
   { id: "ration", kind: "food",   name: "a ration of cycles",  fname: "a food ration",       ch: "%", fg: "#c0a050", nutrition: 600, weight: 5 },
   { id: "crumb",  kind: "food",   name: "a stale block",       fname: "a stale crust",       ch: "%", fg: "#8a7a40", nutrition: 220, weight: 4 },
@@ -91,7 +92,7 @@ export const ITEMS: ItemType[] = [
   { id: "blind",  kind: "potion", name: "a potion of obfuscation", fname: "a potion of blindness", ch: "!", fg: "#707070", effect: "blind", weight: 2 },
   { id: "water",  kind: "potion", name: "a vial of testnet water", fname: "a potion of water",     ch: "!", fg: "#8ac0e0", effect: "water", weight: 4 }, // holy (blessed) / unholy (cursed) — consecrate on Gavin's altar; #dip gear to bless/curse it
   { id: "speed",  kind: "potion", name: "a potion of overclock",  fname: "a potion of speed",       ch: "!", fg: "#e0e060", effect: "speed",     weight: 3 },
-  { id: "gainlvl",kind: "potion", name: "a potion of epoch-up",   fname: "a potion of gain level",  ch: "!", fg: "#e0a0f0", effect: "gainlevel", weight: 2 },
+  { id: "gainlvl",kind: "potion", name: "a potion of epoch-up",   fname: "a potion of gain level",  ch: "!", fg: "#e0a0f0", effect: "gainlevel", weight: 2, minDepth: 5 },
   { id: "enlight",kind: "potion", name: "a potion of full-node sync", fname: "a potion of enlightenment", ch: "!", fg: "#a0e0e0", effect: "enlighten", weight: 2 },
   // ── scrolls ── ? (appearance randomised per game)
   { id: "tele",   kind: "scroll", name: "a scroll of teleport",     fname: "a scroll of teleportation", ch: "?", fg: "#c0c0e0", effect: "teleport", weight: 4 },
@@ -103,19 +104,19 @@ export const ITEMS: ItemType[] = [
   { id: "fork",   kind: "scroll", name: "a scroll of hard fork",      fname: "a scroll of polymorph",   ch: "?", fg: "#e090e0", effect: "polyself", weight: 2 },
   { id: "dobj",   kind: "scroll", name: "a scroll of ledger audit",   fname: "a scroll of treasure detection", ch: "?", fg: "#e8d070", effect: "detect_obj",  weight: 3 },
   { id: "dtrap",  kind: "scroll", name: "a scroll of exploit scan",   fname: "a scroll of trap detection",     ch: "?", fg: "#d09060", effect: "detect_trap", weight: 3 },
-  { id: "charge", kind: "scroll", name: "a scroll of gas top-up",     fname: "a scroll of charging",           ch: "?", fg: "#e0c080", effect: "charge",      weight: 3 },
+  { id: "charge", kind: "scroll", name: "a scroll of gas top-up",     fname: "a scroll of charging",           ch: "?", fg: "#e0c080", effect: "charge",      weight: 2, minDepth: 4 },
   { id: "scare",  kind: "scroll", name: "a scroll of FUD",            fname: "a scroll of scare monster",      ch: "?", fg: "#d0b0b0", effect: "scare",       weight: 3 },
   { id: "gold",   kind: "scroll", name: "a scroll of balance check",  fname: "a scroll of gold detection",     ch: "?", fg: "#e8d060", effect: "gold",        weight: 2 },
   { id: "clair",  kind: "scroll", name: "a scroll of remote view",    fname: "a scroll of clairvoyance",       ch: "?", fg: "#a0d0e0", effect: "clairvoyance", weight: 2 },
   { id: "tame",   kind: "scroll", name: "a scroll of delegation",     fname: "a scroll of taming",             ch: "?", fg: "#a0e0b0", effect: "taming",      weight: 1 },
   { id: "fireb",  kind: "scroll", name: "a scroll of immolation",     fname: "a scroll of fire",               ch: "?", fg: "#e06030", effect: "fireburst",   weight: 2 },
-  { id: "geno",   kind: "scroll", name: "a scroll of hard cap",       fname: "a scroll of genocide",           ch: "?", fg: "#f04040", effect: "genocide",    weight: 1 },
+  { id: "geno",   kind: "scroll", name: "a scroll of hard cap",       fname: "a scroll of genocide",           ch: "?", fg: "#f04040", effect: "genocide",    weight: 1, minDepth: 14 },
   // ── amulets ── " (passive while worn; put on with W, take off with T)
-  { id: "amulet_life",    kind: "amulet", name: "a recovery seed",   fname: "an amulet of life saving", ch: "\"", fg: "#f0d060", weight: 1 }, // crumbles to save you from one lethal blow
-  { id: "amulet_reflect", kind: "amulet", name: "a consensus mirror", fname: "an amulet of reflection",  ch: "\"", fg: "#b0e0e0", weight: 1 }, // rebounds rays/breath back at the source
-  { id: "amulet_esp",     kind: "amulet", name: "a mempool oracle",    fname: "an amulet of ESP",         ch: "\"", fg: "#c0a0e0", weight: 1 }, // telepathy while worn — sense every mind on the floor
-  { id: "amulet_breathe", kind: "amulet", name: "a liquidity lung",    fname: "an amulet of magical breathing", ch: "\"", fg: "#80c0e0", weight: 1 }, // wade through deep water unharmed
-  { id: "amulet_unchanging", kind: "amulet", name: "a finality lock",  fname: "an amulet of unchanging",  ch: "\"", fg: "#d0d0a0", weight: 1 }, // no polymorph/were-shift takes hold while worn
+  { id: "amulet_life",    kind: "amulet", name: "a recovery seed",   fname: "an amulet of life saving", ch: "\"", fg: "#f0d060", weight: 1, minDepth: 6 }, // crumbles to save you from one lethal blow
+  { id: "amulet_reflect", kind: "amulet", name: "a consensus mirror", fname: "an amulet of reflection",  ch: "\"", fg: "#b0e0e0", weight: 1, minDepth: 6 }, // rebounds rays/breath back at the source
+  { id: "amulet_esp",     kind: "amulet", name: "a mempool oracle",    fname: "an amulet of ESP",         ch: "\"", fg: "#c0a0e0", weight: 1, minDepth: 4 }, // telepathy while worn — sense every mind on the floor
+  { id: "amulet_breathe", kind: "amulet", name: "a liquidity lung",    fname: "an amulet of magical breathing", ch: "\"", fg: "#80c0e0", weight: 1, minDepth: 4 }, // wade through deep water unharmed
+  { id: "amulet_unchanging", kind: "amulet", name: "a finality lock",  fname: "an amulet of unchanging",  ch: "\"", fg: "#d0d0a0", weight: 1, minDepth: 5 }, // no polymorph/were-shift takes hold while worn
   // ── rings ── = (passive while worn; put on with W)
   { id: "ring_res",   kind: "ring", name: "a ring of resilience",    fname: "a ring of protection",   ch: "=", fg: "#c0a0e0", weight: 2 },
   { id: "ring_regen", kind: "ring", name: "a ring of regeneration",  fname: "a ring of regeneration", ch: "=", fg: "#a0e0a0", weight: 2 },
@@ -145,7 +146,7 @@ export const ITEMS: ItemType[] = [
   { id: "wand_cold",   kind: "wand", name: "a wand of cryo-slash",   fname: "a wand of cold",          ch: "/", fg: "#90d0f0", weight: 2 }, // a cold ray (may slow)
   { id: "wand_lightning", kind: "wand", name: "a wand of shock",     fname: "a wand of lightning",     ch: "/", fg: "#f0f080", weight: 2 }, // a lightning ray (may blind)
   { id: "wand_missile", kind: "wand", name: "a wand of force",       fname: "a wand of magic missile", ch: "/", fg: "#c0c0f0", weight: 2 }, // a reliable force ray
-  { id: "wand_death",  kind: "wand", name: "a wand of annihilation", fname: "a wand of death",         ch: "/", fg: "#ff3030", weight: 1 }, // unwrites a single foe (bosses endure)
+  { id: "wand_death",  kind: "wand", name: "a wand of annihilation", fname: "a wand of death",         ch: "/", fg: "#ff3030", weight: 1, minDepth: 10 }, // unwrites a single foe (bosses endure)
   { id: "wand_open",   kind: "wand", name: "a wand of unlock",       fname: "a wand of opening",        ch: "/", fg: "#b0a060", weight: 2 }, // unlocks a door/chest
   { id: "wand_light",  kind: "wand", name: "a wand of floodlight",   fname: "a wand of light",          ch: "/", fg: "#fff0a0", weight: 2 }, // floods the area with light
   { id: "wand_secret", kind: "wand", name: "a wand of deep scan",    fname: "a wand of secret door detection", ch: "/", fg: "#c0a0e0", weight: 1 }, // reveals hidden doors + traps
@@ -280,9 +281,10 @@ export function itemById(id: string): ItemType | undefined { return BY_ID.get(id
 export const GEAR_KINDS: ReadonlySet<ItemKind> = new Set(["weapon", "armor", "ring", "wand"]);
 export function isGear(t: ItemType): boolean { return GEAR_KINDS.has(t.kind); }
 
-export function pickItemType(): ItemType {
-  const total = ITEMS.reduce((s, it) => s + it.weight, 0);
+export function pickItemType(depth = 99): ItemType {
+  const pool = ITEMS.filter((it) => it.weight > 0 && (it.minDepth ?? 0) <= depth);
+  const total = pool.reduce((s, it) => s + it.weight, 0);
   let r = ROT.RNG.getUniform() * total;
-  for (const it of ITEMS) { r -= it.weight; if (r <= 0) return it; }
-  return ITEMS[0];
+  for (const it of pool) { r -= it.weight; if (r <= 0) return it; }
+  return pool[0] ?? ITEMS[0];
 }
