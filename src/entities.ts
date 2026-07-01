@@ -5,7 +5,7 @@ import { fp } from "./flavor";
 import { Inventory, Item } from "./inventory";
 import { bucDelta, ITEMS, ItemType, ArmorSlot, Idents } from "./items";
 
-type Verb = "wield" | "wear" | "takeoff" | "quaff" | "read" | "eat" | "drop" | "zap" | "throw" | "forge" | "apply" | "quiver" | "name" | "offhand";
+type Verb = "wield" | "wear" | "takeoff" | "quaff" | "read" | "eat" | "drop" | "zap" | "throw" | "forge" | "apply" | "quiver" | "name" | "offhand" | "dip";
 const VERB_PROMPT: Record<Verb, string> = {
   wield: "Wield which weapon?", wear: "Wear/put on which item?",
   quaff: "Quaff which potion?", read: "Read which scroll?",
@@ -14,6 +14,7 @@ const VERB_PROMPT: Record<Verb, string> = {
   takeoff: "Take off which worn piece?", apply: "Apply which tool?",
   quiver: "Ready which item in your quiver?",
   name: "Name which item?", offhand: "Wield which weapon in your off-hand?",
+  dip: "Dip which item into the water?",
 };
 
 export abstract class Entity {
@@ -360,7 +361,11 @@ export class Player extends Entity {
         this.pendingOpen = true; this.game.log.add("Open in which direction? (a move key, Esc to cancel)", "sys"); return false;
       case "C": this.pendingClose = true; this.game.log.add("Close a door in which direction? (a move key, Esc to cancel)", "sys"); return false;
       case "K": this.pendingKick = true; this.game.log.add("Kick in which direction? (a move key, Esc to cancel)", "sys"); return false;
-      case "D": return this.game.dipWeapon(this) ? this.endTurn() : false;
+      case "D":
+        // On a faucet, dip your weapon (the lawful relic awaits). Otherwise, dip an item into held water.
+        if (this.game.level.tileAt(this.x, this.y) === "faucet") return this.game.dipWeapon(this) ? this.endTurn() : false;
+        if (this.inventory.items.some((it) => it.type.id === "water")) return this.startSelect("dip");
+        this.game.log.add("You've no faucet here and no water to dip into.", "dim"); return false;
       case "N": return this.startSelect("name");
       case "^": this.game.identifyTrap(this); return false;
       case "X": // toggle two-weapon: off → choose an off-hand; on → sheathe it
@@ -436,6 +441,7 @@ export class Player extends Entity {
       this.game.log.add(`Call ${this.game.ident.name(item.type)}: ${this.nameBuf}_  (type a name, Enter to set, Esc to cancel)`, "sys");
       return false;
     }
+    if (verb === "dip") return this.game.dipInWater(this, item) ? this.endTurn() : false;
     if (verb === "offhand") {
       if (item.type.kind !== "weapon") { this.game.log.add("Only a weapon can go in your off-hand.", "dim"); return false; }
       if (item === this.weapon) { this.game.log.add("That's your main weapon already.", "dim"); return false; }

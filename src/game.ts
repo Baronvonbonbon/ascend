@@ -1676,6 +1676,28 @@ export class Game {
     return true;
   }
 
+  /** `#dip` (D) off a faucet — dip a chosen item into a held vial of water. Holy water (blessed)
+   *  blesses & uncurses it; unholy water (cursed) curses it; plain water just wets it. One vial spent. */
+  dipInWater(p: Player, target: Item): boolean {
+    // Pick a vial to dip into — prefer a known holy one, then a known unholy one, then any (not the target itself).
+    const waters = p.inventory.items.filter((it) => it.type.id === "water" && it !== target);
+    if (waters.length === 0) { this.log.add("You've no other vial of water to dip into.", "dim"); return false; }
+    const vial = waters.find((w) => w.bucKnown && w.buc === "blessed") ?? waters.find((w) => w.bucKnown && w.buc === "cursed") ?? waters[0];
+    const tname = this.ident.name(target.type);
+    this.ident.learn(vial.type); vial.bucKnown = true; // dipping reveals what the water was
+    p.inventory.remove(vial);
+    if (vial.buc === "blessed") {
+      target.buc = "blessed"; target.bucKnown = true; // blessing also uncurses — a welded piece comes loose
+      this.log.add(`You dip ${tname} into the holy water — it glows amber. It is now blessed.`, "good");
+    } else if (vial.buc === "cursed") {
+      target.buc = "cursed"; target.bucKnown = true;
+      this.log.add(`You dip ${tname} into the unholy water — a black flicker crawls over it. It is now cursed.`, "bad");
+    } else {
+      this.log.add(`You dip ${tname} into the testnet water. It gets wet. Nothing more.`, "dim");
+    }
+    return true;
+  }
+
   /** `^` — identify the trap underfoot and any revealed traps beside you. A free survey. */
   identifyTrap(p: Player): void {
     const here = this.level.trapAt(p.x, p.y);
@@ -3373,10 +3395,16 @@ export class Game {
     }
     // Gavin's altar reveals an item's sanctity when you set it down upon it.
     if (this.level.tileAt(x, y) === "altar") {
-      fi.bucKnown = true;
-      const b = item.buc ?? "uncursed";
-      const glow = b === "blessed" ? "an amber glow" : b === "cursed" ? "a black flicker" : "no glow at all";
-      this.log.add(`The ${this.ident.name(item.type)} rests on the altar — ${glow}. It is ${b}.`, b === "cursed" ? "bad" : "sys");
+      // A vial of water left on the altar is consecrated into holy water.
+      if (item.type.id === "water" && item.buc !== "blessed") {
+        fi.buc = "blessed"; fi.bucKnown = true; this.ident.learn(item.type);
+        this.log.add("The water rests on the altar and is consecrated — holy water, now blessed.", "good");
+      } else {
+        fi.bucKnown = true;
+        const b = item.buc ?? "uncursed";
+        const glow = b === "blessed" ? "an amber glow" : b === "cursed" ? "a black flicker" : "no glow at all";
+        this.log.add(`The ${this.ident.name(item.type)} rests on the altar — ${glow}. It is ${b}.`, b === "cursed" ? "bad" : "sys");
+      }
     }
     this.level.items.push(fi);
   }
@@ -3430,6 +3458,18 @@ export class Game {
       case "harm": {
         p.hp -= ROT.RNG.getUniformInt(4, 8);
         this.log.add("A reorg tears through you!", "bad"); break;
+      }
+      case "water": {
+        // Holy water (blessed) purifies; unholy water (cursed) burns; plain water is just water.
+        if (buc === "blessed") {
+          if (p.poison > 0 || p.confused > 0 || p.stoning > 0 || p.illness > 0 || p.blind > 0) {
+            p.poison = 0; p.confused = 0; p.stoning = 0; p.illness = 0; p.blind = 0;
+            this.log.add("You drink the holy water — it purifies you, body and ledger.", "good");
+          } else { p.hp = Math.min(p.maxHp, p.hp + ROT.RNG.getUniformInt(3, 6)); this.log.add("You drink the holy water. A blessed calm settles over you.", "good"); }
+        } else if (buc === "cursed") {
+          p.hp -= ROT.RNG.getUniformInt(3, 6); this.log.add("You drink the unholy water — it sears going down!", "bad");
+        } else this.log.add("You drink the testnet water. Refreshing, and nothing more.", "dim");
+        break;
       }
       case "strength": {
         p.maxHp += 3; p.hp += 3;

@@ -54,7 +54,7 @@ export interface ItemType {
   weight: number;          // spawn weight
 }
 
-export type EffectId = "heal" | "harm" | "strength" | "teleport" | "map" | "identify" | "enchant" | "cure" | "uncurse" | "blind" | "polyself" | "detect_obj" | "detect_trap";
+export type EffectId = "heal" | "harm" | "strength" | "teleport" | "map" | "identify" | "enchant" | "cure" | "uncurse" | "blind" | "polyself" | "detect_obj" | "detect_trap" | "water";
 
 export const ITEMS: ItemType[] = [
   // ── weapons ── )
@@ -78,6 +78,7 @@ export const ITEMS: ItemType[] = [
   { id: "harm",   kind: "potion", name: "a potion of reorg",    fname: "a potion of harming",     ch: "!", fg: "#c75c5c", effect: "harm",     weight: 3 },
   { id: "boost",  kind: "potion", name: "a potion of staking",  fname: "a potion of gain strength", ch: "!", fg: "#e0b94d", effect: "strength", weight: 3 },
   { id: "blind",  kind: "potion", name: "a potion of obfuscation", fname: "a potion of blindness", ch: "!", fg: "#707070", effect: "blind", weight: 2 },
+  { id: "water",  kind: "potion", name: "a vial of testnet water", fname: "a potion of water",     ch: "!", fg: "#8ac0e0", effect: "water", weight: 4 }, // holy (blessed) / unholy (cursed) — consecrate on Gavin's altar; #dip gear to bless/curse it
   // ── scrolls ── ? (appearance randomised per game)
   { id: "tele",   kind: "scroll", name: "a scroll of teleport",     fname: "a scroll of teleportation", ch: "?", fg: "#c0c0e0", effect: "teleport", weight: 4 },
   { id: "map",    kind: "scroll", name: "a scroll of light client", fname: "a scroll of magic mapping", ch: "?", fg: "#9ac0e0", effect: "map",      weight: 4 },
