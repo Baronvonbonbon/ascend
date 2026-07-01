@@ -1589,6 +1589,37 @@ export class Game {
       else if (r < 0.62 && !this.level.itemAt(p.x, p.y)) this.level.items.push({ x: p.x, y: p.y, type: pickItemType(), buc: rollBuc() });
     }
     if (beasts) this.log.add("A dank, brackish reek wells through the wall — a drowned swamp, its bog pools (}) churning with eels and serpents.", "bad");
+    // A consensus bridge across a bog pool, worked by a lever beside it (dbridge.c).
+    const pool = open.find((p) => this.level.tileAt(p.x, p.y) === "water");
+    if (pool) {
+      const leverSpot = open.find((q) => this.level.tileAt(q.x, q.y) === "floor" && Math.max(Math.abs(q.x - pool.x), Math.abs(q.y - pool.y)) <= 2 && !this.level.itemAt(q.x, q.y));
+      if (leverSpot) {
+        this.level.tiles[pool.y][pool.x] = "drawbridge";
+        this.level.tiles[leverSpot.y][leverSpot.x] = "lever";
+        this.level.drawbridges.push({ x: pool.x, y: pool.y });
+        this.log.add("A consensus bridge (=) spans the muck, a lever (|) beside it. (walk into the lever to raise or lower it)", "sys");
+      }
+    }
+  }
+
+  /** Walk into a lever: raise/lower every consensus bridge on the floor. A raising span crushes whoever stands on it. */
+  pullLever(p: Player): boolean {
+    if (this.level.drawbridges.length === 0) { this.log.add("You throw the lever, but it works nothing here.", "dim"); return true; }
+    let raised = 0, lowered = 0;
+    for (const b of this.level.drawbridges) {
+      const t = this.level.tileAt(b.x, b.y);
+      if (t === "drawbridge") {
+        // raising: crush anyone on the span
+        const victim = this.monsterAt(b.x, b.y);
+        if (victim) { this.log.add(`The rising bridge crushes ${victim.name}!`, "good"); victim.hp = 0; this.gainXp(p, victim.maxHp); this.kill(victim); }
+        for (const pl of this.playersHere()) if (pl.x === b.x && pl.y === b.y) { this.log.add(`${this.sub(pl)} ${this.verbS(pl, "are")} crushed under the rising bridge!`, "bad", pl); pl.hp = 0; this.killPlayer(pl); }
+        this.level.tiles[b.y][b.x] = "drawbridgeUp"; raised++;
+      } else if (t === "drawbridgeUp") { this.level.tiles[b.y][b.x] = "drawbridge"; lowered++; }
+    }
+    this.recomputeFOV();
+    this.log.add(raised ? `The consensus bridge groans upward — the span is raised.` : `The consensus bridge settles down — the span is lowered.`, "sys");
+    this.draw();
+    return true;
   }
 
   /** A zoo: a room packed with monsters guarding scattered loot (an airdrop trap room). */
@@ -2030,6 +2061,10 @@ export class Game {
       water: "open water — too deep to wade; find a causeway or jump (XCM)",
       branchDown: "a branch-stair into the Storage Caverns — > to descend",
       pit: "a chasm — impassable; shove a boulder into it to bridge across",
+      drawbridge: "a consensus bridge, lowered — walk across",
+      drawbridgeUp: "a consensus bridge, raised — impassable; throw its lever to lower it",
+      lever: "a lever — walk into it to raise or lower the bridge",
+      sink: "a burn sink",
     };
     this.log.add(`You see ${names[t!] ?? "nothing notable"}.`, "dim");
   }

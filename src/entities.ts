@@ -847,6 +847,7 @@ export class Player extends Entity {
     const ally = this.game.otherPlayerAt(this, nx, ny);
     // Doors: a closed one you push open (a turn, then walk through); a locked one you kick.
     const tile = this.game.level.tileAt(nx, ny);
+    if (tile === "lever") return this.game.pullLever(this) ? this.endTurn() : false; // throw the lever — raise/lower the bridge
     if (tile === "doorClosed") {
       this.game.level.tiles[ny][nx] = "door";
       this.game.recomputeFOV();

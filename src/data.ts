@@ -17,7 +17,7 @@ export const COLORS = {
   dim:       "#6c6a60",
 };
 
-export type TileType = "wall" | "floor" | "door" | "doorClosed" | "doorLocked" | "doorHidden" | "stairsDown" | "stairsUp" | "altar" | "portal" | "faucet" | "throne" | "sink" | "vibrating" | "water" | "branchDown" | "pit";
+export type TileType = "wall" | "floor" | "door" | "doorClosed" | "doorLocked" | "doorHidden" | "stairsDown" | "stairsUp" | "altar" | "portal" | "faucet" | "throne" | "sink" | "vibrating" | "water" | "branchDown" | "pit" | "drawbridge" | "drawbridgeUp" | "lever";
 
 export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: string }> = {
   wall:       { ch: "#", fg: COLORS.wall,   fgDim: COLORS.wallDim },
@@ -37,6 +37,9 @@ export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: strin
   water:      { ch: "}", fg: "#3f7ad0",     fgDim: "#1d3a66" }, // open water — impassable; cross by causeway or XCM jump (the Liquidity Pools)
   branchDown: { ch: ">", fg: "#c07a30",     fgDim: "#5a3a18" }, // a craggy side-stair into a branch (the Storage Caverns) — copper, not the gold main stair
   pit:        { ch: "^", fg: "#6a78b0",     fgDim: "#33415e" }, // a chasm (Consensus Vault) — impassable; shove a boulder in to fill it
+  drawbridge: { ch: "=", fg: "#9a7a4a",     fgDim: "#4a3a22" }, // a consensus bridge, lowered — walk across
+  drawbridgeUp: { ch: "▚", fg: "#9a7a4a",   fgDim: "#4a3a22" }, // raised — an impassable span (blocks passage + sight)
+  lever:      { ch: "|", fg: "#d0b040",     fgDim: "#665820" }, // a lever — walk into it to raise/lower the bridge
 };
 
 export const MAX_DEPTH = 25; // the foot of the relay — the vibrating square; the Invocation opens Gehennom below (NetHack-scale ~25-floor main descent)

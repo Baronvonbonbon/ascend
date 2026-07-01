@@ -21,6 +21,7 @@ export class Level {
   lit: boolean[][] = [];         // lit tiles (in lit rooms) — visible at any LOS distance; dark tiles need a light
   items: FloorItem[] = [];
   graves: { x: number; y: number; label: string }[] = []; // bones of fallen heroes
+  drawbridges: { x: number; y: number }[] = []; // consensus-bridge spans a lever raises/lowers (dbridge.c)
   traps: Trap[] = [];
   engravings: Engraving[] = []; // Gray-Paper wards scratched in the dust
   boulders: { x: number; y: number }[] = []; // pushable blocks (Sokoban-flavor)
@@ -315,7 +316,7 @@ export class Level {
   private lightPasses(x: number, y: number): boolean {
     const t = this.tiles[y]?.[x];
     // sight crosses open water (you see the far shore) but you cannot walk into it
-    return t === "floor" || t === "door" || t === "stairsDown" || t === "stairsUp" || t === "altar" || t === "portal" || t === "faucet" || t === "throne" || t === "sink" || t === "vibrating" || t === "water" || t === "branchDown" || t === "pit";
+    return t === "floor" || t === "door" || t === "stairsDown" || t === "stairsUp" || t === "altar" || t === "portal" || t === "faucet" || t === "throne" || t === "sink" || t === "vibrating" || t === "water" || t === "branchDown" || t === "pit" || t === "drawbridge" || t === "lever";
   }
 
   isPassable(x: number, y: number): boolean {
