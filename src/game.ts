@@ -3285,6 +3285,26 @@ export class Game {
     return true;
   }
 
+  /** `a` a drum of consensus (instrument) — a martial roll; nearby foes waver and recoil. Reusable. */
+  applyDrum(p: Player): boolean {
+    let n = 0;
+    for (const m of this.monsters) {
+      if (!m.alive || m.peaceful || m.def.boss || m.def.fearless) continue;
+      if (Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) <= 6) { m.frightened = Math.max(m.frightened, 5); n++; }
+    }
+    this.log.add(n ? `You beat the drum of consensus — a rolling thunder rolls out; ${n} foe${n > 1 ? "s" : ""} waver.` : "You beat the drum of consensus. It echoes through empty halls.", n ? "good" : "dim");
+    return true;
+  }
+
+  /** `a` a towel — wipe a blinding off your face, or bind it over your eyes for ESP scanning. */
+  applyTowel(p: Player): boolean {
+    if (p.blindfolded) { p.blindfolded = false; p.blind = 0; this.recomputeFOV(); this.log.add("You unbind the towel — your eyes open again.", "good"); return true; }
+    if (p.blind > 0) { p.blind = 0; this.recomputeFOV(); this.log.add("You wipe your face with the towel — sight returns.", "good"); return true; }
+    p.blindfolded = true; p.blind = Math.max(p.blind, 1); this.recomputeFOV();
+    this.log.add(p.intrinsics.has("telepathy") ? "You bind the towel over your eyes — blind to the world, but your mind's eye opens wide." : "You bind the towel over your eyes — blind now (of use only with telepathy). Apply it again to remove it.", p.intrinsics.has("telepathy") ? "good" : "dim");
+    return true;
+  }
+
   /** `a` a recall beacon (magic whistle) — blink your nominator to your side. */
   applyWhistle(p: Player): boolean {
     const pet = this.pet;

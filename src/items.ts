@@ -61,6 +61,7 @@ export const ITEMS: ItemType[] = [
   { id: "dagger", kind: "weapon", name: "a debug dagger",      fname: "a dagger",            ch: ")", fg: "#cfcf9a", dmg: [2, 4], skill: "blade", weight: 5 },
   { id: "sword",  kind: "weapon", name: "a consensus sword",   fname: "a long sword",        ch: ")", fg: "#dfe6f0", dmg: [3, 6], skill: "blade", weight: 3 },
   { id: "mace",   kind: "weapon", name: "a validator's mace",  fname: "a war mace",          ch: ")", fg: "#c0a060", dmg: [4, 9], skill: "blunt", weight: 2 },
+  { id: "whip",   kind: "weapon", name: "a slashing whip",     fname: "a bullwhip",          ch: ")", fg: "#a08050", dmg: [1, 4], skill: "blade", weight: 2 },
   // ── armor ── [ (seven slots — wear one of each)
   { id: "shirt",  kind: "armor",  name: "a hashguard shirt",   fname: "a mail shirt",        ch: "[", fg: "#a0b0a0", ac: 1, slot: "shirt",  weight: 3 },
   { id: "vest",   kind: "armor",  name: "a firewall vest",     fname: "a leather cuirass",   ch: "[", fg: "#9ac0c0", ac: 2, slot: "body",   weight: 5 },
@@ -145,6 +146,8 @@ export const ITEMS: ItemType[] = [
   { id: "tinkit",  kind: "tool", name: "a cold-storage kit",    fname: "a tinning kit",       ch: "(", fg: "#b0c0b0", weight: 2 }, // apply on a corpse underfoot — seal it into a tin (charged)
   { id: "whistle", kind: "tool", name: "a recall beacon",       fname: "a magic whistle",     ch: "(", fg: "#d0d0e0", weight: 1 }, // apply — blink your nominator to your side
   { id: "leash",   kind: "tool", name: "a delegation cord",     fname: "a leash",             ch: "(", fg: "#a08050", weight: 1 }, // apply — tether your nominator so it keeps to your side
+  { id: "drum",    kind: "tool", name: "a drum of consensus",   fname: "a drum",              ch: "(", fg: "#c09050", weight: 2 }, // apply — beat it: nearby foes waver and recoil (reusable)
+  { id: "towel",   kind: "tool", name: "a microfibre cloth",    fname: "a towel",             ch: "(", fg: "#d0d0c0", weight: 1 }, // apply — wipe your face, or bind it over your eyes (ESP scanning with telepathy)
   { id: "lamp",    kind: "tool", name: "a block explorer",    fname: "an oil lamp",         ch: "(", fg: "#e0d060", weight: 3 }, // apply to light/douse — full sight in the dark
   { id: "vault",   kind: "tool", name: "a multisig vault",    fname: "a bag of holding",    ch: "(", fg: "#d0c060", weight: 2 }, // bag of holding — #loot to stash beyond the pack
   { id: "trickbag", kind: "tool", name: "a faucet bag",        fname: "a bag of tricks",     ch: "(", fg: "#c060c0", weight: 2 }, // bag of tricks — apply to spit out a monster (charged)

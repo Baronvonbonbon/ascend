@@ -82,6 +82,7 @@ export class Player extends Entity {
   stoning = 0;         // turns until you freeze solid (petrification) — cure fast
   illness = 0;         // turns until food poisoning kills you — cure fast
   blind = 0;           // turns of blindness — FOV shrinks to your fingertips
+  blindfolded = false; // a towel bound over the eyes — sustained blindness (ESP scanning with telepathy)
   paralyzed = 0;       // turns frozen by a gaze (floating eye) — you auto-pass, helpless
   webbed = 0;          // turns caught in a honeypot web — struggle (STR) to tear free before you can move
   silenced = 0;        // turns of magical silence — can't cast extrinsics; in co-op, can't be heard (no chat)
@@ -270,7 +271,8 @@ export class Player extends Entity {
     }
     if (this.confused > 0 && --this.confused === 0) this.game.log.add("Your head clears.", "dim");
     if (this.silenced > 0 && --this.silenced === 0) this.game.log.add(`${this.name === "you" ? "Your voice returns" : this.name + "'s voice returns"} — the silence lifts.`, "good");
-    if (this.blind > 0 && --this.blind === 0) { this.game.log.add(`${this.name === "you" ? "Your sight returns" : this.name + "'s sight returns"}.`, "good"); this.game.recomputeFOV(); }
+    if (this.blindfolded) this.blind = Math.max(this.blind, 1); // a bound towel keeps you blind until you remove it
+    else if (this.blind > 0 && --this.blind === 0) { this.game.log.add(`${this.name === "you" ? "Your sight returns" : this.name + "'s sight returns"}.`, "good"); this.game.recomputeFOV(); }
     // Petrification & illness are countdowns you must out-race (prayer / a cure).
     if (this.stoning > 0 && --this.stoning === 0) {
       this.game.log.add(`${this.name === "you" ? "You freeze" : this.name + " freezes"} solid — ${fp("turned to stone", "finality denied")}.`, "bad");
@@ -489,6 +491,8 @@ export class Player extends Entity {
       if (id === "touchstone") return this.game.appraiseGems(this) ? this.endTurn() : false;
       if (id === "crystal") return this.game.applyCrystalBall(this, item) ? this.endTurn() : false;
       if (id === "tinkit") return this.game.applyTinningKit(this, item) ? this.endTurn() : false;
+      if (id === "drum") return this.game.applyDrum(this) ? this.endTurn() : false;
+      if (id === "towel") return this.game.applyTowel(this) ? this.endTurn() : false;
       if (id === "whistle") return this.game.applyWhistle(this) ? this.endTurn() : false;
       if (id === "leash") return this.game.applyLeash() ? this.endTurn() : false;
       if (id === "grease") {
