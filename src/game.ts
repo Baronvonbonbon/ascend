@@ -2133,6 +2133,14 @@ export class Game {
   /** `;` — farlook the tile in a direction (monster, item, or terrain). A free survey. */
   lookAt(x: number, y: number): void {
     if (!this.level.tileAt(x, y)) { this.log.add("That's beyond the dungeon's edge.", "dim"); return; }
+    const pet = this.pet;
+    if (pet && pet.alive && pet.x === x && pet.y === y) {
+      const hb = pet.nutrition <= 0 ? "starving" : pet.nutrition < 60 ? "weak with hunger" : pet.nutrition < 250 ? "hungry" : pet.nutrition > 1000 ? "well-fed" : "fed";
+      const lb = pet.loyalty >= 16 ? "devoted" : pet.loyalty >= 10 ? "loyal" : pet.loyalty >= 5 ? "wary" : "restive";
+      const carry = pet.carrying ? `, carrying ${this.ident.name(pet.carrying.type)}` : "";
+      this.log.add(`You see ${pet.name} — ${lb}, ${hb}${carry}.`, "sys");
+      return;
+    }
     const m = this.monsterAt(x, y);
     if (m && (m.revealed || !m.def.mimic)) {
       const r = m.hp / m.maxHp;
@@ -2637,6 +2645,7 @@ export class Game {
     else if (d === this.pet) this.log.add(`${cap(a.name)} mauls ${this.pet?.name ?? fp("your hound", "your nominator")} for ${dmg}.`, "bad", who);
     if (d.hp <= 0) {
       if (a instanceof Player && d instanceof Monster) this.gainXp(a, d.maxHp); // XP = the foe's vitality
+      if (a === this.pet && this.pet) this.pet.loyalty = Math.min(20, this.pet.loyalty + 1); // a kill for you deepens its devotion
       this.kill(d);
     }
     // #twoweapon: a lighter off-hand follow-up if the foe still stands.
@@ -3053,6 +3062,13 @@ export class Game {
     for (let step = 0; step < 8; step++) {
       x += dx; y += dy;
       if (!this.level.isPassable(x, y)) break; // hit a wall — stops short
+      // Toss food to your nominator — it catches the morsel mid-air and grows devoted.
+      const pet = this.pet;
+      if (pet && pet.alive && pet.x === x && pet.y === y && t.kind === "food") {
+        pet.feed(t.nutrition ?? 120, 2 + (item.buc === "blessed" ? 1 : 0));
+        this.log.add(`You toss ${this.ident.name(t)} to ${pet.name} — it snaps it up and looks devoted (loyalty ${pet.loyalty}).`, "good");
+        return; // consumed
+      }
       const m = this.monsterAt(x, y);
       if (m) { hit = m; break; }
       lx = x; ly = y;
@@ -3580,6 +3596,90 @@ export class Game {
     return true;
   }
 
+  // ── the nominator's belly, devotion & fetch (Pet depth) ────────────────────
+  /** A morsel the pet may eat where it stands (food scrap or a fresh, non-petrifying corpse). */
+  petEdibleAt(x: number, y: number): FloorItem | null {
+    const it = this.level.itemAt(x, y);
+    if (!it) return null;
+    if (it.corpse) return it.corpse.def.corpseEffect === "petrify" ? null : it; // it senses the killing meat
+    return it.type.kind === "food" ? it : null;
+  }
+
+  /** The closest morsel the pet can reach within `range` (Chebyshev), or null. */
+  petNearestEdible(x: number, y: number, range: number): { x: number; y: number } | null {
+    let best: FloorItem | null = null, bd = range + 1;
+    for (const it of this.level.items) {
+      const d = Math.max(Math.abs(it.x - x), Math.abs(it.y - y));
+      if (d < bd && this.petEdibleAt(it.x, it.y)) { bd = d; best = it; }
+    }
+    return best ? { x: best.x, y: best.y } : null;
+  }
+
+  /** The pet eats the morsel underfoot — sating its belly and warming its devotion. */
+  petEat(pet: Pet): void {
+    const it = this.petEdibleAt(pet.x, pet.y);
+    if (!it) return;
+    const nutr = it.corpse ? Math.min(400, 40 + it.corpse.def.hp * 6) : (it.type.nutrition ?? 120);
+    this.level.items = this.level.items.filter((z) => z !== it);
+    pet.feed(nutr, 1);
+    const what = it.corpse ? `${monName(it.corpse.def)} corpse` : this.ident.name(it.type);
+    this.log.add(`${cap(pet.name)} wolfs down ${what}.`, "dim", this.player);
+  }
+
+  /** Starved past the last of its loyalty, the nominator turns feral and rounds on you. */
+  petGoesFeral(pet: Pet): void {
+    if (pet.carrying) { pet.carrying.x = pet.x; pet.carrying.y = pet.y; if (!this.level.itemAt(pet.x, pet.y)) this.level.items.push(pet.carrying); pet.carrying = null; }
+    const feralDef: MonsterDef = pet.def ?? { name: "a feral hound", fname: "a feral hound", ch: "d", fg: "#a06848", hp: pet.maxHp, dmg: pet.attackDmg, ai: "chase", minDepth: 1, weight: 0, cowardly: true };
+    const m = new Monster(this, feralDef, pet.x, pet.y);
+    m.hp = Math.max(1, pet.hp); m.floorKey = pet.floorKey;
+    this.monsters.push(m); this.scheduler.add(m, true);
+    this.scheduler.remove(pet);
+    this.pet = null;
+    this.player.luck = Math.max(-13, this.player.luck - 2); // forsaking a companion is ill fortune
+    this.log.add(`Starved and forsaken, ${pet.name} turns feral and slinks into the dark.`, "bad", this.player);
+  }
+
+  /** A tamed wild beast pads to your side as your new nominator (fills an empty pet slot). */
+  promoteToPet(m: Monster): void {
+    const pet = new Pet(this, m.x, m.y);
+    pet.adopt(m.def);
+    pet.hp = Math.max(1, m.hp);
+    pet.floorKey = m.floorKey;
+    pet.loyalty = 6; // freshly delegated — earn its trust with food
+    this.pet = pet;
+    this.scheduler.add(pet, true);
+    m.hp = 0; this.monsters = this.monsters.filter((z) => z !== m); this.scheduler.remove(m);
+    this.log.add(`${cap(monName(m.def))} delegates to you — it pads to your side as your nominator.`, "good", this.player);
+  }
+
+  /** A loose, mundane trinket the pet may fetch — never shop wares, gold, corpses, relics, or the amulet. */
+  petFetchableNear(x: number, y: number, range: number): FloorItem | null {
+    let best: FloorItem | null = null, bd = range + 1;
+    for (const it of this.level.items) {
+      if (it.corpse || it.chest || it.price || it.coins || it.relic || it.nft || it.type.kind === "amulet") continue;
+      const d = Math.max(Math.abs(it.x - x), Math.abs(it.y - y));
+      if (d < bd && this.level.isPassable(it.x, it.y)) { bd = d; best = it; }
+    }
+    return best;
+  }
+
+  /** The pet takes up the trinket it's standing on, to carry back to you. */
+  petPickup(pet: Pet): void {
+    const it = this.level.itemAt(pet.x, pet.y);
+    if (!it || it.corpse || it.chest || it.price || it.coins || it.relic || it.nft || it.type.kind === "amulet") return;
+    this.level.items = this.level.items.filter((z) => z !== it);
+    pet.carrying = it;
+  }
+
+  /** The pet lays what it carried at your feet. */
+  petDropCarried(pet: Pet): void {
+    const it = pet.carrying; if (!it) return;
+    let dx = pet.x, dy = pet.y;
+    if (this.level.itemAt(dx, dy)) { const s = this.adjacentFree(dx, dy); if (s) { dx = s.x; dy = s.y; } }
+    it.x = dx; it.y = dy; this.level.items.push(it); pet.carrying = null;
+    this.log.add(`${cap(pet.name)} lays ${this.ident.name(it.type)} at your feet.`, "good", this.player);
+  }
+
   applyHorn(p: Player): boolean {
     if (p.poison === 0 && p.confused === 0 && p.stoning === 0 && p.illness === 0 && p.blind === 0 && p.paralyzed === 0 && p.silenced === 0 && p.hp >= p.maxHp) {
       this.log.add("The auditor's horn finds nothing amiss.", "dim"); return false;
@@ -4079,10 +4179,22 @@ export class Game {
         this.showAudit(); break;
       }
       case "taming": {
+        const range = buc === "blessed" ? 12 : 6;
+        // With no nominator at your side, the nearest eligible beast is truly tamed — it
+        // becomes your companion. Uniques, keepers, priests and the Oracle can't be delegated.
+        if (!this.pet || !this.pet.alive) {
+          let best: Monster | undefined, bd = 1e9;
+          for (const m of this.monsters) {
+            if (!m.alive || m.def.boss || m.def.fearless || m.def.keeper || m.def.priest || m.def.seer || m.def.weight === 0) continue;
+            const d = Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y));
+            if (d <= range && d < bd) { bd = d; best = m; }
+          }
+          if (best) this.promoteToPet(best);
+        }
         let n = 0;
         for (const m of this.monsters) {
           if (!m.alive || m.peaceful || m.def.boss || m.def.fearless) continue;
-          if (Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) <= (buc === "blessed" ? 12 : 6)) { m.peaceful = true; m.frightened = 0; n++; }
+          if (Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) <= range) { m.peaceful = true; m.frightened = 0; n++; }
         }
         this.log.add(n ? `A wave of goodwill rolls out — ${n} foe${n > 1 ? "s" : ""} stand down and delegate to you.` : "A wave of goodwill rolls out, but no one near is swayed.", n ? "good" : "dim");
         break;

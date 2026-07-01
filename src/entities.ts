@@ -5,6 +5,7 @@ import { fp } from "./flavor";
 import { Inventory, Item } from "./inventory";
 import { bucDelta, ITEMS, ItemType, ArmorSlot, Idents } from "./items";
 import { runAi, wanderStep, cheb, MONSTER_BEHAVIORS, PET_BEHAVIORS } from "./ai";
+import type { FloorItem } from "./level";
 
 type Verb = "wield" | "wear" | "takeoff" | "quaff" | "read" | "eat" | "drop" | "zap" | "throw" | "forge" | "apply" | "quiver" | "name" | "offhand" | "dip" | "charge" | "grease";
 const VERB_PROMPT: Record<Verb, string> = {
@@ -1113,9 +1114,20 @@ export class Monster extends Entity {
   }
 }
 
-/** The player's loyal nominator — follows, and savages adjacent enemies. */
+export const PET_MAX_NUTR = 1200; // a full belly — feeding caps here
+export const PET_HUNGRY = 250;    // below this it forages / won't play fetch
+export const PET_MAX_LOYAL = 20;  // devotion ceiling (dog.c mtame)
+
+/** The player's nominator — follows and savages adjacent enemies, but now with its own
+ *  belly and a devotion that must be earned: feed it and it grows loyal; starve or forsake
+ *  it and its loyalty frays until it turns feral. A tamed wild beast can take its place. */
 export class Pet extends Entity {
   leashed = false; // clipped to a leash — it's pulled to your side if it ever strays too far
+  nutrition = 800;         // its own hunger clock (dog.c EDOG.hungrytime)
+  loyalty = 12;            // tameness 1..20; starve it to 0 and it turns feral
+  carrying: FloorItem | null = null; // an object it fetched, to lay at your feet (apport)
+  def: MonsterDef | null = null;     // set when a tamed wild beast — drives its look & name
+  private starveWarned = false;
   constructor(game: Game, x: number, y: number) {
     super(game);
     this.x = x; this.y = y;
@@ -1126,11 +1138,40 @@ export class Pet extends Entity {
 
   getSpeed(): number { return 110; } // keeps pace with you
 
+  /** Re-skin this pet as a tamed creature's species (name, glyph, vitality). */
+  adopt(def: MonsterDef): void {
+    this.def = def;
+    this.ch = def.ch;
+    this.fg = "#80d0b0"; // an allied tint, distinct from a hostile of the same letter
+    this.name = "your " + monName(def).replace(/^an? /, "");
+    this.maxHp = this.hp = Math.max(this.hp, def.hp);
+    this.attackDmg = def.dmg;
+  }
+
+  /** A meal: sate the belly and warm the devotion. */
+  feed(nutr: number, loyaltyGain = 1): void {
+    this.nutrition = Math.min(PET_MAX_NUTR, this.nutrition + nutr);
+    this.loyalty = Math.min(PET_MAX_LOYAL, this.loyalty + loyaltyGain);
+    this.starveWarned = false;
+  }
+
   act(): void {
     if (!this.alive) return;
     this.game.setActive(this.floorKey); // follow on whatever floor this pet stands
     const p = this.game.player;
     if (p.riding) { this.x = p.x; this.y = p.y; return; } // ridden — it moves only with its rider
+
+    // Hunger clock. A fed hound slowly mends and settles; a starving one weakens and its
+    // devotion frays a point at a time until, forsaken, it turns feral and rounds on you.
+    if (--this.nutrition <= 0) {
+      this.nutrition = 0;
+      if (!this.starveWarned) { this.game.log.add(`${this.name[0].toUpperCase() + this.name.slice(1)} whines with hunger.`, "bad", p); this.starveWarned = true; }
+      if (ROT.RNG.getUniform() < 0.5) this.hp = Math.max(1, this.hp - 1);
+      if (ROT.RNG.getUniform() < 0.35 && --this.loyalty <= 0) { this.game.petGoesFeral(this); return; }
+    } else {
+      if (this.nutrition > PET_HUNGRY) this.starveWarned = false;
+      if (this.nutrition > 400 && this.hp < this.maxHp && this.game.turn % 12 === 0) this.hp++; // well-fed mend
+    }
 
     // Leashed: if it drifts beyond the tether, it's yanked back to your side before it decides.
     if (this.leashed && cheb(this.x, this.y, p.x, p.y) > 2 && p.floorKey === this.floorKey) {
@@ -1138,8 +1179,8 @@ export class Pet extends Entity {
       if (spot) { this.x = spot.x; this.y = spot.y; }
     }
 
-    // Its own drives (src/ai.ts): break off when nearly dead, maul what's in reach,
-    // hunt foes it can see, body-block threats to you, then heel around any traps.
+    // Its own drives (src/ai.ts): break off when nearly dead, maul what's in reach, forage
+    // when hungry, hunt foes it sees, body-block threats, fetch a trinket, then heel round traps.
     const dist = Math.max(Math.abs(this.x - p.x), Math.abs(this.y - p.y));
     runAi(this.game, this, PET_BEHAVIORS, { p, dist });
   }

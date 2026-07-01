@@ -409,6 +409,22 @@ export const PET_BEHAVIORS: Behavior<Pet>[] = [
     score: (g, s) => (g.adjacentEnemy(s.x, s.y) ? 1 : 0),
     act: (g, s) => g.attack(s, g.adjacentEnemy(s.x, s.y)!) },
 
+  // NEW — forage: a hungry hound would rather eat than chase. Wolf down a corpse or scrap
+  // underfoot, or pad over to the nearest one it can reach (petEdibleAt skips petrifying meat).
+  { name: "eat",
+    score: (g, s, c) => {
+      if (s.nutrition >= 250) return 0;
+      if (g.petEdibleAt(s.x, s.y)) return 1;
+      const near = g.petNearestEdible(s.x, s.y, 4);
+      if (!near) return 0;
+      c.forage = near;
+      return 1;
+    },
+    act: (g, s, c) => {
+      if (g.petEdibleAt(s.x, s.y)) { g.petEat(s); return; }
+      const f = c.forage as { x: number; y: number }; if (f) stepToward(g, s, f.x, f.y);
+    } },
+
   // NEW — hunt: the drive it never had. Lunge at a foe it can see, as long as the
   // chase won't drag it dangerously far from you.
   { name: "hunt",
@@ -446,6 +462,30 @@ export const PET_BEHAVIORS: Behavior<Pet>[] = [
         if (d < bestD) { bestD = d; best = [nx, ny]; }
       }
       if (best) stepToward(g, s, best[0], best[1]);
+    } },
+
+  // NEW — apport (fetch): carrying something, it trots back to lay it at your feet; idle and
+  // unhurried, it'll occasionally snatch up a loose trinket nearby to bring you. It won't
+  // touch shop wares, gold, corpses, relics, or the amulet, and won't wander far to fetch.
+  { name: "apport",
+    score: (g, s, c) => {
+      if (s.carrying) return 1;                          // always want to deliver the goods
+      if (s.nutrition < 250) return 0;                   // too hungry to play
+      if (cheb(s.x, s.y, c.p.x, c.p.y) > 3) return 0;    // stay close
+      const it = g.petFetchableNear(s.x, s.y, 2);
+      if (!it || ROT.RNG.getUniform() < 0.7) return 0;   // only now and then
+      c.fetch = it;
+      return 1;
+    },
+    act: (g, s, c) => {
+      if (s.carrying) {
+        if (cheb(s.x, s.y, c.p.x, c.p.y) <= 1) g.petDropCarried(s);
+        else stepToward(g, s, c.p.x, c.p.y);
+        return;
+      }
+      const it = c.fetch as { x: number; y: number };
+      if (s.x === it.x && s.y === it.y) g.petPickup(s);
+      else stepToward(g, s, it.x, it.y);
     } },
 
   // Heel: trail you (routing around traps it senses) when there's nothing to fight.
