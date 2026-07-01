@@ -15,6 +15,7 @@ import { Idents, Appearances, ITEMS, JAM, CORPSE, CHEST, GOLD, WRITABLE_SCROLLS,
 import { connectWallet, Wallet } from "./chain/wallet";
 import { walletBalancePas, buyDirect } from "./chain/bank";
 import { recordRun, readRecent, RunEntry } from "./chain/ledger";
+import { bumpGames, bumpDeaths } from "./net/counter";
 import { readGear, forgeGear, forgePrice } from "./chain/gear";
 import { claimDeed, readDeed, deedConfigured } from "./chain/deed";
 import { RARITY } from "./chain/config";
@@ -97,7 +98,12 @@ export class Game {
   /** Identification is per-character: this resolves to whichever player is currently acting. */
   get ident(): Idents { return this.acting.ident; }
   monsters: Monster[] = [];
-  pet: Pet | null = null;
+  static readonly PET_CAP = 4;                    // retinue ceiling — taming beyond this only sways loyalty
+  pets: Pet[] = [];                               // the whole retinue; the lead nominator is the first living one
+  /** The lead nominator (ride/whistle/leash target, and the sole pet in solo v1 before taming). */
+  get pet(): Pet | null { return this.pets.find((p) => p.alive) ?? this.pets[0] ?? null; }
+  set pet(v: Pet | null) { this.pets = v ? [v] : []; }
+  livingPets(): Pet[] { return this.pets.filter((p) => p.alive); }
   // Phase 15 — persistence: each visited level is generated once and stored, so revisiting
   // returns the *same* layout with its dropped items, bones, traps, and monsters' state.
   // Keyed by branch+depth ("dungeon:7", "kusama:1", "quest"). Planes are excluded — the ascent
@@ -221,6 +227,7 @@ export class Game {
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
+    void bumpGames(); // a fresh run joins the perpetual global tally
     void this.fetchLeaderboard();
     if (this.wallet && !this.coop) void this.loadRelics(); // carry owned NFT gear into the new run (solo only — per-wallet gear would desync a shared co-op world)
   }
@@ -637,18 +644,34 @@ export class Game {
   /** Place the pet beside the arriving (acting) player. Co-op: the partner does NOT travel — it stays put. */
   private placeParty(): void {
     const lead = this.acting;
-    if (this.pet && this.pet.alive) {
-      const spot = this.adjacentFree(lead.x, lead.y);
-      if (spot) { this.pet.x = spot.x; this.pet.y = spot.y; }
-      this.pet.floorKey = lead.floorKey; // the hound follows its owner to the new floor
+    const pack = this.livingPets();
+    const spots = this.gatherFreeTiles(lead.x, lead.y, pack.length);
+    pack.forEach((pet, i) => {
+      if (spots[i]) { pet.x = spots[i].x; pet.y = spots[i].y; }
+      pet.floorKey = lead.floorKey; // the retinue follows its owner to the new floor
+    });
+  }
+
+  /** Up to `n` distinct free tiles ringing (cx,cy) — for seating a retinue without stacking. */
+  private gatherFreeTiles(cx: number, cy: number, n: number): { x: number; y: number }[] {
+    const out: { x: number; y: number }[] = [];
+    for (let r = 1; r <= 3 && out.length < n; r++) {
+      for (let dx = -r; dx <= r && out.length < n; dx++) {
+        for (let dy = -r; dy <= r && out.length < n; dy++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue; // walk the ring at radius r
+          const x = cx + dx, y = cy + dy;
+          if (this.level.isPassable(x, y) && !this.monsterAt(x, y) && !this.petAt(x, y) && !(x === cx && y === cy)) out.push({ x, y });
+        }
+      }
     }
+    return out;
   }
 
   /** Rebuild the scheduler: both players, plus the alive monsters of every floor a player stands on. */
   private rebuildSchedule(): void {
     this.scheduler.clear();
     this.acting.floorKey = this.activeKey; // the arriving player now stands on this floor
-    if (this.pet && this.pet.alive) this.pet.floorKey = this.acting.floorKey;
+    for (const pet of this.livingPets()) pet.floorKey = this.acting.floorKey;
     this.scheduler.add(this.player, true);
     if (this.coPlayer && this.coPlayer.alive) this.scheduler.add(this.coPlayer, true);
     // every floor that currently has a living player is simulated (dedupe when both share one)
@@ -658,7 +681,7 @@ export class Game {
       if (!mons) continue;
       for (const m of mons) if (m.alive && !added.has(m)) { added.add(m); this.scheduler.add(m, true); }
     }
-    if (this.pet && this.pet.alive) this.scheduler.add(this.pet, true);
+    for (const pet of this.livingPets()) this.scheduler.add(pet, true);
     this.recomputeFOV();
     if (this.acting === this.localPlayer) this.music.setArea(this.currentAreaId()); // my speakers follow my own floor
   }
@@ -2133,8 +2156,8 @@ export class Game {
   /** `;` — farlook the tile in a direction (monster, item, or terrain). A free survey. */
   lookAt(x: number, y: number): void {
     if (!this.level.tileAt(x, y)) { this.log.add("That's beyond the dungeon's edge.", "dim"); return; }
-    const pet = this.pet;
-    if (pet && pet.alive && pet.x === x && pet.y === y) {
+    const pet = this.petAt(x, y);
+    if (pet) {
       const hb = pet.nutrition <= 0 ? "starving" : pet.nutrition < 60 ? "weak with hunger" : pet.nutrition < 250 ? "hungry" : pet.nutrition > 1000 ? "well-fed" : "fed";
       const lb = pet.loyalty >= 16 ? "devoted" : pet.loyalty >= 10 ? "loyal" : pet.loyalty >= 5 ? "wary" : "restive";
       const carry = pet.carrying ? `, carrying ${this.ident.name(pet.carrying.type)}` : "";
@@ -2494,6 +2517,7 @@ export class Game {
     this.conductReport(this.player);
     this.music.playStinger("death");
     this.draw();
+    void bumpDeaths(); // another adventurer fallen — the global memorial ticks up
     void this.recordResult(false);
     void this.showHallOfFame();
   }
@@ -2641,11 +2665,11 @@ export class Game {
       }
     }
     else if (a instanceof Player && d instanceof Player) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg} — friendly fire!`, "bad", who);
-    else if (a === this.pet) this.log.add(`Your nominator savages ${d.name} for ${dmg}.`, "good", who);
-    else if (d === this.pet) this.log.add(`${cap(a.name)} mauls ${this.pet?.name ?? fp("your hound", "your nominator")} for ${dmg}.`, "bad", who);
+    else if (a instanceof Pet) this.log.add(`${cap(a.name)} savages ${d.name} for ${dmg}.`, "good", who);
+    else if (d instanceof Pet) this.log.add(`${cap(a.name)} mauls ${d.name} for ${dmg}.`, "bad", who);
     if (d.hp <= 0) {
       if (a instanceof Player && d instanceof Monster) this.gainXp(a, d.maxHp); // XP = the foe's vitality
-      if (a === this.pet && this.pet) this.pet.loyalty = Math.min(20, this.pet.loyalty + 1); // a kill for you deepens its devotion
+      if (a instanceof Pet) a.loyalty = Math.min(20, a.loyalty + 1); // a kill for you deepens its devotion
       this.kill(d);
     }
     // #twoweapon: a lighter off-hand follow-up if the foe still stands.
@@ -3062,9 +3086,9 @@ export class Game {
     for (let step = 0; step < 8; step++) {
       x += dx; y += dy;
       if (!this.level.isPassable(x, y)) break; // hit a wall — stops short
-      // Toss food to your nominator — it catches the morsel mid-air and grows devoted.
-      const pet = this.pet;
-      if (pet && pet.alive && pet.x === x && pet.y === y && t.kind === "food") {
+      // Toss food to a nominator — it catches the morsel mid-air and grows devoted.
+      const pet = this.petAt(x, y);
+      if (pet && t.kind === "food") {
         pet.feed(t.nutrition ?? 120, 2 + (item.buc === "blessed" ? 1 : 0));
         this.log.add(`You toss ${this.ident.name(t)} to ${pet.name} — it snaps it up and looks devoted (loyalty ${pet.loyalty}).`, "good");
         return; // consumed
@@ -3575,26 +3599,32 @@ export class Game {
     return true;
   }
 
-  /** `a` a recall beacon (magic whistle) — blink your nominator to your side. */
+  /** `a` a recall beacon (magic whistle) — blink your whole retinue to your side. */
   applyWhistle(p: Player): boolean {
-    const pet = this.pet;
-    if (!pet || !pet.alive) { this.log.add("You sound the recall beacon. Its note fades, unanswered.", "dim"); return true; }
-    const spot = this.adjacentFree(p.x, p.y);
-    if (!spot) { this.log.add("You sound the recall beacon, but there's no room beside you for your nominator.", "dim"); return true; }
-    pet.x = spot.x; pet.y = spot.y; pet.floorKey = this.activeKey;
+    const pack = this.livingPets();
+    if (!pack.length) { this.log.add("You sound the recall beacon. Its note fades, unanswered.", "dim"); return true; }
+    const spots = this.gatherFreeTiles(p.x, p.y, pack.length);
+    let moved = 0;
+    pack.forEach((pet, i) => { if (spots[i]) { pet.x = spots[i].x; pet.y = spots[i].y; pet.floorKey = this.activeKey; moved++; } });
     this.recomputeFOV();
-    this.log.add("A shrill note — your nominator blinks to your side.", "good");
+    this.log.add(moved ? `A shrill note — your ${moved > 1 ? "retinue blinks" : "nominator blinks"} to your side.` : "You sound the recall beacon, but there's no room beside you.", moved ? "good" : "dim");
     return true;
   }
 
-  /** `a` a delegation cord (leash) — clip/unclip your nominator so it keeps to your side. */
+  /** `a` a delegation cord (leash) — clip/unclip your retinue so it keeps to your side. */
   applyLeash(): boolean {
-    const pet = this.pet;
-    if (!pet || !pet.alive) { this.log.add("You've no nominator to leash.", "dim"); return false; }
-    pet.leashed = !pet.leashed;
-    this.log.add(pet.leashed ? "You clip the delegation cord to your nominator — it will keep to your side now." : "You unclip the delegation cord.", "good");
+    const pack = this.livingPets();
+    if (!pack.length) { this.log.add("You've no nominator to leash.", "dim"); return false; }
+    const on = !pack[0].leashed; // toggle the whole retinue to the lead's new state
+    for (const pet of pack) pet.leashed = on;
+    this.log.add(on ? "You clip the delegation cord — your retinue will keep to your side now." : "You unclip the delegation cord.", "good");
     return true;
   }
+
+  /** A living pet standing on (x,y), or undefined. */
+  petAt(x: number, y: number): Pet | undefined { return this.livingPets().find((p) => p.x === x && p.y === y); }
+  /** A living pet adjacent to (x,y) — for monsters that swat at the retinue. */
+  adjacentPet(x: number, y: number): Pet | undefined { return this.livingPets().find((p) => Math.max(Math.abs(p.x - x), Math.abs(p.y - y)) === 1); }
 
   // ── the nominator's belly, devotion & fetch (Pet depth) ────────────────────
   /** A morsel the pet may eat where it stands (food scrap or a fresh, non-petrifying corpse). */
@@ -3634,7 +3664,7 @@ export class Game {
     m.hp = Math.max(1, pet.hp); m.floorKey = pet.floorKey;
     this.monsters.push(m); this.scheduler.add(m, true);
     this.scheduler.remove(pet);
-    this.pet = null;
+    this.pets = this.pets.filter((z) => z !== pet); // only this one abandons you; the rest stay
     this.player.luck = Math.max(-13, this.player.luck - 2); // forsaking a companion is ill fortune
     this.log.add(`Starved and forsaken, ${pet.name} turns feral and slinks into the dark.`, "bad", this.player);
   }
@@ -3646,7 +3676,7 @@ export class Game {
     pet.hp = Math.max(1, m.hp);
     pet.floorKey = m.floorKey;
     pet.loyalty = 6; // freshly delegated — earn its trust with food
-    this.pet = pet;
+    this.pets.push(pet); // joins the retinue (the taming caller enforces the cap)
     this.scheduler.add(pet, true);
     m.hp = 0; this.monsters = this.monsters.filter((z) => z !== m); this.scheduler.remove(m);
     this.log.add(`${cap(monName(m.def))} delegates to you — it pads to your side as your nominator.`, "good", this.player);
@@ -4180,9 +4210,11 @@ export class Game {
       }
       case "taming": {
         const range = buc === "blessed" ? 12 : 6;
-        // With no nominator at your side, the nearest eligible beast is truly tamed — it
-        // becomes your companion. Uniques, keepers, priests and the Oracle can't be delegated.
-        if (!this.pet || !this.pet.alive) {
+        // While your retinue has room, the nearest eligible beast is truly tamed and joins you
+        // (a blessed scroll can bind a couple). Uniques, keepers, priests and the Oracle resist.
+        const slots = this.coop ? 0 : Game.PET_CAP - this.livingPets().length;
+        const bind = buc === "blessed" ? Math.min(2, slots) : Math.min(1, slots);
+        for (let k = 0; k < bind; k++) {
           let best: Monster | undefined, bd = 1e9;
           for (const m of this.monsters) {
             if (!m.alive || m.def.boss || m.def.fearless || m.def.keeper || m.def.priest || m.def.seer || m.def.weight === 0) continue;
@@ -4425,7 +4457,13 @@ export class Game {
 
   private kill(d: Entity): void {
     if (d instanceof Player) { this.downPlayer(d); return; }
-    if (d === this.pet) { this.log.add("Your nominator falls. You descend alone.", "bad"); this.scheduler.remove(this.pet); return; }
+    if (d instanceof Pet) {
+      if (d.carrying) { d.carrying.x = d.x; d.carrying.y = d.y; if (!this.level.itemAt(d.x, d.y)) this.level.items.push(d.carrying); d.carrying = null; }
+      this.pets = this.pets.filter((z) => z !== d);
+      this.scheduler.remove(d);
+      this.log.add(this.livingPets().length ? `${cap(d.name)} falls.` : `${cap(d.name)} falls. You are alone again.`, "bad");
+      return;
+    }
     const m = d as Monster;
     for (const pl of this.allPlayers()) if (pl.engulfedBy === m) pl.engulfedBy = null; // a slain trapper releases its victim
     if (m.def.keeper) for (const pl of this.allPlayers()) for (const it of pl.inventory.items) it.unpaid = undefined; // the till's unguarded — your bill is voided
@@ -4488,21 +4526,33 @@ export class Game {
     this.level.coopSoloBudget = soloCount;
     this.level.coopTuned = this.coop && this.nextFloorShared ? this.livingPlayers().length : 1; // the party size it's sized for
     const count = Math.round(soloCount * this.coopFactor());
+    const openFor = (x: number, y: number): boolean =>
+      !this.monsterAt(x, y) && !(x === this.player.x && y === this.player.y) &&
+      !this.level.inVault(x, y) && this.level.tileAt(x, y) === "floor";
     for (let i = 0; i < count; i++) {
       const def = this.pickMonster(poolDepth);
       let pos = this.level.randomFloor();
       let tries = 0;
-      while (
-        tries < 60 &&
-        (this.monsterAt(pos.x, pos.y) ||
-          (pos.x === this.player.x && pos.y === this.player.y) ||
-          this.level.inVault(pos.x, pos.y) || // the sealed Treasury holds no random foes — only its Guard
-          this.level.tileAt(pos.x, pos.y) === "stairsDown")
-      ) {
+      while (tries < 60 && !(openFor(pos.x, pos.y) && this.level.tileAt(pos.x, pos.y) !== "stairsDown")) {
         pos = this.level.randomFloor();
         tries++;
       }
       this.monsters.push(new Monster(this, def, pos.x, pos.y));
+      // Pack hunters arrive as a cluster around the leader, so surround/flank tactics bite in
+      // ordinary corridors — not just zoos. The whole pack counts against the floor's budget.
+      if (def.pack) {
+        const groupSize = ROT.RNG.getUniformInt(def.pack[0], def.pack[1]);
+        for (let placed = 1; placed < groupSize && i < count - 1; placed++) {
+          let spot: { x: number; y: number } | null = null;
+          for (let a = 0; a < 16 && !spot; a++) {
+            const c = { x: pos.x + ROT.RNG.getUniformInt(-2, 2), y: pos.y + ROT.RNG.getUniformInt(-2, 2) };
+            if (this.level.isPassable(c.x, c.y) && openFor(c.x, c.y)) spot = c;
+          }
+          if (!spot) break;
+          this.monsters.push(new Monster(this, def, spot.x, spot.y));
+          i++; // consume a slot from the budget so packs don't inflate the count
+        }
+      }
     }
   }
 
@@ -4927,7 +4977,7 @@ export class Game {
     const f = toggleFlavor();
     for (const slot of this.slots.values()) for (const m of slot.monsters) m.name = monName(m.def);
     for (const m of this.monsters) m.name = monName(m.def);
-    if (this.pet) this.pet.name = fp("your hound", "your nominator");
+    for (const pet of this.pets) if (!pet.def) pet.name = fp("your hound", "your nominator"); // adopted beasts keep their species name
     this.log.add(f === "fantasy"
       ? "✦ The chains fade — a classic dungeon of fantasy reveals itself."
       : "✦ The veil lifts — the Polkadot truth shows through.", "good");
@@ -5005,7 +5055,7 @@ export class Game {
       const dormant = m.def.mimic && !m.revealed && !near; // warning reveals a mimic for what it is
       cells.push([m.x, m.y, dormant ? m.disguiseCh : m.ch, dormant ? m.disguiseFg : m.fg]);
     }
-    if (this.pet && this.pet.alive && this.pet.floorKey === onFloor && vis(this.pet.x, this.pet.y)) cells.push([this.pet.x, this.pet.y, this.pet.ch, this.pet.fg]);
+    for (const pet of this.livingPets()) if (pet.floorKey === onFloor && vis(pet.x, pet.y)) cells.push([pet.x, pet.y, pet.ch, pet.fg]);
     for (const pl of this.allPlayers()) {
       if (pl.floorKey !== onFloor) continue; // only adventurers standing on this viewer's floor
       if (!pl.alive) { if (this.downed.has(pl) && (vis(pl.x, pl.y) || sensed)) cells.push([pl.x, pl.y, "@", "#804040"]); continue; } // a fallen partner's body — dim red @ (step onto it to revive)

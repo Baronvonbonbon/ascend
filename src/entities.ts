@@ -951,10 +951,11 @@ export class Player extends Entity {
     // Displace — slip past a peaceful NPC (the Marketmaker), your nominator, or your co-op partner.
     if (foe && foe.peaceful) { foe.x = this.x; foe.y = this.y; this.game.log.add(`You slip past ${foe.name}.`, "dim"); }
     if (ally) { ally.x = this.x; ally.y = this.y; this.game.log.add(`You slip past ${ally.name}.`, "dim", this); }
-    const pet = this.game.pet;
-    if (pet && pet.alive && pet.x === nx && pet.y === ny) { pet.x = this.x; pet.y = this.y; }
+    const petHere = this.game.petAt(nx, ny); // swap places with whichever of the retinue stands there
+    if (petHere) { petHere.x = this.x; petHere.y = this.y; }
     this.x = nx; this.y = ny;
-    if (this.riding && pet && pet.alive) { pet.x = this.x; pet.y = this.y; } // the steed carries you along
+    const steed = this.game.pet;
+    if (this.riding && steed && steed.alive) { steed.x = this.x; steed.y = this.y; } // the steed carries you along
     this.game.recomputeFOV();
     const here = this.game.level.itemAt(this.x, this.y);
     if (here) {

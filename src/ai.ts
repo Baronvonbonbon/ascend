@@ -45,9 +45,10 @@ export function cheb(x0: number, y0: number, x1: number, y1: number): number {
   return Math.max(Math.abs(x0 - x1), Math.abs(y0 - y1));
 }
 
-/** True if `self` can step onto (x,y): passable, and no monster/boulder in the way. */
+/** True if `self` can step onto (x,y): passable, and no monster/pet/boulder in the way.
+ *  Pets soft-block too, so a retinue doesn't stack and foes must route around your hounds. */
 function freeForStep(game: Game, x: number, y: number): boolean {
-  return game.level.isPassable(x, y) && !game.monsterAt(x, y) && !game.level.boulderAt(x, y);
+  return game.level.isPassable(x, y) && !game.monsterAt(x, y) && !game.petAt(x, y) && !game.level.boulderAt(x, y);
 }
 
 /** First tile of a Dijkstra path toward (tx,ty), or null if none. Does not move. */
@@ -283,17 +284,15 @@ export const MONSTER_BEHAVIORS: Behavior<Monster>[] = [
   // support before finishing you.
   { name: "melee", score: (_g, _s, c) => (c.dist === 1 ? 1 : 0),
     act: (g, s, c) => {
-      const pet = g.pet;
-      if (pet && pet.alive && cheb(s.x, s.y, pet.x, pet.y) === 1 && (pet.hp <= pet.maxHp * 0.4 || ROT.RNG.getUniform() < 0.35)) {
-        g.attack(s, pet); return;
-      }
+      const pet = g.adjacentPet(s.x, s.y);
+      if (pet && (pet.hp <= pet.maxHp * 0.4 || ROT.RNG.getUniform() < 0.35)) { g.attack(s, pet); return; }
       g.attack(s, c.p);
     } },
 
-  // If the player's nominator is at our side (and the player isn't), swat it.
+  // If one of the retinue is at our side (and the player isn't), swat it.
   { name: "swat-pet",
-    score: (g, s) => { const pet = g.pet; return pet && pet.alive && cheb(s.x, s.y, pet.x, pet.y) === 1 ? 1 : 0; },
-    act: (g, s) => g.attack(s, g.pet!) },
+    score: (g, s) => (g.adjacentPet(s.x, s.y) ? 1 : 0),
+    act: (g, s) => g.attack(s, g.adjacentPet(s.x, s.y)!) },
 
   // muse.c: a caster zaps a wand-borne debuff at you from range — silence stops it.
   { name: "zap",

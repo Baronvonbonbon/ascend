@@ -1,5 +1,6 @@
 import { Game } from "./game";
 import { initLobby } from "./net/lobby";
+import { loadCounts } from "./net/counter";
 import { ARCHETYPES, archetypeName, archetypeBlurb, RACES, raceName, raceBlurb } from "./data";
 
 const screen = document.getElementById("screen");
@@ -49,6 +50,26 @@ if (screen && logEl) {
     const deck = document.getElementById("touch-deck");
     if (more && deck) more.addEventListener("click", () => deck.classList.toggle("open"));
   }
+
+  // ── controls / how-to-play modal (desktop button + mobile deck button) ──
+  const modal = document.getElementById("controls-modal");
+  if (modal) {
+    const open = () => modal.classList.add("open");
+    const close = () => modal.classList.remove("open");
+    document.getElementById("help-btn")?.addEventListener("click", open);
+    document.getElementById("touch-help")?.addEventListener("click", open);
+    document.getElementById("controls-close")?.addEventListener("click", close);
+    modal.addEventListener("click", (e) => { if (e.target === modal) close(); }); // click the backdrop to dismiss
+    // Swallow Escape (and keep game keys out) while the modal is up.
+    window.addEventListener("keydown", (e) => {
+      if (!modal.classList.contains("open")) return;
+      if (e.key === "Escape") close();
+      e.stopPropagation();
+    }, true);
+  }
+
+  // ── perpetual global tally (runs braved / fallen) — best-effort, fails silent ──
+  void loadCounts();
 
   // ── co-op chat bar: type + Send (PC keyboard or mobile touch keyboard) ──
   const chatInput = document.getElementById("chat-input") as HTMLInputElement | null;
