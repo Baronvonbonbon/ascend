@@ -691,7 +691,17 @@ export class MusicEngine {
     // roll + turnaround landing on a downbeat impact) instead of a generic riser/swell. Combat stays
     // reactive even though idle/explore swaps wait for the bar line. A boss/swarm arriving mid-fight
     // upgrades a light theme to a heavy one (no re-fill — the fill is the arrival announcement).
-    if (!this.dangerActive || !this.dangerTheme) { this.dangerActive = true; this.pickDangerTheme(); this.combatEntryFill(); }
+    if (!this.dangerActive || !this.dangerTheme) {
+      this.dangerActive = true; this.pickDangerTheme();
+      // Fire the entry fill on the next CLEAN BEAT of the running groove clock (≤ ~1 beat away, so
+      // still reactive) and lock the combat layer's grids to that downbeat — combat lands in the
+      // level's pulse instead of at a random mid-bar instant.
+      const beat = this.nextBeat(t, now);
+      this.combatEntryFill(beat);
+      this.nextTensionStep = beat; this.tensionStepIdx = 0;
+      this.nextTensionBass = beat; this.tensionBassIdx = 0;
+      this.nextTrill = beat; this.trillIdx = 0;
+    }
     else if (!this.dangerTheme.heavy && (this.c.bossNear || this.c.crowd > 0.55)) this.pickDangerTheme();
     const th = this.dangerTheme!;
 
@@ -763,24 +773,32 @@ export class MusicEngine {
   /** When enemies appear, announce the fight with the ZONE'S OWN transition fill (the `FILLS` entry:
    *  a drum roll + a bass/lead turnaround) rendered dry on the tension bus and landing on a downbeat
    *  impact — a snappy, characterful arrival that replaces the old generic riser/swell "wave". */
-  private combatEntryFill(): void {
+  /** The onset time of the next clean beat (quarter-note, step % 4 === 0) on the groove clock, at or
+   *  after `now` — so combat locks to the level's pulse yet stays within ~1 beat of the threat. */
+  private nextBeat(t: TrackDef, now: number): number {
+    const step = 60 / (t.bpm ?? 110) / 4;
+    let when = this.gNext, s = this.gStep;
+    for (let g = 0; g < 96; g++) { if (when >= now - 0.001 && s % 4 === 0) return when; when += step; s = (s + 1) % this.gBarLen; }
+    return now; // clock not running — fall back to immediate
+  }
+
+  private combatEntryFill(beat: number): void {
     const t = this.active?.def; if (!this.ctx || !t) return;
-    const now = this.ctx.currentTime;
-    if (now - this.lastIntro < 4) return; // debounce danger flicker near the threshold
-    this.lastIntro = now;
+    if (this.ctx.currentTime - this.lastIntro < 4) return; // debounce danger flicker near the threshold
+    this.lastIntro = this.ctx.currentTime;
     const f = FILLS[t.area] ?? FILLS.legacy, bus = this.tensionBus, step = 60 / (t.bpm ?? 110) / 4;
-    // the zone's fill as a one-beat lead-in (a touch hotter than the groove fill — this is combat)
+    // the zone's fill as a one-beat lead-in landing on the following downbeat (a touch hotter — this is combat)
     if (f.snare) f.snare.forEach((o, i) => {
-      const w = now + o * step;
+      const w = beat + o * step;
       if (f.deep) this.noiseHit(w, 0.2, bus, 0.12 + i * 0.02, "lowpass", 260 - i * 22, 0.7);   // descending toms
       else this.noiseHit(w, 0.1, bus, 0.12 + i * 0.03, "bandpass", 1700 + i * 260, 0.8);        // a tightening roll
     });
-    if (f.kick) f.kick.forEach((o) => this.kick(now + o * step, bus, f.deep ? 0.42 : 0.55, !!f.deep));
-    if (f.hatBuild) for (let i = 0; i < 8; i++) this.noiseHit(now + i * step * 0.5, 0.03, bus, 0.05 + i * 0.01, "highpass", 8000, 0.7);
-    if (f.turn) { const n = Math.max(1, f.turn.length); f.turn.forEach((deg, i) => { let bf = semi(t.root, deg); while (bf < 41) bf *= 2; this.bassNote(bf, now + i * step * (4 / n), step * 1.6, bus, 0.26); }); }
-    if (f.lead) { const n = Math.max(1, f.lead.length); f.lead.forEach((deg, i) => this.note(semi(t.root, deg) * 2, now + i * step * (4 / n), step * 1.4, bus, "triangle", 0.06, 3400)); }
-    // the arrival impact the old riser used to land on — a dark boom (dread) or a bright crash + kick
-    const land = now + 4 * step;
+    if (f.kick) f.kick.forEach((o) => this.kick(beat + o * step, bus, f.deep ? 0.42 : 0.55, !!f.deep));
+    if (f.hatBuild) for (let i = 0; i < 8; i++) this.noiseHit(beat + i * step * 0.5, 0.03, bus, 0.05 + i * 0.01, "highpass", 8000, 0.7);
+    if (f.turn) { const n = Math.max(1, f.turn.length); f.turn.forEach((deg, i) => { let bf = semi(t.root, deg); while (bf < 41) bf *= 2; this.bassNote(bf, beat + i * step * (4 / n), step * 1.6, bus, 0.26); }); }
+    if (f.lead) { const n = Math.max(1, f.lead.length); f.lead.forEach((deg, i) => this.note(semi(t.root, deg) * 2, beat + i * step * (4 / n), step * 1.4, bus, "triangle", 0.06, 3400)); }
+    // the arrival impact — a dark boom (dread) or a bright crash + kick — lands on the next downbeat
+    const land = beat + 4 * step;
     if (f.deep) this.noiseHit(land, 0.6, bus, 0.16, "lowpass", 320, 0.6);
     else this.noiseHit(land, 0.7, bus, 0.11, "highpass", 5200, 0.5);
     this.kick(land, bus, 0.6, !!f.deep);
