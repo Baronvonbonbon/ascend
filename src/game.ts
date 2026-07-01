@@ -112,6 +112,7 @@ export class Game {
   private gehennomOpen = false;                  // the Invocation has been performed — the Dark Forest lies below
   private plane = 0;                              // 0 = the dungeon; 1..PLANES.length = the ascent above the surface
   private genesisAltars: { x: number; y: number; ethos: Ethos }[] = []; // the three Astral altars — only your aligned one ascends
+  private altarEthos = new Map<string, Ethos>(); // per-dungeon-altar alignment (lazily assigned), keyed by floor+coords — for conversion
   private jamStolen = false;                     // THE CENSOR has snatched the JAM — slay the hunter to reclaim it
   private vaultGuard: Monster | null = null;     // the Council Guard, while it tends the Treasury vault escort
   private censorTimer = 0;                        // turns until the next resurrection rises
@@ -180,6 +181,7 @@ export class Game {
     this.currentChain = null;
     this.branchFloor = 0;
     this.slots.clear();
+    this.altarEthos.clear();
     this.activeKey = "dungeon:1";
     this.appearances = new Appearances();
     this.level = new Level(W, MAP_H);
@@ -1200,9 +1202,16 @@ export class Game {
 
   /** Sense an Astral altar's alignment when you step onto it (called as you enter a tile). */
   noteTile(p: Player): void {
-    if (this.plane !== PLANES.length) return;
-    const a = this.genesisAltars.find((g) => g.x === p.x && g.y === p.y);
-    if (a) this.log.add(`This altar resonates with ${ethosName(a.ethos)}.${a.ethos === p.ethos ? ` It is yours — offer the ${fp("Amulet", "JAM")} (O).` : " Not your alignment."}`, a.ethos === p.ethos ? "good" : "dim");
+    if (this.plane === PLANES.length) {
+      const a = this.genesisAltars.find((g) => g.x === p.x && g.y === p.y);
+      if (a) this.log.add(`This altar resonates with ${ethosName(a.ethos)}.${a.ethos === p.ethos ? ` It is yours — offer the ${fp("Amulet", "JAM")} (O).` : " Not your alignment."}`, a.ethos === p.ethos ? "good" : "dim");
+      return;
+    }
+    // A dungeon altar announces its alignment as you step on — a cross-aligned one can be converted by sacrifice.
+    if (this.level.tileAt(p.x, p.y) === "altar") {
+      const ae = this.altarEthosAt(p.x, p.y, p);
+      this.log.add(`A Gavin altar aligned to ${ethosName(ae)}.${ae === p.ethos ? " Your own — offer here (O)." : " Not your alignment — sacrifice to try to convert it (O)."}`, ae === p.ethos ? "good" : "dim");
+    }
   }
 
   // ── the Censor's hunt (Phase 12d) ──
@@ -2166,6 +2175,19 @@ export class Game {
   }
 
   /** Offer a corpse (on or beside a Gavin altar) — burn it for the Architect's favor: Fortune, and rarely a gift. */
+  /** A dungeon altar's alignment — lazily rolled the first time it matters (mostly co-aligned; sometimes not). */
+  private altarEthosAt(x: number, y: number, p: Player): Ethos {
+    const key = `${this.activeKey}@${x},${y}`;
+    let e = this.altarEthos.get(key);
+    if (!e) {
+      const others: Ethos[] = (["Order", "Balance", "Chaos"] as Ethos[]).filter((z) => z !== p.ethos);
+      e = ROT.RNG.getUniform() < 0.62 ? (p.ethos as Ethos) : ROT.RNG.getItem(others)!;
+      this.altarEthos.set(key, e);
+    }
+    return e;
+  }
+  private setAltarEthos(x: number, y: number, e: Ethos): void { this.altarEthos.set(`${this.activeKey}@${x},${y}`, e); }
+
   offerCorpse(p: Player): boolean {
     if (this.level.tileAt(p.x, p.y) !== "altar") { this.log.add("You can only make an offering at a Gavin altar (_).", "dim"); return false; }
     // The Genesis Plane: offer the JAM on your aligned altar of pure intent — the true ascension.
@@ -2201,6 +2223,22 @@ export class Game {
     if (rotten) {
       p.luck = Math.max(-13, p.luck - 1);
       this.log.add(`You burn the rotten ${name} on the altar — Gavin is unimpressed. (Fortune dips)`, "bad");
+      return true;
+    }
+    // Cross-aligned altar: sacrificing here is a bid to CONVERT it to your ethos — or anger its patron.
+    const ae = this.altarEthosAt(p.x, p.y, p);
+    if (ae !== p.ethos) {
+      const power = 0.3 + Math.max(0, this.luckOf(p)) * 0.02 + fi.corpse.def.hp * 0.01;
+      if (ROT.RNG.getUniform() < Math.min(0.75, power)) {
+        this.setAltarEthos(p.x, p.y, p.ethos as Ethos);
+        p.favor += 3; p.luck = Math.min(13, p.luck + 1);
+        this.log.add(`The ${ethosName(ae)} altar shudders and re-consecrates to ${ethosName(p.ethos)} — you have converted it! This ground is yours now.`, "good");
+      } else {
+        const dmg = ROT.RNG.getUniformInt(4, 10); p.hp -= dmg;
+        this.log.add(`The ${ethosName(ae)} altar's patron resists your ${name} and lashes out for ${dmg}!`, "bad");
+        if (p.hp <= 0) this.killPlayer(p);
+      }
+      this.draw();
       return true;
     }
     p.luck = Math.min(13, p.luck + 1);
