@@ -77,6 +77,9 @@ export const ITEMS: ItemType[] = [
   { id: "boots",  kind: "armor",  name: "sync boots",          fname: "leather boots",       ch: "[", fg: "#a08060", ac: 1, slot: "boots",  weight: 2 },
   { id: "shield", kind: "armor",  name: "a firewall shield",   fname: "a kite shield",       ch: "[", fg: "#90a0c0", ac: 2, slot: "shield", weight: 3 },
   { id: "oilcloak", kind: "armor", name: "an oilskin cloak",   fname: "an oilskin cloak",    ch: "[", fg: "#c0b080", ac: 1, slot: "cloak",  weight: 2 }, // inherently rust/acid-proof (spawns proofed)
+  { id: "scale_red",  kind: "armor", name: "red validator scale",  fname: "red dragon scale mail",  ch: "[", fg: "#e05040", ac: 3, slot: "body", weight: 2 }, // fire resistance while worn
+  { id: "scale_white",kind: "armor", name: "white validator scale", fname: "white dragon scale mail", ch: "[", fg: "#c0e0f0", ac: 3, slot: "body", weight: 2 }, // cold resistance while worn
+  { id: "scale_blue", kind: "armor", name: "blue validator scale", fname: "blue dragon scale mail", ch: "[", fg: "#6080f0", ac: 3, slot: "body", weight: 2 }, // shock resistance while worn
   // ── food ── %
   { id: "ration", kind: "food",   name: "a ration of cycles",  fname: "a food ration",       ch: "%", fg: "#c0a050", nutrition: 600, weight: 5 },
   { id: "crumb",  kind: "food",   name: "a stale block",       fname: "a stale crust",       ch: "%", fg: "#8a7a40", nutrition: 220, weight: 4 },

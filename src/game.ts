@@ -3124,7 +3124,9 @@ export class Game {
   private elementResisted(e: Entity, element: "fire" | "cold" | "shock"): boolean {
     const key = element === "fire" ? "fireResist" : element === "cold" ? "coldResist" : "shockResist";
     const ringRes = e instanceof Player && ((element === "fire" && e.ringFireRes) || (element === "cold" && e.ringColdRes) || (element === "shock" && e.ringShockRes));
-    if (e instanceof Player && (e.intrinsics.has(key) || ringRes)) {
+    const scaleId = element === "fire" ? "scale_red" : element === "cold" ? "scale_white" : "scale_blue";
+    const scaleRes = e instanceof Player && e.wornArmor.some((a) => a.type.id === scaleId); // dragon-scale mail grants the matching resistance while worn
+    if (e instanceof Player && (e.intrinsics.has(key) || ringRes || scaleRes)) {
       const what = element === "fire" ? "The flames wash over you harmlessly" : element === "cold" ? "The killing cold cannot touch you" : "The current earths itself through you harmlessly";
       this.log.add(`${what} — ${element} resistance!`, "good", e);
       return true;
