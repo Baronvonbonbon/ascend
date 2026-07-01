@@ -52,8 +52,8 @@ Every adaptation routes through this table so the theming stays coherent.
 | Elemental Planes | **the Relay Planes** (Consensus / Finality / Light Clients) | ✅ (Phase 12b; per-Plane layouts Phase 17) |
 | Astral Plane | **the Genesis Plane** — offer the JAM on your aligned altar | ✅ (Phase 12b/12c) |
 | Gods + alignment (Law/Neutral/Chaos) | **Architects** + **ethos**: Order / Balance / Chaos | ✅ (Phase 8d — ethos, favor, wrath, crowning) |
-| Roles (Valkyrie, Wizard…) | **archetypes**: Validator, Nominator, Cypherpunk, Builder (+more planned) | 🟡 (Phase 6 — 4 archetypes w/ stats + kits) |
-| Races (Human/Elf/Dwarf/Gnome/Orc) | **ecosystems**: Substrate-native, EVM, Bitcoiner, Kusaman, Goblin/bot | ❌ |
+| Roles (Valkyrie, Wizard…) | **archetypes**: Validator, Nominator, Cypherpunk, Builder, Maximalist, Watcher, Solo Staker, Auditor | ✅ (Phase 19 — 8 archetypes w/ stats + kits) |
+| Races (Human/Elf/Dwarf/Gnome/Orc) | **ecosystems**: Substrate-native, EVM, Bitcoiner, Kusaman, Botnet | ✅ (Phase 19 — 5 races: stat tweak + intrinsic on top of the class) |
 | Pet dog/cat | **nominator** (`d`) | ✅ |
 | Steed (horse, #ride) | **validator steed** (ride the nominator) | ✅ (Phase 11g — `M` #ride, +30 speed) |
 | Polymorph (self/other) | **fork** (poly self) / **nullify** (poly other via wand) / **lycanthropy** ("you've been forked") | ✅ (Phase 8b self-fork + Phase 7d poly-monster wand + Phase 8f lycanthropy) |
@@ -188,7 +188,7 @@ Each phase is independently shippable through the existing build → deploy → 
 ## 3. Intentionally adapted or cut (⤬)
 
 - **Save/restore** — permadeath is the point; on-chain run records + bones replace save files. No save-scumming.
-- **The full 13 roles / 5 races at once** — we phase in archetypes; not all of NetHack's classes ship day one.
+- **The full 13 roles** — we ship **8 archetypes** (+ the **5 ecosystems/races**), not all of NetHack's 13 classes.
 - **Exact RNG / ISAAC64 parity** — rot-js RNG is fine; we *gain* seedable shared-seed/daily runs.
 - **Terminal-specific UI** (`windows.c`, `options.c`, tty/curses/Qt ports, colors symbols sets) — we have one canvas renderer + a mobile deck; options become a small settings panel.
 - **`mail.c`** real mail daemon — at most a cosmetic "airdrop incoming" gag.

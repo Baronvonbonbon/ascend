@@ -7,7 +7,7 @@ import type { LogWho } from "./log";
 import {
   COLORS, TILE_GLYPH, TileType, MONSTERS, MonsterDef, deaths, greetings,
   MAX_DEPTH, CENSOR, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, PRIEST, COUNCIL_GUARD, ORACLE, ORACLE_HINTS, ORACLE_RUMORS, realmName, grayPaper, ChainDef, CHAINS, BranchDef, BRANCHES, branchById, questFor,
-  abilityMod, archetypeById, ATTRS, ATTR_LABEL, attrFlavor, spellById, Ethos,
+  abilityMod, archetypeById, raceById, raceName, ATTRS, ATTR_LABEL, attrFlavor, spellById, Ethos,
   monName, questHomeland, archetypeName, ethosName, spellName, chainName, branchEnd, branchEntryFlavor,
 } from "./data";
 import { fp, skin, toggleFlavor } from "./flavor";
@@ -139,6 +139,7 @@ export class Game {
   private peer: Peer | null = null;
   private downed = new Set<Player>(); // players who have fallen this run
   archetypeId = "validator";   // the local player's chosen archetype (applied on newGame)
+  raceId = "substrate";        // the local player's chosen ecosystem/race (stat tweak + intrinsic)
   turn = 0;                    // global turn clock (drives corpse rot)
 
   private screen!: HTMLElement;                 // the map's container — overlays (chat banner, queue badge) attach here
@@ -187,6 +188,7 @@ export class Game {
     this.acting = this.player;
     this.giveStartingKit(this.player);
     this.applyArchetype(this.player, this.archetypeId);
+    this.applyRace(this.player, this.raceId);
     if (this.coop) {
       // Two adventurers descend together; perspective-neutral names for the shared log.
       this.player.name = "Host";
@@ -196,6 +198,7 @@ export class Game {
       this.coPlayer.ident = new Idents(this.appearances); // shared world looks, separate knowledge
       this.giveStartingKit(this.coPlayer);
       this.applyArchetype(this.coPlayer, "nominator"); // the partner runs as a Nominator in co-op v1
+      this.applyRace(this.coPlayer, "substrate");
       this.pet = null; // no nominators in co-op v1
     } else {
       this.coPlayer = null;
@@ -311,6 +314,16 @@ export class Game {
     }
   }
 
+  /** Layer an ecosystem/race onto the chosen archetype: a stat tweak (clamped 3–18) + starting intrinsics. */
+  private applyRace(p: Player, id: string): void {
+    const r = raceById(id);
+    p.race = r.id;
+    for (const a of ATTRS) { const m = r.statMod[a]; if (m) p[a] = Math.max(3, Math.min(18, p[a] + m)); }
+    for (const intr of r.intrinsics) p.intrinsics.add(intr);
+    this.recomputeEnergy(p); p.energy = p.maxEnergy; // INT tweaks shift the energy pool
+    p.maxHp = Math.max(1, p.maxHp + (r.statMod.con ?? 0)); p.hp = p.maxHp; // a hardier/frailer body
+  }
+
   /** XP needed to reach a given epoch (level): L2=20, L3=60, L4=120, L5=200… */
   private xpForLevel(L: number): number { return 10 * L * (L - 1); }
 
@@ -364,7 +377,7 @@ export class Game {
 
   showCharSheet(): void {
     const p = this.acting;
-    this.log.add(`— ${p.name === "you" ? "You" : p.name}, ${p.title ? p.title + " " : ""}${archetypeName(archetypeById(p.archetype))} · ${ethosName(p.ethos)} · epoch ${p.level} —`, "sys");
+    this.log.add(`— ${p.name === "you" ? "You" : p.name}, ${p.title ? p.title + " " : ""}${raceName(raceById(p.race))} ${archetypeName(archetypeById(p.archetype))} · ${ethosName(p.ethos)} · epoch ${p.level} —`, "sys");
     this.log.add(`  ${ATTRS.map((a) => `${ATTR_LABEL[a]} ${p[a]}`).join("  ")}`, "dim");
     this.log.add(`  HP ${p.hp}/${p.maxHp}  AC ${p.ac}  Fortune ${this.luckOf(p) >= 0 ? "+" : ""}${this.luckOf(p)}  XP ${p.xp}/${this.xpForLevel(p.level + 1)}`, "dim");
     const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", drainResist: "drain resist", fast: "fast", telepathy: "telepathy" } as Record<string, string>)[i] ?? i);
@@ -379,7 +392,7 @@ export class Game {
   /** `#audit` (A) — a full enlightenment dump: everything the character sheet has, and more. A free read. */
   showAudit(): void {
     const p = this.acting;
-    this.log.add(`— ${fp("Character record", "Audit report")}: ${p.name === "you" ? "you" : p.name}, ${p.title ? p.title + " " : ""}${archetypeName(archetypeById(p.archetype))} —`, "sys");
+    this.log.add(`— ${fp("Character record", "Audit report")}: ${p.name === "you" ? "you" : p.name}, ${p.title ? p.title + " " : ""}${raceName(raceById(p.race))} ${archetypeName(archetypeById(p.archetype))} —`, "sys");
     this.log.add(`  ${ethosName(p.ethos)} · epoch ${p.level} · XP ${p.xp}/${this.xpForLevel(p.level + 1)}${p.crowned ? ` · ${fp("Knighted", "Technical Fellowship")} ${p.title}` : ""}.`, "dim");
     this.log.add(`  ${ATTRS.map((a) => `${ATTR_LABEL[a]} ${p[a]}`).join("  ")}`, "dim");
     this.log.add(`  HP ${p.hp}/${p.maxHp}  AC ${p.ac}  En ${p.energy}/${p.maxEnergy}  Speed ${p.getSpeed()}  Fortune ${this.luckOf(p) >= 0 ? "+" : ""}${this.luckOf(p)}.`, "dim");

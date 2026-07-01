@@ -77,7 +77,28 @@ export const ARCHETYPES: Archetype[] = [
     stats: { str: 10, dex: 16, con: 11, int: 15, wis: 12, cha: 8 }, hp: 18, start: ["ring_priv", "tele"], spell: "tele", ethos: "Chaos" },
   { id: "builder", name: "Builder", fname: "Wizard", blurb: "Ships primitives — versatile and bright.", fblurb: "Weaver of spells — versatile and bright.",
     stats: { str: 11, dex: 12, con: 12, int: 16, wis: 13, cha: 11 }, hp: 20, start: ["book_map"], spell: "bolt", ethos: "Balance" },
+  { id: "maximalist", name: "Maximalist", fname: "Barbarian", blurb: "A maximalist brute — raw stake and fury.", fblurb: "A wild brute — raw might and fury.",
+    stats: { str: 17, dex: 12, con: 16, int: 8, wis: 10, cha: 8 }, hp: 28, start: ["mace"], ethos: "Chaos" },
+  { id: "watcher", name: "Watcher", fname: "Ranger", blurb: "A keen-eyed node — strikes from range.", fblurb: "A keen-eyed hunter — strikes from range.",
+    stats: { str: 12, dex: 16, con: 12, int: 11, wis: 13, cha: 9 }, hp: 20, start: ["dagger", "dagger"], ethos: "Balance" },
+  { id: "solostaker", name: "Solo Staker", fname: "Monk", blurb: "A self-reliant ascetic — fights bare-handed, swift and calm.", fblurb: "A disciplined ascetic — fights bare-handed, swift and serene.",
+    stats: { str: 13, dex: 15, con: 13, int: 11, wis: 16, cha: 10 }, hp: 22, start: [], ethos: "Order" },
+  { id: "auditor", name: "Auditor", fname: "Archeologist", blurb: "A meticulous explorer — armed with tools and insight.", fblurb: "A meticulous delver — armed with tools and insight.",
+    stats: { str: 11, dex: 13, con: 12, int: 15, wis: 14, cha: 10 }, hp: 20, start: ["scope", "lamp", "pickaxe"], ethos: "Order" },
 ];
+
+/** Ecosystem (NetHack race): a stat tweak + a starting intrinsic, on top of the chosen archetype. */
+export interface Race { id: string; name: string; fname: string; blurb: string; fblurb: string; statMod: Partial<Record<Attr, number>>; intrinsics: string[]; }
+export const RACES: Race[] = [
+  { id: "substrate", name: "Substrate-native", fname: "Human", blurb: "The native chain — balanced and adaptable.", fblurb: "Balanced and adaptable — no innate gifts, no flaws.", statMod: {}, intrinsics: [] },
+  { id: "evm",       name: "EVM",       fname: "Elf",   blurb: "Quick and clever, a touch frail.", fblurb: "Quick and clever, a touch frail.", statMod: { dex: 2, int: 1, con: -1 }, intrinsics: [] },
+  { id: "bitcoiner", name: "Bitcoiner", fname: "Dwarf", blurb: "A tough HODLer — can't be drained.", fblurb: "A tough delver — unshakeable, can't be drained.", statMod: { con: 2, str: 1, dex: -1 }, intrinsics: ["drainResist"] },
+  { id: "kusaman",   name: "Kusaman",   fname: "Orc",   blurb: "Chaos-forged — strong and poison-proof, but abrasive.", fblurb: "War-forged — strong and poison-proof, but abrasive.", statMod: { str: 1, con: 1, cha: -2, int: -1 }, intrinsics: ["poisonResist"] },
+  { id: "botnet",    name: "Botnet",    fname: "Gnome", blurb: "A networked swarm — clever and sensing, but slight.", fblurb: "A clever little folk — sharp-witted and far-sensing, but slight.", statMod: { dex: 1, int: 1, str: -1, con: -1 }, intrinsics: ["telepathy"] },
+];
+export function raceById(id: string): Race { return RACES.find((r) => r.id === id) ?? RACES[0]; }
+export function raceName(r: Race): string { return getFlavor() === "fantasy" ? r.fname : r.name; }
+export function raceBlurb(r: Race): string { return getFlavor() === "fantasy" ? r.fblurb : r.blurb; }
 export function archetypeById(id: string): Archetype { return ARCHETYPES.find((a) => a.id === id) ?? ARCHETYPES[0]; }
 /** An archetype's class name + blurb, flavored. */
 export function archetypeName(a: Archetype): string { return getFlavor() === "fantasy" ? a.fname : a.name; }

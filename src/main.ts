@@ -1,6 +1,6 @@
 import { Game } from "./game";
 import { initLobby } from "./net/lobby";
-import { ARCHETYPES, archetypeName } from "./data";
+import { ARCHETYPES, archetypeName, archetypeBlurb, RACES, raceName, raceBlurb } from "./data";
 
 const screen = document.getElementById("screen");
 const logEl = document.getElementById("log");
@@ -10,13 +10,25 @@ if (screen && logEl) {
 
   const archetype = document.getElementById("archetype") as HTMLSelectElement | null;
   if (archetype) {
-    // Relabel the class options to the active flavor's names (fantasy by default — Knight/Cleric/…).
-    for (const opt of Array.from(archetype.options)) {
-      const a = ARCHETYPES.find((x) => x.id === opt.value);
-      if (a && opt.textContent) opt.textContent = archetypeName(a) + opt.textContent.slice(a.name.length);
+    archetype.innerHTML = ""; // build the class options from the data (fantasy names by default)
+    for (const a of ARCHETYPES) {
+      const opt = document.createElement("option");
+      opt.value = a.id; opt.textContent = `${archetypeName(a)} — ${archetypeBlurb(a)}`;
+      archetype.appendChild(opt);
     }
     game.archetypeId = archetype.value;
     archetype.onchange = () => { game.archetypeId = archetype.value; };
+  }
+  const race = document.getElementById("race") as HTMLSelectElement | null;
+  if (race) {
+    race.innerHTML = ""; // the ecosystem/race options (a stat tweak + intrinsic on top of the class)
+    for (const r of RACES) {
+      const opt = document.createElement("option");
+      opt.value = r.id; opt.textContent = `${raceName(r)} — ${raceBlurb(r)}`;
+      race.appendChild(opt);
+    }
+    game.raceId = race.value;
+    race.onchange = () => { game.raceId = race.value; };
   }
 
   // Wallet connect + on-chain (PAS) payments are deferred — to be reintroduced in a later update.
