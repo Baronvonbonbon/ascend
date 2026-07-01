@@ -58,6 +58,7 @@
       #lobby textarea { width: 100%; font-family: inherit; font-size: 10px; background: #08080a; color: var(--ink);
         border: 1px solid #2a2620; border-radius: 4px; resize: vertical; }
       #lobby-status { color: var(--gold); min-height: 14px; }
+      .lobby-note { color: var(--dim); font-size: 11px; line-height: 1.4; margin: 2px 0 0; }
 
       /* ── touch controls (shown on touch / narrow screens) ── */
       #touch { display: none; width: 100%; max-width: 520px; flex-direction: column; align-items: center; gap: 8px; user-select: none; }
@@ -81,7 +82,7 @@
         #log { height: 96px; }
       }
     </style>
-    <script type="module" crossorigin src="/ascend/assets/index-DYQyBjZk.js"></script>
+    <script type="module" crossorigin src="/ascend/assets/index-C464ukgE.js"></script>
   </head>
   <body>
     <div id="app">
@@ -108,6 +109,7 @@
           <button id="lobby-join" type="button">Join</button>
           <span id="lobby-status"></span>
         </div>
+        <p class="lobby-note">🔒 Direct browser-to-browser (WebRTC, DTLS-encrypted — no server sees your game). Only play with people you trust: your partner sees your IP address, and the link is only as safe as the channel you swap the offer/answer codes over. Exchange those codes over a trusted, end-to-end-encrypted channel (not a public post).</p>
         <div id="lobby-host-pane" class="lobby-pane" hidden>
           <label>1) Send this <b>offer code</b> to your partner:</label>
           <textarea id="lobby-offer" readonly rows="2"></textarea>
