@@ -3260,6 +3260,14 @@ export class Game {
   /** Hard-fork into a monster form: its glyph, attacks, speed, and HP pool, for a while. */
   polySelf(p: Player, form?: MonsterDef): void {
     if (p.polyForm) this.revertPoly(p, true);
+    // System shock: the strain of an unstable rewrite can jolt you before the new form settles —
+    // less likely the tougher (higher-CON) you are. A blessed/controlled fork (an explicit form) is safe.
+    if (!form && ROT.RNG.getUniform() < Math.max(0.05, 0.25 - abilityMod(p.con) * 0.04)) {
+      const d = ROT.RNG.getUniformInt(4, 10); p.hp -= d;
+      this.log.add(`System shock! The unstable rewrite jolts you for ${d} before it snaps back.`, "bad");
+      if (p.hp <= 0) { this.killPlayer(p); return; }
+      return; // the poly fizzles — no new form takes
+    }
     const f = form ?? ROT.RNG.getItem(MONSTERS.filter((m) => m.weight > 0))!;
     p.polyForm = f;
     p.polyTurns = ROT.RNG.getUniformInt(20, 40);
