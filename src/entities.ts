@@ -134,8 +134,9 @@ export class Player extends Entity {
   armorValue(it: Item): number {
     return Math.max(0, (it.type.ac ?? 0) + (it.enchant ?? 0) + bucDelta(it.buc) - (it.erosion ?? 0));
   }
-  /** Recompute total AC (evasion) from every worn piece. */
-  recomputeAC(): void { this.ac = this.wornArmor.reduce((s, it) => s + this.armorValue(it), 0); }
+  protection = 0; // divine protection bought from a temple priest (donation) — permanent evasion bonus
+  /** Recompute total AC (evasion) from every worn piece, plus any bought divine protection. */
+  recomputeAC(): void { this.ac = this.protection + this.wornArmor.reduce((s, it) => s + this.armorValue(it), 0); }
   armorInSlot(slot: ArmorSlot): Item | undefined { return this.wornArmor.find((a) => (a.type.slot ?? "body") === slot); }
 
   /** Apply (on=true) or revert a worn ring's passive effect. A cursed ring betrays you. */

@@ -1960,6 +1960,20 @@ export class Game {
     return `The Oracle eyes your thin purse. "Return with coin, seeker." Then, unbidden: "${ROT.RNG.getItem(ORACLE_RUMORS)!}"`;
   }
 
+  /** `#chat` a temple priest: a gold donation buys divine protection (a permanent evasion bonus) + favor.
+   *  A full offering (≈400×epoch) grants +2; a partial one +1; a stingy coin is rebuffed. Capped by epoch. */
+  private priestDonate(p: Player): string {
+    const full = 400 * p.level;
+    if (p.gold < 50) return "The priest surveys your empty purse. \"Alms feed the temple, seeker — return with coin.\"";
+    if (p.protection >= 3 + Math.floor(p.level / 3)) { return "The priest raises a hand: \"You are already well protected, child. Keep your coin.\""; }
+    const give = Math.min(p.gold, full);
+    p.gold -= give; this.breakConduct(p, "bankless");
+    const grant = give >= full ? 2 : give >= Math.floor(full / 2) ? 1 : 0;
+    if (grant === 0) return `The priest accepts your ${give} gold with a thin smile — but it buys no blessing. (${p.gold} left)`;
+    p.protection += grant; p.favor += grant; p.recomputeAC();
+    return `The priest blesses you for your ${give}-gold offering — a mantle of protection settles over you (+${grant} AC). (${p.gold} left)`;
+  }
+
   /** `c` — chat with an adjacent monster. A free social action; lore, banter, or a taunt. */
   chat(m: Monster): void {
     const d = m.def;
@@ -1980,6 +1994,8 @@ export class Game {
         `${cap(m.name)} regards you coldly: \"You are an unconfirmed transaction. I am finality.\"`,
         `${cap(m.name)} sneers: \"Turn back, validator. The JAM is not for the likes of you.\"`,
       ])!;
+    } else if (d.priest) {
+      line = m.peaceful ? this.priestDonate(this.acting) : "The priest, blood on the altar, thunders: \"You will be judged, defiler!\"";
     } else if (d.name.includes("oracle")) {
       line = "The oracle intones: " + ROT.RNG.getItem([
         "\"Seek the vibrating square where consensus trembles.\"",
