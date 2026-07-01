@@ -344,6 +344,10 @@ export const MONSTERS: MonsterDef[] = [
   // ── rival adventurers (mplayer.c) — other ascendants who came for the JAM and never left; deep only ──
   { name: "a rogue validator",   fname: "a rogue",            ch: "@", fg: "#c0b070", hp: 40, dmg: [6, 11], ai: "chase", minDepth: 20, weight: 1, steals: true, muse: true, speed: 110 },
   { name: "a rival ascendant",   fname: "a valkyrie",         ch: "@", fg: "#b8c8e8", hp: 48, dmg: [7, 12], ai: "chase", minDepth: 26, weight: 1, muse: true, throws: "dart", zaps: "sleep" },
+  // ── the deep Gehennom apex — the last terrors before Moloch ──
+  { name: "a rollup titan",      fname: "a titan",            ch: "H", fg: "#d0a850", hp: 44, dmg: [7, 12], ai: "chase", minDepth: 30, weight: 1, throws: "rock", speed: 90 },
+  { name: "a 51% attacker",      fname: "a minotaur",         ch: "H", fg: "#e05030", hp: 52, dmg: [8, 14], ai: "chase", minDepth: 34, weight: 1, speed: 110 },
+  { name: "a finality reaper",   fname: "a death knight",     ch: "&", fg: "#c03030", hp: 50, dmg: [7, 13], ai: "chase", minDepth: 38, weight: 1, drains: true, fearless: true, muse: true },
 ];
 
 /** The Marketmaker — a bazaar shopkeeper. Peaceful while you pay; lethal if you shoplift. */
