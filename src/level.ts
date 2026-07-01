@@ -483,4 +483,15 @@ export class Level {
       for (let x = 0; x < this.width; x++)
         if (this.tiles[y][x]) { this.explored[y][x] = true; this.exploredCo[y][x] = true; }
   }
+
+  /** Clairvoyance: add the terrain within radius r of (cx,cy) to explored memory — a remote glimpse. */
+  revealAround(cx: number, cy: number, r: number): number {
+    let n = 0;
+    for (let y = Math.max(0, cy - r); y <= Math.min(this.height - 1, cy + r); y++)
+      for (let x = Math.max(0, cx - r); x <= Math.min(this.width - 1, cx + r); x++)
+        if (this.tiles[y][x] && Math.max(Math.abs(x - cx), Math.abs(y - cy)) <= r && (!this.explored[y][x] || !this.exploredCo[y][x])) {
+          this.explored[y][x] = true; this.exploredCo[y][x] = true; n++;
+        }
+    return n;
+  }
 }

@@ -3573,6 +3573,31 @@ export class Game {
         this.log.add(n ? `Auditing the ledger — you sense ${n} object${n > 1 ? "s" : ""} scattered across the level.` : "You audit the ledger, but sense no objects here.", n ? "good" : "dim");
         break;
       }
+      case "scare": {
+        // A wave of dread — nearby foes recoil and flee (bosses/fearless/peaceful are unmoved). Blessed reaches the whole floor.
+        const reach = buc === "blessed" ? 999 : 8, turns = buc === "blessed" ? 15 : 8;
+        let n = 0;
+        for (const m of this.monsters) {
+          if (!m.alive || m.peaceful || m.def.boss || m.def.fearless) continue;
+          if (Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) <= reach) { m.frightened = Math.max(m.frightened, turns); n++; }
+        }
+        this.log.add(n ? `A wave of dread rolls out — ${n} foe${n > 1 ? "s" : ""} recoil and flee!` : "A wave of dread rolls out, but nothing near enough feels it.", n ? "good" : "dim");
+        break;
+      }
+      case "gold": {
+        let n = 0;
+        for (const i of this.level.items) if (i.coins != null) { i.detected = true; n++; }
+        this.recomputeFOV();
+        this.log.add(n ? `A balance check pings — you sense ${n} gold pile${n > 1 ? "s" : ""} across the floor.` : "A balance check pings, but no gold lies loose on this floor.", n ? "good" : "dim");
+        break;
+      }
+      case "clairvoyance": {
+        const r = buc === "blessed" ? 14 : 8;
+        const n = this.level.revealAround(p.x, p.y, r);
+        this.recomputeFOV();
+        this.log.add(n ? "A remote view floods your mind — the surrounding halls lay themselves bare." : "A remote view floods your mind, but you already know these halls.", n ? "sys" : "dim");
+        break;
+      }
       case "detect_trap": {
         let n = 0;
         for (const tr of this.level.traps) { tr.revealed = true; tr.detected = true; n++; }
