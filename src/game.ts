@@ -1,6 +1,6 @@
 import * as ROT from "rot-js";
 import { Level, Trap, TrapKind, LevelKind, FloorItem } from "./level";
-import { Entity, Player, Monster, Pet } from "./entities";
+import { Entity, Player, Monster, Pet, SATIATED, CHOKE } from "./entities";
 import { Item } from "./inventory";
 import { Log } from "./log";
 import type { LogWho } from "./log";
@@ -3605,11 +3605,23 @@ export class Game {
     const { def, born } = fi.corpse;
     this.breakConduct(p, "vegetarian"); // eating a corpse ends Vegetarian
     this.level.items = this.level.items.filter((i) => i !== fi);
-    p.nutrition += Math.max(50, Math.min(600, def.hp * 12));
     this.log.add(`${this.sub(p)} ${this.verbS(p, "eat")} the ${def.name} corpse.`, "good");
+    this.swallow(p, Math.max(50, Math.min(600, def.hp * 12)));
     this.applyMeatEffect(p, def, this.turn - born > 60);
     if (p.hp <= 0) this.killPlayer(p);
     return true;
+  }
+
+  /** Add nutrition from a meal, warning at Satiated and choking (fatal — the life-saving amulet can catch it)
+   *  if you gorge past the choke threshold. Every eat path funnels through here. */
+  swallow(p: Player, amount: number): void {
+    p.nutrition += amount;
+    if (p.nutrition > CHOKE) {
+      this.log.add(`${this.sub(p)} ${this.verbS(p, "choke")} over the food — it won't go down!`, "bad");
+      this.killPlayer(p); // the amulet of life saving (if worn) catches even this
+    } else if (p.nutrition > SATIATED) {
+      this.log.add("You're having a hard time getting all that food down.", "bad");
+    }
   }
 
   /** The nutrition-borne effects of eating meat (a corpse or a tin's contents): intrinsics, poison, illness. */
@@ -3643,8 +3655,8 @@ export class Game {
     p.inventory.remove(tin);
     this.breakConduct(p, "vegetarian"); // tinned meat ends Vegetarian
     const def = this.pickMonster(p.depth);
-    p.nutrition += 500;
     this.log.add(`You crank the tin open — ${def.name} meat within. You eat it. Much better.`, "good");
+    this.swallow(p, 500);
     this.applyMeatEffect(p, def, false); // tinned meat never rots
     if (p.hp <= 0) this.killPlayer(p);
     return true;

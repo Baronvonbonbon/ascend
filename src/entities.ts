@@ -46,6 +46,9 @@ export abstract class Entity {
 }
 
 // Chebyshev (8-dir) movement deltas keyed by KeyboardEvent.key.
+export const SATIATED = 2000; // over-full: eating more warns, then risks choking
+export const CHOKE = 2900;     // gorge past this and you choke on your food
+
 const MOVES: Record<string, [number, number]> = {
   ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
   k: [0, -1], j: [0, 1], h: [-1, 0], l: [1, 0],
@@ -321,6 +324,7 @@ export class Player extends Entity {
     if (this.nutrition <= 0) return "Starving";
     if (this.nutrition < 50) return "Weak";
     if (this.nutrition < 150) return "Hungry";
+    if (this.nutrition > SATIATED) return "Satiated";
     return "";
   }
 
@@ -766,8 +770,8 @@ export class Player extends Entity {
       case "eat":
         if (t.kind !== "food") { this.game.log.add("That isn't food.", "dim"); return false; }
         if (t.id === "tin") return this.game.eatTin(this, item) ? this.endTurn() : false;
-        this.nutrition += t.nutrition!;
         this.game.log.add(`You eat ${t.name}. Much better.`, "good");
+        this.game.swallow(this, t.nutrition!);
         this.inventory.remove(item); this.unequip(item); return this.endTurn();
       case "quaff":
         if (t.kind !== "potion") { this.game.log.add("You can't drink that.", "dim"); return false; }
