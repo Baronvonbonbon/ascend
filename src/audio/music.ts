@@ -5,13 +5,15 @@
 // baseline + live danger/crowd/JAM/boss). When you've been calm for a while it settles
 // back to the bare ambient bed; the groove snaps back when a threat returns.
 //
-// When fully settled (a long calm), a relaxed CHILL IDLE GROOVE takes over — a half-time
-// syncopated bass + light percussion with very sparse zone-keyed chimes. The dread depths each get
-// their OWN ominous idle, escalating: the Foot of the Relay has a deep pulse; Gehennom is sparser and
-// grinding (irregular thuds, a sub-rumble, looming minor-2nd swells); Moloch's Sanctum is the most
-// oppressive — a slow distant doom-toll heartbeat, a constant dissonant tritone drone, and frequent
-// low looming swells (all hope is lost). The Planes float free instead — no drums, no low end, just
-// sparse ascending harp arpeggios + bright high chimes in vast reverb. All state changes (combat ↔
+// When fully settled (a long calm), a CHILL IDLE GROOVE takes over. Each zone has FIVE distinct idle
+// grooves (the `IDLE` table); one is picked at random every time idle engages, so a long session hears
+// different grooves as threats come and go. Meters roam beyond 4/4 — each groove is a self-contained
+// cell of `steps` sixteenths (3/4·6/8, 7/8, 5/4, 9/8, 12/8, 5/8…) with a bass figure summing to the
+// bar. Exploration zones get a bright syncopated kit + bass; the dread depths escalate — the Foot of
+// the Relay keeps a deep pulse, Gehennom is sparser + grinding (thuds every other bar, looming
+// minor-2nd swells), Moloch's Sanctum is the most oppressive (a slow doom-toll, a dissonant tritone
+// drone, frequent low swells). The Planes float free — no drums/low-end, just ascending harp
+// arpeggios + bright high chimes in vast reverb. All state changes (combat ↔
 // idle ↔ explore) crossfade smoothly — the tension layer recedes over ~2s so nothing is ever abrupt.
 // And the bed
 // BREATHES: the drone AND the pad swells drop low and fully out for ~30s on a slow ~80s
@@ -119,6 +121,105 @@ const DANGER_THEMES: DangerTheme[] = [
   { id: "hunt",  zoned: false, scale: [0, 3, 6, 7, 10, 7, 6, 3],                                               lead: "square",   grace: "sawtooth", cutoff: 2050, bassFig: [0, 0, 0, 6, 0, 0, 7, 6], kickFill: 1.0,  heavy: true },
 ];
 
+// ── idle grooves ─────────────────────────────────────────────────────────────
+// Five settled-state grooves PER ZONE. When a long calm settles into the idle bed, one is picked at
+// random. Each is a self-contained rhythm cell of `steps` sixteenth-notes — so meters roam beyond 4/4
+// (16): 3/4·6/8 = 12, 7/8 = 14, 5/4 = 20, 9/8 = 18, 12/8 = 24, 5/8 = 10. The bass figure's durations
+// sum to `steps`, so it re-locks each bar. Exploration zones get a bright kit + bass; the dread trio
+// (relay < gehennom < sanctum) deep thuds + dissonant m2/tritone bass + looming swells + low tolls,
+// escalating per zone; the Planes float free — no drums/bass, just ascending harp arps + bright chimes.
+interface IdleGroove {
+  steps: number;          // bar length in 16th steps (16=4/4, 12=3/4·6/8, 14=7/8, 20=5/4, 18=9/8, 24=12/8, 10=5/8)
+  bass: Note[];           // [degree-from-root, durSteps]; durations sum to `steps` (REST allowed)
+  kick?: number[];        // kick / deep-thud step positions
+  snare?: number[];       // bandpass hit (snare / rim / tom) step positions
+  hat?: number[];         // highpass hit (hat / shaker) step positions
+  deep?: boolean;         // deep, heavy kick + low-pass "tom" (the dread depths)
+  barGate?: number;       // fire the kit only every Nth bar (sparse dread)
+  swellEvery?: number;    // looming low swell cadence in seconds (dread); omit = none
+  low?: boolean;          // low dissonant toll chimes (dread) instead of bright octave-up bells
+  chimeDegs?: number[];   // chime pitch pool (degrees from root)
+  chimeEvery?: number;    // seconds between chime rolls (base; randomised ±100%)
+  arp?: number[];         // Planes only: ascending arpeggio degrees (no drums/bass)
+  arpEvery?: number;      // Planes: seconds between arpeggios
+}
+
+const IDLE: Record<string, IdleGroove[]> = {
+  // ── exploration: bright kit + syncopated bass, octave-up chimes ──
+  legacy: [
+    { steps: 16, kick: [0, 10], snare: [8], hat: [4, 6, 12, 14], bass: [[0, 4], [REST, 2], [7, 2], [5, 4], [REST, 2], [3, 2]], chimeDegs: [0, 7, 12, 15], chimeEvery: 4 },
+    { steps: 12, kick: [0, 6], snare: [9], hat: [3, 9], bass: [[0, 3], [7, 3], [REST, 3], [5, 3]], chimeDegs: [7, 12, 15, 19], chimeEvery: 4.5 },
+    { steps: 20, kick: [0, 12, 16], snare: [8], hat: [4, 6, 14, 18], bass: [[0, 4], [REST, 2], [7, 2], [3, 4], [REST, 2], [5, 2], [7, 4]], chimeDegs: [0, 5, 12], chimeEvery: 5 },
+    { steps: 14, kick: [0, 8], snare: [10], hat: [4, 6, 12], bass: [[0, 4], [7, 2], [REST, 2], [3, 3], [5, 3]], chimeDegs: [0, 7, 15], chimeEvery: 4 },
+    { steps: 16, kick: [0, 11], snare: [4, 12], hat: [2, 6, 10, 14], bass: [[0, 3], [REST, 1], [3, 4], [7, 4], [REST, 1], [5, 3]], chimeDegs: [12, 15, 19], chimeEvery: 4.5 },
+  ],
+  parachain: [
+    { steps: 16, kick: [0, 6, 8, 14], snare: [4, 12], hat: [2, 6, 10, 14], bass: [[0, 2], [7, 2], [REST, 2], [4, 2], [9, 2], [7, 2], [5, 2], [REST, 2]], chimeDegs: [0, 7, 14, 16], chimeEvery: 3.5 },
+    { steps: 14, kick: [0, 6, 10], snare: [8], hat: [2, 4, 8, 12], bass: [[0, 2], [4, 2], [7, 2], [REST, 2], [9, 2], [7, 2], [5, 2]], chimeDegs: [7, 14, 16], chimeEvery: 4 },
+    { steps: 24, kick: [0, 6, 12, 18], snare: [9, 21], hat: [3, 9, 15, 21], bass: [[0, 3], [7, 3], [4, 3], [7, 3], [9, 3], [7, 3], [5, 3], [0, 3]], chimeDegs: [0, 7, 14], chimeEvery: 4.5 },
+    { steps: 10, kick: [0, 6], snare: [4], hat: [2, 8], bass: [[0, 2], [7, 2], [4, 2], [9, 2], [7, 2]], chimeDegs: [7, 16, 19], chimeEvery: 3.5 },
+    { steps: 20, kick: [0, 8, 10, 16], snare: [4, 12], hat: [2, 6, 14, 18], bass: [[0, 4], [7, 2], [4, 2], [7, 2], [9, 2], [7, 2], [5, 2], [0, 4]], chimeDegs: [0, 9, 14, 16], chimeEvery: 4 },
+  ],
+  kusama: [
+    { steps: 16, kick: [0, 4, 8, 12], snare: [8], hat: [2, 6, 10, 14], bass: [[0, 2], [0, 2], [6, 2], [0, 2], [3, 2], [6, 2], [0, 4]], chimeDegs: [0, 6, 13], chimeEvery: 3.5 },
+    { steps: 12, kick: [0, 6, 9], snare: [6], hat: [3, 9], bass: [[0, 3], [6, 3], [0, 3], [3, 3]], chimeDegs: [6, 13], chimeEvery: 4 },
+    { steps: 18, kick: [0, 6, 10, 14], snare: [8], hat: [2, 12, 16], bass: [[0, 3], [6, 3], [0, 3], [3, 3], [6, 3], [0, 3]], chimeDegs: [0, 6, 13], chimeEvery: 4 },
+    { steps: 14, kick: [0, 4, 8], snare: [10], hat: [2, 6, 12], bass: [[0, 2], [6, 2], [0, 2], [3, 2], [6, 2], [0, 2], [6, 2]], chimeDegs: [3, 6, 13], chimeEvery: 3.5 },
+    { steps: 20, kick: [0, 8, 12, 16], snare: [4], hat: [2, 6, 10, 14, 18], bass: [[0, 4], [6, 2], [0, 2], [3, 4], [6, 2], [0, 2], [6, 4]], chimeDegs: [0, 6, 13], chimeEvery: 4 },
+  ],
+  mempool: [
+    { steps: 16, kick: [0, 4, 8, 10, 12], snare: [4, 12], hat: [2, 6, 10, 14], bass: [[0, 2], [0, 2], [7, 2], [0, 2], [0, 2], [10, 2], [7, 2], [5, 2]], chimeDegs: [0, 5, 10, 12], chimeEvery: 3 },
+    { steps: 24, kick: [0, 6, 8, 12, 18, 20], snare: [9, 21], hat: [3, 9, 15, 21], bass: [[0, 3], [7, 3], [0, 3], [10, 3], [7, 3], [5, 3], [0, 3], [7, 3]], chimeDegs: [0, 7, 10], chimeEvery: 3.5 },
+    { steps: 12, kick: [0, 3, 6, 9], snare: [6], hat: [2, 4, 8, 10], bass: [[0, 2], [7, 2], [0, 2], [10, 2], [7, 2], [5, 2]], chimeDegs: [5, 10, 12], chimeEvery: 3 },
+    { steps: 20, kick: [0, 4, 8, 10, 16], snare: [8], hat: [2, 6, 12, 14, 18], bass: [[0, 4], [7, 2], [0, 2], [10, 2], [7, 2], [5, 2], [0, 2], [7, 4]], chimeDegs: [0, 5, 10, 12], chimeEvery: 3.5 },
+    { steps: 14, kick: [0, 4, 6, 10], snare: [8], hat: [2, 6, 10, 12], bass: [[0, 2], [0, 2], [7, 2], [10, 2], [7, 2], [5, 2], [0, 2]], chimeDegs: [0, 7, 10], chimeEvery: 3 },
+  ],
+  elsewhere: [
+    { steps: 16, kick: [0, 6, 8, 14], snare: [4, 12], hat: [2, 6, 10, 14], bass: [[0, 2], [4, 2], [8, 2], [4, 2], [0, 2], [8, 2], [4, 2], [0, 2]], chimeDegs: [0, 4, 8, 12], chimeEvery: 3.5 },
+    { steps: 20, kick: [0, 8, 10, 16], snare: [4, 12], hat: [2, 6, 14, 18], bass: [[0, 4], [4, 2], [8, 2], [4, 2], [0, 2], [8, 2], [4, 2], [0, 4]], chimeDegs: [0, 4, 8], chimeEvery: 4 },
+    { steps: 12, kick: [0, 6], snare: [9], hat: [3, 6, 9], bass: [[0, 3], [4, 3], [8, 3], [4, 3]], chimeDegs: [4, 8, 12], chimeEvery: 4 },
+    { steps: 14, kick: [0, 6, 10], snare: [8], hat: [2, 4, 12], bass: [[0, 2], [4, 2], [8, 2], [REST, 2], [4, 2], [8, 2], [0, 2]], chimeDegs: [0, 8, 12], chimeEvery: 3.5 },
+    { steps: 18, kick: [0, 6, 12], snare: [9, 15], hat: [3, 9, 15], bass: [[0, 3], [4, 3], [8, 3], [4, 3], [0, 3], [8, 3]], chimeDegs: [0, 4, 8], chimeEvery: 4 },
+  ],
+  // ── the dread trio: deep thuds + dissonant m2(1)/tritone(6) bass + low tolls; sparser + swellier per zone ──
+  relay: [ // least dread — a deep pulse persists
+    { steps: 16, deep: true, kick: [0], snare: [10], bass: [[0, 8], [7, 4], [0, 4]], chimeDegs: [1, 6, 11], low: true, chimeEvery: 7 },
+    { steps: 24, deep: true, kick: [0, 12], snare: [18], bass: [[0, 12], [6, 6], [0, 6]], chimeDegs: [1, 6], low: true, chimeEvery: 8 },
+    { steps: 12, deep: true, kick: [0], snare: [8], bass: [[0, 6], [1, 3], [0, 3]], chimeDegs: [6, 11], low: true, chimeEvery: 7 },
+    { steps: 20, deep: true, kick: [0, 10], snare: [14], bass: [[0, 8], [7, 4], [6, 4], [0, 4]], chimeDegs: [1, 6, 11], low: true, chimeEvery: 7 },
+    { steps: 14, deep: true, kick: [0, 8], snare: [11], bass: [[0, 8], [1, 3], [6, 3]], chimeDegs: [1, 6], low: true, chimeEvery: 7 },
+  ],
+  gehennom: [ // sparser, grinding — the kit thuds only every other bar, looming swells enter
+    { steps: 16, deep: true, barGate: 2, kick: [0], snare: [6], bass: [[0, 10], [1, 3], [6, 3]], swellEvery: 11, chimeDegs: [1, 6], low: true, chimeEvery: 9 },
+    { steps: 24, deep: true, barGate: 2, kick: [0, 12], snare: [6], bass: [[0, 12], [1, 6], [6, 6]], swellEvery: 11, chimeDegs: [1, 6], low: true, chimeEvery: 9 },
+    { steps: 20, deep: true, barGate: 2, kick: [0], snare: [10], bass: [[0, 12], [6, 4], [1, 4]], swellEvery: 10, chimeDegs: [6], low: true, chimeEvery: 9 },
+    { steps: 14, deep: true, barGate: 2, kick: [0, 7], bass: [[0, 8], [1, 3], [6, 3]], swellEvery: 11, chimeDegs: [1, 6], low: true, chimeEvery: 9 },
+    { steps: 18, deep: true, barGate: 2, kick: [0, 9], snare: [6], bass: [[0, 9], [6, 5], [1, 4]], swellEvery: 10, chimeDegs: [1, 6], low: true, chimeEvery: 9 },
+  ],
+  sanctum: [ // most oppressive — a slow doom-toll, an unbroken tritone drone, frequent low swells
+    { steps: 16, deep: true, barGate: 2, kick: [0], bass: [[0, 8], [6, 8]], swellEvery: 6, chimeDegs: [6], low: true, chimeEvery: 12 },
+    { steps: 24, deep: true, barGate: 2, kick: [0, 12], bass: [[0, 8], [6, 8], [1, 8]], swellEvery: 6, chimeDegs: [6], low: true, chimeEvery: 12 },
+    { steps: 20, deep: true, barGate: 2, kick: [0], bass: [[0, 10], [6, 10]], swellEvery: 6, chimeDegs: [6], low: true, chimeEvery: 12 },
+    { steps: 12, deep: true, barGate: 2, kick: [0], bass: [[6, 6], [1, 3], [6, 3]], swellEvery: 6, chimeDegs: [6], low: true, chimeEvery: 12 },
+    { steps: 16, deep: true, barGate: 3, kick: [0], bass: [[0, 4], [6, 4], [1, 4], [6, 4]], swellEvery: 5, chimeDegs: [6], low: true, chimeEvery: 12 },
+  ],
+  // ── the Planes: no drums/bass — ascending harp arps + bright chimes in vast reverb ──
+  planes: [
+    { steps: 16, bass: [], arp: [0, 7, 12, 16], arpEvery: 5, chimeDegs: [0, 7, 12, 16], chimeEvery: 5 },
+    { steps: 12, bass: [], arp: [0, 7, 16, 23], arpEvery: 4, chimeDegs: [7, 16, 23], chimeEvery: 4.5 },
+    { steps: 20, bass: [], arp: [0, 7, 12, 16, 19], arpEvery: 6, chimeDegs: [0, 12, 19], chimeEvery: 6 },
+    { steps: 14, bass: [], arp: [7, 12, 16, 23], arpEvery: 5, chimeDegs: [12, 16, 23], chimeEvery: 5 },
+    { steps: 24, bass: [], arp: [0, 7, 12, 16, 23, 28], arpEvery: 7, chimeDegs: [0, 16, 28], chimeEvery: 6 },
+  ],
+  genesis: [
+    { steps: 16, bass: [], arp: [0, 4, 7, 11], arpEvery: 5, chimeDegs: [0, 4, 7, 11], chimeEvery: 5 },
+    { steps: 12, bass: [], arp: [0, 4, 7, 14], arpEvery: 4, chimeDegs: [4, 7, 14], chimeEvery: 4.5 },
+    { steps: 20, bass: [], arp: [0, 4, 7, 11, 14], arpEvery: 6, chimeDegs: [0, 7, 14], chimeEvery: 6 },
+    { steps: 14, bass: [], arp: [4, 7, 11, 14], arpEvery: 5, chimeDegs: [7, 11, 14], chimeEvery: 5 },
+    { steps: 24, bass: [], arp: [0, 4, 7, 11, 14, 19], arpEvery: 7, chimeDegs: [0, 11, 19], chimeEvery: 6 },
+  ],
+};
+
 interface Voice { osc: OscillatorNode; gain: GainNode; lfo?: OscillatorNode; }
 interface ActiveTrack { def: TrackDef; bus: GainNode; voices: Voice[]; }
 
@@ -165,7 +266,9 @@ export class MusicEngine {
   private nextChime = 0;
   private nextDrip = 0;
   private ebbPhase = Math.random() * Math.PI * 2;
-  // ── idle chill groove (settled state): relaxed syncopated bass + light perc + sparse chimes ──
+  // ── idle chill groove (settled state): one of the zone's five grooves, re-rolled each time idle engages ──
+  private idleVariant = 0;       // which of the current zone's 5 idle grooves is playing
+  private inIdle = false;        // are we currently in the settled idle state (for edge-triggered re-roll)
   private nextChillStep = 0;
   private chillStepIdx = 0;
   private nextChillBass = 0;
@@ -383,6 +486,7 @@ export class MusicEngine {
     this.trillIdx = 0; this.tensionStepIdx = this.tensionBassIdx = 0;
     this.nextJam = this.nextChime = this.nextDrip = now + 1;
     this.nextChillStep = this.nextChillBass = this.nextChillChime = this.nextChillSwell = now + 2; this.chillStepIdx = this.chillBassIdx = this.chillBar = 0;
+    this.inIdle = false; this.idleVariant = Math.floor(Math.random() * 5); // a fresh zone → re-roll its idle groove when calm settles
     this.dangerActive = false; this.dangerTheme = null;
   }
 
@@ -497,11 +601,19 @@ export class MusicEngine {
       const stinging = now < this.stingerUntil;
 
       if (settled && !stinging) {
-        // ── idle: a relaxed, syncopated chill groove (bass + light perc + sparse chimes) over the breathing bed ──
+        // ── idle: one of this zone's five grooves (re-rolled each time idle engages) over the breathing bed ──
+        if (!this.inIdle) { // edge into idle → pick a fresh groove and start its cell clean
+          this.inIdle = true;
+          const n = (IDLE[t.area] ?? IDLE.legacy).length;
+          this.idleVariant = Math.floor(Math.random() * n);
+          this.chillBar = 0; this.chillStepIdx = this.chillBassIdx = 0;
+          this.nextChillStep = this.nextChillBass = this.nextChillChime = this.nextChillSwell = now;
+        }
         this.grooveBus.gain.setTargetAtTime(0.34, now, 2.6);
         this.scheduleChillGroove(t, now, horizon);
         this.nextStep = this.nextBass = now; this.stepIdx = this.bassIdx = 0; // keep the combat groove re-synced for when threat returns
       } else {
+        this.inIdle = false;
         this.grooveBus.gain.setTargetAtTime(grooveOn && !stinging ? intensity * 0.5 : 0, now, 1.4); // ease, never snap
         if (grooveOn && !stinging) this.scheduleGroove(t, now, horizon, intensity);
         else { this.nextStep = this.nextBass = now; this.stepIdx = this.bassIdx = 0; }
@@ -716,102 +828,87 @@ export class MusicEngine {
     } else { this.nextBass = now; this.bassIdx = 0; }
   }
 
-  /** The idle/exploration texture: a relaxed half-time syncopated bass + light percussion with very
-   *  sparse zone-keyed chimes — replaces the old idle bell melody. Drums/bass run through the punchy
-   *  groove bus; chimes ring through the area's reverb. */
+  /** The idle texture: play this zone's currently-selected idle groove (`idleVariant`). Each groove is
+   *  a self-contained rhythm cell of `steps` sixteenths, so meters roam beyond 4/4. Exploration =
+   *  bright kit + syncopated bass; the dread trio = deep thuds + dissonant m2/tritone bass + low tolls +
+   *  looming swells (escalating per zone); the Planes = ascending harp arps + bright chimes (no
+   *  drums/bass). Drums/bass run the groove bus; chimes/arps ring through the area reverb. */
   private scheduleChillGroove(t: TrackDef, now: number, horizon: number): void {
-    // The dread depths (Foot of the Relay / Gehennom / Sanctum) get an ominous idle: sparser, slower
-    // percussion, long low bass tones, and rare dark dissonant chimes — reinforcing the impending dread.
-    // Three escalating dread profiles for the deep zones, each unique:
-    //   relay    — ominous but with a pulse (a deep downbeat thud + an off-beat tom)
-    //   gehennom — sparser, grinding: irregular thuds, a far sub-rumble, looming minor-2nd swells
-    //   sanctum  — the most oppressive: a slow distant doom-toll heartbeat, a constant dissonant
-    //              tritone/minor-2nd drone, frequent low looming swells. All hope is lost.
-    const relay = t.area === "relay", gehennom = t.area === "gehennom", sanctum = t.area === "sanctum";
-    const dread = relay || gehennom || sanctum;
-    // The Planes float free of the dungeon: no drums, no low end — pure weightless space (handled below).
-    const planes = t.area === "planes" || t.area === "genesis";
+    const grooves = IDLE[t.area] ?? IDLE.legacy;
+    const g = grooves[this.idleVariant % grooves.length];
     const step = 60 / (t.bpm ?? 110) / 4; // the zone's 16th grid
     const bus = this.grooveBus;
-    if (this.nextChillStep < now - 1) { this.nextChillStep = now; this.chillStepIdx = 0; }
-    while (!planes && this.nextChillStep < horizon) {
-      const s = this.chillStepIdx, when = this.nextChillStep;
-      if (s === 0) this.chillBar++;
-      if (relay) {
-        if (s === 0) this.kick(when, bus, 0.34, true);
-        if (s === 10 && this.chillBar % 2 === 1) this.noiseHit(when, 0.2, bus, 0.1, "bandpass", 900, 0.7);
-      } else if (gehennom) {
-        if (s === 0 && this.chillBar % 2 === 0) this.kick(when, bus, 0.3, true);        // a thud only every other bar
-        if (s === 6 && this.chillBar % 4 === 1) this.noiseHit(when, 0.34, bus, 0.09, "lowpass", 190, 0.6); // a far sub-rumble
-      } else if (sanctum) {
-        // a slow, distant heartbeat of doom — a deep toll-and-echo every two bars, nothing else
-        if (s === 0 && this.chillBar % 2 === 0) { this.kick(when, bus, 0.3, true); this.kick(when + step * 1.5, bus, 0.15, true); }
-      } else {
-        // half-time, laid-back kit: kick on beat 1 + the syncopated "&-of-3"; soft rim on 3; swung shaker
-        if (s === 0 || s === 11) this.kick(when, bus, 0.3);
-        if (s === 8) this.noiseHit(when, 0.11, bus, 0.11, "bandpass", 1700, 0.7);
-        if (s === 6 || s === 14) this.noiseHit(when, 0.04, bus, 0.05, "highpass", 7000, 0.7);
-      }
-      this.chillStepIdx = (s + 1) % 16;
-      this.nextChillStep += step;
-    }
-    if (planes) {
-      // no bass — instead, sparse but always-ascending syncopated harp arpeggios (a sense of rising),
-      // drenched in the Planes' big reverb. Lots of empty space between them.
+
+    // ── the Planes: no drums/bass — ascending harp arpeggios + bright chimes, lots of empty space ──
+    if (g.arp) {
       if (this.nextChillBass < now - 1) this.nextChillBass = now;
       while (this.nextChillBass < horizon) {
-        if (this.active && Math.random() < 0.7) {
-          const ch = t.chord.length ? t.chord : [0, 7, 12];
-          const notes = [...ch, ch[ch.length - 1] + 12]; // climb into the octave above
+        if (this.active && Math.random() < 0.72) {
           let when = this.nextChillBass;
-          for (let i = 0; i < notes.length; i++) {
-            this.harpNote(semi(t.root, notes[i]) * 2, when, 2.6, this.active.bus, 0.038);
-            when += step * (i % 2 === 0 ? 1 : 2); // syncopated spacing — a lilt as it ascends
+          for (let i = 0; i < g.arp.length; i++) {
+            this.harpNote(semi(t.root, g.arp[i]) * 2, when, 2.6, this.active.bus, 0.038);
+            when += step * (i % 2 === 0 ? 1 : 2); // syncopated lilt as it ascends
           }
         }
-        this.nextChillBass += 4 + Math.random() * 4; // a fresh arpeggio every ~4–8s, sparse
+        this.nextChillBass += (g.arpEvery ?? 5) + Math.random() * (g.arpEvery ?? 5);
       }
-    } else {
-      // bass: each dread zone its own grind — relay (root → m2 → tritone), gehennom (very long root drone
-      // → m2 → long tritone), sanctum (an unbroken dissonant cluster cycle: root/tritone/m2/tritone). Else
-      // a sparse syncopated figure. All in the zone's key, summing to whole bars.
-      const fig: Note[] = relay ? [[0, 16], [1, 8], [0, 16], [6, 8]]
-        : gehennom ? [[0, 24], [1, 8], [6, 16], [1, 8]]
-        : sanctum ? [[0, 16], [6, 16], [1, 16], [6, 16]]
-        : [[0, 3], [REST, 1], [7, 2], [REST, 2], [5, 2], [REST, 1], [0, 3], [REST, 2]];
-      const bassPeak = sanctum ? 0.22 : dread ? 0.2 : 0.18;
+      this.nextChillStep = this.nextChillSwell = now;
+      const pd = g.chimeDegs ?? [0, 7, 12, 16];
+      while (this.nextChillChime < horizon) {
+        if (this.active && Math.random() < 0.35) this.bellNote(semi(t.root, pd[Math.floor(Math.random() * pd.length)]) * 2, this.nextChillChime, 5.5, this.active.bus, 0.04);
+        this.nextChillChime += (g.chimeEvery ?? 5) + Math.random() * ((g.chimeEvery ?? 5) + 1);
+      }
+      return;
+    }
+
+    // ── drum zones (exploration + the dread trio): the groove's own kit on its own `steps` grid ──
+    const deep = !!g.deep;
+    if (this.nextChillStep < now - 1) { this.nextChillStep = now; this.chillStepIdx = 0; }
+    while (this.nextChillStep < horizon) {
+      const s = this.chillStepIdx, when = this.nextChillStep;
+      if (s === 0) this.chillBar++;
+      if (!g.barGate || this.chillBar % g.barGate === 0) { // sparse dread: fire the kit only every Nth bar
+        if (g.kick && g.kick.includes(s)) this.kick(when, bus, 0.32, deep);
+        if (g.snare && g.snare.includes(s)) this.noiseHit(when, deep ? 0.22 : 0.12, bus, deep ? 0.1 : 0.12, deep ? "lowpass" : "bandpass", deep ? 260 : 1750, 0.7);
+        if (g.hat && g.hat.includes(s)) this.noiseHit(when, 0.04, bus, s % 4 === 2 ? 0.06 : 0.045, "highpass", 7200, 0.7);
+      }
+      this.chillStepIdx = (s + 1) % g.steps;
+      this.nextChillStep += step;
+    }
+
+    // ── the bass figure (durations sum to the bar, so it re-locks each cell) ──
+    const bassPeak = deep ? 0.2 : 0.18;
+    if (g.bass.length) {
       if (this.nextChillBass < now - 1) { this.nextChillBass = now; this.chillBassIdx = 0; }
       while (this.nextChillBass < horizon) {
-        const [deg, steps] = fig[this.chillBassIdx % fig.length];
+        const [deg, steps] = g.bass[this.chillBassIdx % g.bass.length];
         const dur = steps * step;
-        if (deg !== REST) { let bf = semi(t.root, deg); while (bf < 41) bf *= 2; this.bassNote(bf, this.nextChillBass, dur * (dread ? 0.98 : 0.85), bus, bassPeak); }
+        if (deg !== REST) { let bf = semi(t.root, deg); while (bf < 41) bf *= 2; this.bassNote(bf, this.nextChillBass, dur * (deep ? 0.98 : 0.85), bus, bassPeak); }
         this.nextChillBass += dur;
-        this.chillBassIdx = (this.chillBassIdx + 1) % fig.length;
+        this.chillBassIdx = (this.chillBassIdx + 1) % g.bass.length;
       }
-    }
-    // ominous low looming swells (gehennom + sanctum) — a dissonant interval that rises and recedes;
-    // sanctum's are more frequent, lower, louder — a constant sense of something vast closing in.
-    if (gehennom || sanctum) {
-      const every = sanctum ? 6 : 11;
+    } else this.nextChillBass = now;
+
+    // ── looming low swells (the dread grooves that declare a cadence); frequent ones ring longer ──
+    if (g.swellEvery) {
+      const frequent = g.swellEvery <= 7;
       while (this.nextChillSwell < horizon) {
-        let sf = semi(t.root, sanctum ? 6 : 1); while (sf < 30) sf *= 2; // tritone (sanctum) / minor-2nd (gehennom)
-        this.dreadSwell(sf, this.nextChillSwell, sanctum ? 7 : 5, bus, sanctum ? 0.13 : 0.08);
-        this.nextChillSwell += every + Math.random() * every;
+        let sf = semi(t.root, g.low ? 6 : 1); while (sf < 30) sf *= 2; // tritone (low) / minor-2nd
+        this.dreadSwell(sf, this.nextChillSwell, frequent ? 7 : 5, bus, frequent ? 0.13 : 0.08);
+        this.nextChillSwell += g.swellEvery + Math.random() * g.swellEvery;
       }
     } else this.nextChillSwell = now;
-    // chimes: bright zone-keyed bells normally; in the dread zones, rare low dissonant tolls that grow
-    // rarer and lower with the dread — relay (m2/tritone), gehennom (sparser), sanctum (a lone deep knell).
-    const sc = this.tensionScale(t);
-    const chimeProb = planes ? 0.35 : sanctum ? 0.22 : gehennom ? 0.25 : relay ? 0.3 : 0.4;
+
+    // ── chimes: low dissonant tolls (dread) or bright octave-up bells (exploration) ──
+    const degs = g.chimeDegs ?? this.tensionScale(t);
+    const low = !!g.low;
+    const prob = low ? (g.swellEvery && g.swellEvery <= 7 ? 0.22 : 0.28) : 0.42;
     while (this.nextChillChime < horizon) {
-      if (this.active && Math.random() < chimeProb) {
-        if (planes) this.bellNote(semi(t.root, [0, 7, 12, 16][Math.floor(Math.random() * 4)]) * 2, this.nextChillChime, 5.5, this.active.bus, 0.04); // bright, high, long — empty space
-        else if (sanctum) this.bellNote(semi(t.root, 6), this.nextChillChime, 5.2, this.active.bus, 0.04); // a long, low tritone knell
-        else if (gehennom) this.bellNote(semi(t.root, [1, 6][Math.floor(Math.random() * 2)]), this.nextChillChime, 4.0, this.active.bus, 0.03);
-        else if (relay) this.bellNote(semi(t.root, [1, 6, 6, 11][Math.floor(Math.random() * 4)]), this.nextChillChime, 3.6, this.active.bus, 0.035);
-        else this.bellNote(semi(t.root, sc[Math.floor(Math.random() * sc.length)]) * 2, this.nextChillChime, 3.2, this.active.bus, 0.045);
+      if (this.active && Math.random() < prob) {
+        const d = degs[Math.floor(Math.random() * degs.length)];
+        this.bellNote(low ? semi(t.root, d) : semi(t.root, d) * 2, this.nextChillChime, low ? 4.4 : 3.3, this.active.bus, low ? 0.035 : 0.045);
       }
-      this.nextChillChime += (planes ? 5 : sanctum ? 12 : gehennom ? 9 : relay ? 7 : 4) + Math.random() * (planes ? 6 : sanctum ? 12 : gehennom ? 9 : relay ? 7 : 5);
+      this.nextChillChime += (g.chimeEvery ?? 4) + Math.random() * (g.chimeEvery ?? 4);
     }
   }
 
