@@ -173,6 +173,8 @@ export class Player extends Entity {
   private pendingOpen = false;              // open (o) — choosing a direction (door / locked = force)
   private pendingClose = false;             // close (C) — choosing a door direction
   private pendingKick = false;              // kick (K) — choosing a direction
+  private pendingJump = false;              // #jump (J) — choosing a direction
+  private pendingMonster = false;           // #monster (G) — choosing a direction to breathe
   private pendingName: Item | null = null;  // name (N) — the item being labelled
   private pendingCharge: Item | null = null; // charging scroll (read) — remembers its BUC for the target choice
   private pendingGrease: Item | null = null; // a can of grease awaiting the gear piece to lubricate
@@ -336,6 +338,8 @@ export class Player extends Entity {
     if (this.pendingOpen) return this.resolveOpenDir(e);
     if (this.pendingClose) return this.resolveCloseDir(e);
     if (this.pendingKick) return this.resolveKickDir(e);
+    if (this.pendingJump) return this.resolveJumpDir(e);
+    if (this.pendingMonster) return this.resolveMonsterDir(e);
     if (this.pendingName) return this.resolveName(e);
     if (this.pendingSpell) return this.resolveCast(e);
     if (this.pending) return this.resolveSelection(e);
@@ -379,6 +383,10 @@ export class Player extends Entity {
       case "I": return this.game.invoke(this) ? this.endTurn() : false; // #invoke the ritual
       case "A": this.game.showAudit(); return false; // #audit — enlightenment dump (free)
       case "V": this.game.showOverview(); return false; // #overview — visited floors + their features (free)
+      case "J": this.pendingJump = true; this.game.log.add("Jump in which direction? (a move key, Esc to cancel)", "sys"); return false;
+      case "U": return this.game.turnUndead(this) ? this.endTurn() : false; // #turn undead
+      case "&": return this.game.wipeFace(this) ? this.endTurn() : false;   // #wipe your face
+      case "G": this.pendingMonster = true; this.game.log.add("Loose your breath in which direction? (a move key, Esc to cancel)", "sys"); return false; // #monster
       case "r": return this.startSelect("read");
       case "e": return this.game.eatFloorCorpse(this) ? this.endTurn() : this.startSelect("eat");
       case "d": return this.startSelect("drop");
@@ -630,6 +638,22 @@ export class Player extends Entity {
     const mv = MOVES[e.key];
     if (!mv) { this.game.log.add("That is not a direction.", "dim"); return false; }
     return this.game.kick(this, mv[0], mv[1]) ? this.endTurn() : false;
+  }
+
+  private resolveJumpDir(e: KeyboardEvent): boolean {
+    this.pendingJump = false;
+    if (e.key === "Escape") { this.game.log.add("Never mind.", "dim"); return false; }
+    const mv = MOVES[e.key];
+    if (!mv) { this.game.log.add("That is not a direction.", "dim"); return false; }
+    return this.game.jump(this, mv[0], mv[1]) ? this.endTurn() : false;
+  }
+
+  private resolveMonsterDir(e: KeyboardEvent): boolean {
+    this.pendingMonster = false;
+    if (e.key === "Escape") { this.game.log.add("Never mind.", "dim"); return false; }
+    const mv = MOVES[e.key];
+    if (!mv) { this.game.log.add("That is not a direction.", "dim"); return false; }
+    return this.game.monsterAbility(this, mv[0], mv[1]) ? this.endTurn() : false;
   }
 
   private resolveName(e: KeyboardEvent): boolean {

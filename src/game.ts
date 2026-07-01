@@ -3196,6 +3196,63 @@ export class Game {
     return true;
   }
 
+  /** `#jump` (J) — leap two tiles in a direction, clearing a pit/boulder/foe in between. */
+  jump(p: Player, dx: number, dy: number): boolean {
+    if (p.engulfedBy || p.webbed > 0) { this.log.add("You can't jump — you're held fast.", "dim"); return false; }
+    if (p.riding) { this.log.add("You can't jump while mounted.", "dim"); return false; }
+    const lx = p.x + dx * 2, ly = p.y + dy * 2;
+    if (!this.level.isPassable(lx, ly) || this.monsterAt(lx, ly) || this.playerAt(lx, ly) || this.level.boulderAt(lx, ly)) {
+      this.log.add("You can't leap there — no clear landing.", "dim"); return false;
+    }
+    p.x = lx; p.y = ly;
+    this.recomputeFOV();
+    this.log.add(`${this.sub(p)} ${this.verbS(p, "leap")} across the gap.`, "good");
+    const trap = this.level.trapAt(lx, ly); if (trap) this.triggerTrap(trap);
+    this.draw();
+    return true;
+  }
+
+  /** `#turn` (U) — channel turn-undead: nearby undead recoil and burn. Priest/crowned ability. */
+  turnUndead(p: Player): boolean {
+    if (!p.spells.has("turn") && !p.crowned) { this.log.add("You don't know how to turn undead.", "dim"); return false; }
+    let n = 0;
+    for (const m of [...this.monsters]) {
+      if (!m.alive || m.peaceful) continue;
+      if (!/wraith|wight|lich|undead|zombie|skeleton|ghost|mummy|barrow/i.test(`${m.def.name} ${m.def.fname ?? ""}`)) continue;
+      if (Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) > 5) continue;
+      const d = ROT.RNG.getUniformInt(5, 10); m.hp -= d; m.frightened = Math.max(m.frightened, 8); n++;
+      if (m.hp <= 0) { this.gainXp(p, m.maxHp); this.kill(m); }
+    }
+    this.log.add(n ? `You raise your authority over the unquiet — ${n} undead recoil and burn!` : "You channel turn-undead, but no undead are near to heed it.", n ? "good" : "dim");
+    this.draw();
+    return true;
+  }
+
+  /** `#wipe` (&) — wipe your face clear, cutting short a blinding. */
+  wipeFace(p: Player): boolean {
+    if (p.blind <= 0) { this.log.add("Your face is clean — nothing to wipe away.", "dim"); return false; }
+    p.blind = Math.max(0, p.blind - ROT.RNG.getUniformInt(3, 6));
+    this.recomputeFOV();
+    this.log.add(p.blind ? "You wipe your eyes — sight begins to seep back." : "You wipe your eyes clear — you can see again!", "good");
+    this.draw();
+    return true;
+  }
+
+  /** `#monster` (G) — use your polymorphed form's innate attack (a breath weapon). */
+  monsterAbility(p: Player, dx: number, dy: number): boolean {
+    if (!p.polyForm) { this.log.add("You have no monster form whose power to call on.", "dim"); return false; }
+    if (!p.polyForm.breath) { this.log.add(`Your ${p.polyForm.name.replace(/^an? /, "")} form has no special attack to loose.`, "dim"); return false; }
+    const range = p.polyForm.breath;
+    this.castRay(p.x, p.y, dx, dy, 9, (e) => {
+      const d = ROT.RNG.getUniformInt(Math.round(range * 0.4), range); e.hp -= d;
+      this.log.add(e instanceof Player ? `Your own breath washes back over ${e.name} for ${d}!` : `Your breath weapon engulfs ${e.name} for ${d}.`, e instanceof Player ? "bad" : "good");
+      if (e.hp <= 0) { if (e instanceof Monster) this.gainXp(p, e.maxHp); this.kill(e); }
+    });
+    this.log.add(`${this.sub(p)} ${this.verbS(p, "loose")} a breath weapon!`, "good");
+    this.draw();
+    return true;
+  }
+
   applyHorn(p: Player): boolean {
     if (p.poison === 0 && p.confused === 0 && p.stoning === 0 && p.illness === 0 && p.blind === 0 && p.paralyzed === 0 && p.silenced === 0 && p.hp >= p.maxHp) {
       this.log.add("The auditor's horn finds nothing amiss.", "dim"); return false;
