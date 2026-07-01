@@ -897,6 +897,7 @@ export class Monster extends Entity {
   sleepTurns = 0; // a wand of stasis freezes it for a while
   blindTurns = 0; // a thrown potion of obfuscation blinds it — it can't chase
   frightened = 0; // scared by a mirror node (or its own reflection) — it flees while this lasts
+  invisible = false; // a wand of cloaking — unseen except by ESP (sense minds / telepathy) or a ring of warning
   cancelled = false; // a wand of nullification strips its special powers
   silenced = 0;   // turns of magical silence — can't summon or fire ranged spells
   museLeft = 0;   // healing draughts it still carries (muse.c) — gulped when badly hurt

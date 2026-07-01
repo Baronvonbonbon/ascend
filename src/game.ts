@@ -2903,6 +2903,16 @@ export class Game {
       for (const tr of this.level.traps) if (!tr.revealed) { tr.revealed = true; tr.detected = true; found++; }
       this.recomputeFOV();
       this.log.add(found ? `Hidden things shimmer into view — ${found} secret(s) revealed.` : "The wand of scanning finds nothing hidden here.", found ? "sys" : "dim");
+    } else if (item.type.id === "wand_create") {
+      // Conjures depth-appropriate foes around the zapper — no aim, and rarely a boon.
+      const n = ROT.RNG.getUniformInt(1, 3); let made = 0;
+      for (let i = 0; i < n; i++) {
+        const spot = this.adjacentFree(this.acting.x, this.acting.y);
+        if (!spot) break;
+        const m = new Monster(this, this.pickMonster(this.acting.depth), spot.x, spot.y);
+        this.monsters.push(m); this.scheduler.add(m, true); made++;
+      }
+      this.log.add(made ? `The wand of spawning hums — ${made} shape${made > 1 ? "s" : ""} coalesce${made > 1 ? "" : "s"} out of the aether!` : "The wand of spawning hums, but there's no room for anything to form.", made ? "bad" : "dim");
     } else {
       let x = this.acting.x, y = this.acting.y;
       let hit: Monster | undefined;
@@ -2943,6 +2953,13 @@ export class Game {
         hit.splitsLeft = nd.splits ? 2 : 0; hit.cancelled = false; hit.sleepTurns = 0; hit.speedMod = 1;
         this.scheduler.remove(hit); this.scheduler.add(hit, true);
         this.log.add(`${cap(old)} is forked into ${nd.name}!`, "sys");
+      } else if (item.type.id === "wand_speed") {
+        hit.speedMod = Math.max(hit.speedMod, 1.5);
+        this.scheduler.remove(hit); this.scheduler.add(hit, true); // re-time at the faster speed
+        this.log.add(`${cap(hit.name)} blurs into a faster gear.`, hit.peaceful || hit === this.pet ? "good" : "bad");
+      } else if (item.type.id === "wand_invis") {
+        hit.invisible = true;
+        this.log.add(`${cap(hit.name)} shimmers and vanishes from sight.`, hit === this.pet ? "good" : "bad");
       } else if (item.type.id === "wand_silence") {
         hit.silenced = ROT.RNG.getUniformInt(8, 14);
         this.log.add(`${cap(hit.name)} is wrapped in silence — its voice fails.`, "good");
@@ -4192,6 +4209,7 @@ export class Game {
     for (const m of mons) {
       const near = warn && Math.max(Math.abs(m.x - me!.x), Math.abs(m.y - me!.y)) <= 5;
       if (!m.alive || !(vis(m.x, m.y) || sensed || near)) continue;
+      if (m.invisible && !sensed && !near) continue; // cloaked — only ESP (sense minds / telepathy) or warning reveals it
       const dormant = m.def.mimic && !m.revealed && !near; // warning reveals a mimic for what it is
       cells.push([m.x, m.y, dormant ? m.disguiseCh : m.ch, dormant ? m.disguiseFg : m.fg]);
     }
