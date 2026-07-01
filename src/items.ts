@@ -98,6 +98,9 @@ export const ITEMS: ItemType[] = [
   // ── amulets ── " (passive while worn; put on with W, take off with T)
   { id: "amulet_life",    kind: "amulet", name: "a recovery seed",   fname: "an amulet of life saving", ch: "\"", fg: "#f0d060", weight: 1 }, // crumbles to save you from one lethal blow
   { id: "amulet_reflect", kind: "amulet", name: "a consensus mirror", fname: "an amulet of reflection",  ch: "\"", fg: "#b0e0e0", weight: 1 }, // rebounds rays/breath back at the source
+  { id: "amulet_esp",     kind: "amulet", name: "a mempool oracle",    fname: "an amulet of ESP",         ch: "\"", fg: "#c0a0e0", weight: 1 }, // telepathy while worn — sense every mind on the floor
+  { id: "amulet_breathe", kind: "amulet", name: "a liquidity lung",    fname: "an amulet of magical breathing", ch: "\"", fg: "#80c0e0", weight: 1 }, // wade through deep water unharmed
+  { id: "amulet_unchanging", kind: "amulet", name: "a finality lock",  fname: "an amulet of unchanging",  ch: "\"", fg: "#d0d0a0", weight: 1 }, // no polymorph/were-shift takes hold while worn
   // ── rings ── = (passive while worn; put on with W)
   { id: "ring_res",   kind: "ring", name: "a ring of resilience",    fname: "a ring of protection",   ch: "=", fg: "#c0a0e0", weight: 2 },
   { id: "ring_regen", kind: "ring", name: "a ring of regeneration",  fname: "a ring of regeneration", ch: "=", fg: "#a0e0a0", weight: 2 },

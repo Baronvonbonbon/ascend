@@ -881,7 +881,10 @@ export class Player extends Entity {
       return this.endTurn();
     }
     if (tile === "doorLocked") return this.game.kickDoor(this, nx, ny) ? this.endTurn() : false;
-    if (tile === "water") { this.game.log.add("Deep water — too deep to wade. Find a causeway, or jump it (XCM).", "dim"); return false; }
+    if (tile === "water") {
+      if (this.amulet?.type.id === "amulet_breathe") { this.x = nx; this.y = ny; this.game.recomputeFOV(); this.game.log.add("You wade through the deep water, breathing easy.", "dim"); this.game.draw(); return this.endTurn(); }
+      this.game.log.add("Deep water — too deep to wade. Find a causeway, or jump it (XCM).", "dim"); return false;
+    }
     if (!this.game.level.isPassable(nx, ny)) return false; // bumping a wall costs no turn
     // Push a boulder one tile if the space beyond is clear; otherwise it won't budge.
     const boulder = this.game.level.boulderAt(nx, ny);

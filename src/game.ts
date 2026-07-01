@@ -3280,6 +3280,7 @@ export class Game {
   // ── polymorph self / "fork" (Phase 8b) ──────────────────────────────────────
   /** Hard-fork into a monster form: its glyph, attacks, speed, and HP pool, for a while. */
   polySelf(p: Player, form?: MonsterDef): void {
+    if (p.amulet?.type.id === "amulet_unchanging") { this.log.add("You feel a fleeting urge to change shape — the finality lock holds you fast.", "dim"); return; }
     if (p.polyForm) this.revertPoly(p, true);
     // System shock: the strain of an unstable rewrite can jolt you before the new form settles —
     // less likely the tougher (higher-CON) you are. A blessed/controlled fork (an explicit form) is safe.
@@ -3301,7 +3302,7 @@ export class Game {
   /** Lycanthropy: while infected, a small chance each turn to involuntarily shift into the were-beast
    *  (unless already in a form). The fork reverts on its own; the infection persists until cured. */
   tickLycanthropy(p: Player): void {
-    if (!p.lycanthrope || p.polyForm || !p.alive) return;
+    if (!p.lycanthrope || p.polyForm || !p.alive || p.amulet?.type.id === "amulet_unchanging") return; // the finality lock holds your shape
     if (ROT.RNG.getUniform() < 0.04) {
       this.log.add(`${this.sub(p)} ${this.verbS(p, "convulse")} — the change takes you, against your will!`, "bad", p);
       this.polySelf(p, p.lycanthrope);
@@ -4646,7 +4647,7 @@ export class Game {
     }
     for (const b of lvl.boulders) if (vis(b.x, b.y)) cells.push([b.x, b.y, "0", "#9a8a6a"]);
     // Sense minds: only THIS viewer's blindness-telepathy or sense-minds spell reveals out-of-sight foes.
-    const sensed = !!me && ((me.blind > 0 && me.intrinsics.has("telepathy")) || me.senseTurns > 0);
+    const sensed = !!me && ((me.blind > 0 && me.intrinsics.has("telepathy")) || me.senseTurns > 0 || me.amulet?.type.id === "amulet_esp");
     const warn = !!me && me.warning; // a ring of warning shows nearby foes through walls
     for (const m of mons) {
       const near = warn && Math.max(Math.abs(m.x - me!.x), Math.abs(m.y - me!.y)) <= 5;
