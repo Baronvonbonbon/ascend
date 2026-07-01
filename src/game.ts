@@ -137,6 +137,10 @@ export class Game {
   netRole: "solo" | "host" | "guest" = "solo";
   coopMode: CoopMode = "coop-ff";
   private coop = false;        // this game session has two players
+  // ── inbound flood guard (defense-in-depth vs a malicious/broken peer) ──
+  private netTokens = 300;    // token bucket: refills ~150/s, burst 300 — far above any legit play, so it
+  private netRefill = 0;      //   only trips on a genuine flood (an already-broken session; a drop can't make it worse)
+  private lastRemoteChat = 0; // chat throttle — no banner spam
   private peer: Peer | null = null;
   private downed = new Set<Player>(); // players who have fallen this run
   archetypeId = "validator";   // the local player's chosen archetype (applied on newGame)
@@ -4614,12 +4618,33 @@ export class Game {
   private freshSeed(): number { return (Math.random() * 0x7fffffff) | 0; }
 
   /** Common peer wiring for both roles: apply the partner's keystrokes; rebuild on start/restart. */
+  /** Flood guard: a token bucket refilling ~150/s (burst 300) — orders of magnitude above real play, so
+   *  a legit input is never dropped (which would desync the deterministic lockstep); it only sheds a
+   *  genuine flood, and a flooding peer is already an adversarial/broken session where a drop is moot. */
+  private allowRemote(): boolean {
+    const now = performance.now() / 1000;
+    this.netTokens = Math.min(300, this.netTokens + (now - this.netRefill) * 150);
+    this.netRefill = now;
+    if (this.netTokens < 1) return false;
+    this.netTokens -= 1;
+    return true;
+  }
+
   private wireCoopPeer(peer: Peer): void {
     peer.onMessage((m: NetMsg) => {
-      if (m?.t === "start") { this.coopMode = m.mode; this.archetypeId = m.archetype; this.newGame(m.seed); }   // build the shared world (Host's class)
-      else if (m?.t === "restart") { this.archetypeId = m.archetype; this.newGame(m.seed); }                    // reseeded new run
-      else if (m?.t === "input" && typeof m.key === "string") this.remoteInput(m.key);
-      else if (m?.t === "chat" && typeof m.text === "string") this.receiveChat(m.text, m.power ?? "say");
+      if (!m || typeof (m as { t?: unknown }).t !== "string") return; // ignore anything without a message tag
+      if (!this.allowRemote()) return;                                 // shed a flood (see allowRemote)
+      if (m.t === "start" && typeof m.seed === "number" && typeof m.archetype === "string") { this.coopMode = m.mode === "solo" ? "solo" : "coop-ff"; this.archetypeId = m.archetype; this.newGame(m.seed); }
+      else if (m.t === "restart" && typeof m.seed === "number" && typeof m.archetype === "string") { this.archetypeId = m.archetype; this.newGame(m.seed); }
+      else if (m.t === "input" && typeof m.key === "string" && m.key.length <= 24) this.remoteInput(m.key); // a key name is short; anything longer is junk
+      else if (m.t === "chat" && typeof m.text === "string") {
+        const now = performance.now();
+        if (now - this.lastRemoteChat < 400) return;                   // chat throttle — ≤ ~2.5/s, no banner spam
+        this.lastRemoteChat = now;
+        const text = m.text.slice(0, 80);                              // hard length cap (the send side is 60)
+        const power = m.power === "whisper" || m.power === "shout" ? m.power : "say"; // whitelist — never index with attacker data
+        this.receiveChat(text, power);
+      }
     });
     peer.onState((open) => {
       if (open) return;
