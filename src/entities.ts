@@ -376,6 +376,7 @@ export class Player extends Entity {
       case "M": return this.game.toggleRide(this) ? this.endTurn() : false;
       case "I": return this.game.invoke(this) ? this.endTurn() : false; // #invoke the ritual
       case "A": this.game.showAudit(); return false; // #audit — enlightenment dump (free)
+      case "V": this.game.showOverview(); return false; // #overview — visited floors + their features (free)
       case "r": return this.startSelect("read");
       case "e": return this.game.eatFloorCorpse(this) ? this.endTurn() : this.startSelect("eat");
       case "d": return this.startSelect("drop");

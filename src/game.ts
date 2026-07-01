@@ -428,6 +428,49 @@ export class Game {
     // on-chain wallet/PAS readout is deferred — to be reintroduced in a later update.
   }
 
+  /** `#overview` (V) — a dungeon overview: every floor you've visited, with its notable features. */
+  showOverview(): void {
+    this.log.add("— Dungeon overview —", "sys");
+    const entries: { key: string; level: Level }[] = [{ key: this.activeKey, level: this.level }];
+    for (const [key, slot] of this.slots) if (key !== this.activeKey) entries.push({ key, level: slot.level });
+    entries.sort((a, b) => this.overviewRank(a.key) - this.overviewRank(b.key));
+    for (const { key, level } of entries) {
+      let altar = false, faucet = false, throne = false, sink = false, branch = false, vib = false;
+      for (let y = 0; y < level.height; y++) for (let x = 0; x < level.width; x++) {
+        const t = level.tiles[y][x];
+        if (t === "altar") altar = true; else if (t === "faucet") faucet = true; else if (t === "throne") throne = true;
+        else if (t === "sink") sink = true; else if (t === "branchDown") branch = true; else if (t === "vibrating") vib = true;
+      }
+      const tags: string[] = [];
+      if (level.shop) tags.push("a shop");
+      if (altar) tags.push("an altar");
+      if (throne) tags.push("a throne");
+      if (faucet) tags.push("a faucet");
+      if (sink) tags.push("a sink");
+      if (branch) tags.push("a branch stair");
+      if (vib) tags.push("the vibrating square");
+      if (level.items.some((i) => i.type.id === "jam")) tags.push("the JAM");
+      if (level.graves.length) tags.push(`${level.graves.length} grave${level.graves.length > 1 ? "s" : ""}`);
+      const here = key === this.activeKey;
+      this.log.add(`  ${this.overviewLabel(key)}${tags.length ? `: ${tags.join(", ")}` : ""}${here ? "  ← you are here" : ""}`, here ? "good" : "dim");
+    }
+  }
+
+  /** Sort key so the main descent lists in depth order, then branches/quest after. */
+  private overviewRank(key: string): number {
+    const [base, n] = key.split(":");
+    if (base === "dungeon") return Number(n) || 0;
+    if (base === "quest") return 900;
+    return 1000 + (Number(n) || 0);
+  }
+
+  private overviewLabel(key: string): string {
+    const [base, n] = key.split(":");
+    if (base === "dungeon") return `Relay, depth ${n}`;
+    if (base === "quest") return "the Quest homeland";
+    return `${cap(base)}${n ? `, floor ${n}` : ""}`;
+  }
+
   /** A line summarising the vows a player still holds (for the death/ascension screen). */
   private conductReport(p: Player): void {
     const kept = CONDUCTS.filter((c) => p.conducts.has(c.id));
