@@ -62,6 +62,11 @@ export const ITEMS: ItemType[] = [
   { id: "sword",  kind: "weapon", name: "a consensus sword",   fname: "a long sword",        ch: ")", fg: "#dfe6f0", dmg: [3, 6], skill: "blade", weight: 3 },
   { id: "mace",   kind: "weapon", name: "a validator's mace",  fname: "a war mace",          ch: ")", fg: "#c0a060", dmg: [4, 9], skill: "blunt", weight: 2 },
   { id: "whip",   kind: "weapon", name: "a slashing whip",     fname: "a bullwhip",          ch: ")", fg: "#a08050", dmg: [1, 4], skill: "blade", weight: 2 },
+  { id: "shortsword", kind: "weapon", name: "a light client blade", fname: "a short sword",   ch: ")", fg: "#cfd6c0", dmg: [2, 5], skill: "blade", weight: 3 },
+  { id: "spear",  kind: "weapon", name: "a sharding spear",     fname: "a spear",             ch: ")", fg: "#c0c0a0", dmg: [3, 6], skill: "blade", weight: 3 },
+  { id: "battleaxe", kind: "weapon", name: "a fork axe",        fname: "a battle-axe",        ch: ")", fg: "#d08060", dmg: [4, 10], skill: "blade", weight: 5 },
+  { id: "quarterstaff", kind: "weapon", name: "a governance staff", fname: "a quarterstaff",  ch: ")", fg: "#b0906a", dmg: [3, 7], skill: "blunt", weight: 4 },
+  { id: "flail",  kind: "weapon", name: "a slashing flail",     fname: "a morning star",      ch: ")", fg: "#c0a080", dmg: [4, 8], skill: "blunt", weight: 4 },
   // ── armor ── [ (seven slots — wear one of each)
   { id: "shirt",  kind: "armor",  name: "a hashguard shirt",   fname: "a mail shirt",        ch: "[", fg: "#a0b0a0", ac: 1, slot: "shirt",  weight: 3 },
   { id: "vest",   kind: "armor",  name: "a firewall vest",     fname: "a leather cuirass",   ch: "[", fg: "#9ac0c0", ac: 2, slot: "body",   weight: 5 },
