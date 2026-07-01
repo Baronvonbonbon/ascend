@@ -2042,7 +2042,7 @@ export class Game {
       if (m.def.seduces) tags.push("seductive");
       if (m.sleepTurns > 0) tags.push("asleep");
       if (m.cancelled) tags.push("nullified");
-      this.log.add(`You see ${m.name} — ${band} (${tags.join(", ")}).`, "sys");
+      this.log.add(`You see ${m.name}${m.label ? ` named "${m.label}"` : ""} — ${band} (${tags.join(", ")}).`, "sys");
       return;
     }
     const it = this.level.itemAt(x, y);

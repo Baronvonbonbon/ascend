@@ -184,6 +184,8 @@ export class Player extends Entity {
   private pendingJump = false;              // #jump (J) — choosing a direction
   private pendingMonster = false;           // #monster (G) — choosing a direction to breathe
   private pendingName: Item | null = null;  // name (N) — the item being labelled
+  private pendingNameMonDir = false;        // #name a monster (Y) — choosing a direction
+  private pendingNameMon: Monster | null = null; // the monster being labelled (typing its name)
   private pendingCharge: Item | null = null; // charging scroll (read) — remembers its BUC for the target choice
   private pendingGrease: Item | null = null; // a can of grease awaiting the gear piece to lubricate
   private nameBuf = "";                     // accumulating typed text for #name
@@ -373,6 +375,8 @@ export class Player extends Entity {
     if (this.pendingJump) return this.resolveJumpDir(e);
     if (this.pendingMonster) return this.resolveMonsterDir(e);
     if (this.pendingName) return this.resolveName(e);
+    if (this.pendingNameMonDir) return this.resolveNameMonDir(e);
+    if (this.pendingNameMon) return this.resolveNameMon(e);
     if (this.pendingSpell) return this.resolveCast(e);
     if (this.pending) return this.resolveSelection(e);
     const mv = MOVES[e.key];
@@ -419,6 +423,7 @@ export class Player extends Entity {
       case "U": return this.game.turnUndead(this) ? this.endTurn() : false; // #turn undead
       case "&": return this.game.wipeFace(this) ? this.endTurn() : false;   // #wipe your face
       case "G": this.pendingMonster = true; this.game.log.add("Loose your breath in which direction? (a move key, Esc to cancel)", "sys"); return false; // #monster
+      case "Y": this.pendingNameMonDir = true; this.game.log.add("Name a monster in which direction? (a move key, Esc to cancel)", "sys"); return false; // #name a monster
       case "r": return this.startSelect("read");
       case "e": return this.game.eatFloorCorpse(this) ? this.endTurn() : this.startSelect("eat");
       case "d": return this.startSelect("drop");
@@ -691,6 +696,35 @@ export class Player extends Entity {
     const mv = MOVES[e.key];
     if (!mv) { this.game.log.add("That is not a direction.", "dim"); return false; }
     return this.game.monsterAbility(this, mv[0], mv[1]) ? this.endTurn() : false;
+  }
+
+  private resolveNameMonDir(e: KeyboardEvent): boolean {
+    this.pendingNameMonDir = false;
+    if (e.key === "Escape") { this.game.log.add("Never mind.", "dim"); return false; }
+    const mv = MOVES[e.key];
+    if (!mv) { this.game.log.add("That is not a direction.", "dim"); return false; }
+    const mon = this.game.monsterAt(this.x + mv[0], this.y + mv[1]);
+    if (!mon) { this.game.log.add("There's no monster there to name.", "dim"); return false; }
+    this.pendingNameMon = mon;
+    this.nameBuf = mon.label ?? "";
+    this.game.log.add(`Name ${mon.name}: ${this.nameBuf}_  (type a name, Enter to set, Esc to cancel)`, "sys");
+    return false;
+  }
+
+  private resolveNameMon(e: KeyboardEvent): boolean {
+    const mon = this.pendingNameMon!;
+    if (e.key === "Escape") { this.pendingNameMon = null; this.game.log.add("Never mind.", "dim"); return false; }
+    if (e.key === "Enter") {
+      this.pendingNameMon = null;
+      mon.label = this.nameBuf.trim();
+      this.game.log.add(mon.label ? `You name ${mon.name} "${mon.label}".` : "You clear its name.", "dim");
+      return false;
+    }
+    if (e.key === "Backspace") this.nameBuf = this.nameBuf.slice(0, -1);
+    else if (e.key.length === 1 && this.nameBuf.length < 24) this.nameBuf += e.key;
+    else return false;
+    this.game.log.add(`Name ${mon.name}: ${this.nameBuf}_`, "sys");
+    return false;
   }
 
   private resolveName(e: KeyboardEvent): boolean {
@@ -975,6 +1009,7 @@ export class Monster extends Entity {
   blindTurns = 0; // a thrown potion of obfuscation blinds it — it can't chase
   frightened = 0; // scared by a mirror node (or its own reflection) — it flees while this lasts
   invisible = false; // a wand of cloaking — unseen except by ESP (sense minds / telepathy) or a ring of warning
+  label = "";        // a player-given name (#name a monster, e.g. "Fido") shown in farlook
   cancelled = false; // a wand of nullification strips its special powers
   silenced = 0;   // turns of magical silence — can't summon or fire ranged spells
   museLeft = 0;   // healing draughts it still carries (muse.c) — gulped when badly hurt
