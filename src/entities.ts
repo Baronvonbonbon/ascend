@@ -284,6 +284,7 @@ export class Player extends Entity {
     this.game.censorHuntTick();
     if (this.polyForm && --this.polyTurns <= 0) this.game.revertPoly(this);
     this.game.tickLycanthropy(this); // infected? a chance to involuntarily shift into the were-beast
+    this.game.tickLuck(this);        // Fortune drifts toward the mean unless a HODL stone anchors it
     this.game.checkVault();          // teleported into the Treasury? summon the Council Guard escort
     this.game.checkShopBill(this);   // left the shop carrying unpaid wares? settle the bill (or be named a thief)
     if (this.autoSearch) this.game.autoSearchAround(this); // ring of searching — reveal adjacent hidden things

@@ -2478,6 +2478,15 @@ export class Game {
     return Math.max(-13, Math.min(13, l));
   }
 
+  /** Luck timeout: base Fortune drifts one step toward the mean every ~250 turns — unless a HODL stone
+   *  (luckstone) in your pack anchors it. So a lucky/unlucky streak fades if you don't hold the stone. */
+  tickLuck(p: Player): void {
+    if (p.luck === 0 || this.turn % 250 !== 0) return;
+    if (p.inventory.items.some((it) => it.type.id === "hodlstone")) return; // a luckstone holds your Fortune fast
+    p.luck += p.luck > 0 ? -1 : 1;
+    this.log.add(p.luck === 0 ? "Your Fortune settles back to even." : "Your Fortune drifts toward the mean.", "dim", p);
+  }
+
   // ── #enhance: weapon skills ──
   private weaponSkillClass(p: Player): string { return p.weapon?.type.skill ?? "martial"; }
   /** To-hit bonus from your trained rank with the wielded weapon's class. */
