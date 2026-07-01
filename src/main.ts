@@ -1,6 +1,7 @@
 import { Game } from "./game";
 import { initLobby } from "./net/lobby";
 import { loadCounts } from "./net/counter";
+import { readSave } from "./save";
 import { ARCHETYPES, archetypeName, archetypeBlurb, RACES, raceName, raceBlurb, introStory } from "./data";
 import { setFlavor, fp } from "./flavor";
 
@@ -99,6 +100,22 @@ if (screen && logEl) {
     if (archetype) game.archetypeId = archetype.value;
     if (race) game.raceId = race.value;
     game.newGame();
+  });
+
+  // Continue: if a suspended run exists, offer to resume it (restores exactly where you left off).
+  const continueBtn = document.getElementById("continue-btn") as HTMLButtonElement | null;
+  void readSave().then((save) => {
+    if (!save || !continueBtn) return;
+    const meta = save.meta as { player?: { fields?: { depth?: number } }; coop?: boolean } | undefined;
+    const depth = (save.player as { fields?: { depth?: number } } | undefined)?.fields?.depth;
+    continueBtn.textContent = `Continue your descent${depth ? ` — depth ${depth}` : ""} ▸`;
+    continueBtn.hidden = false;
+    if (meta?.coop) continueBtn.title = "This was a co-op run — resuming solo restores your own adventurer.";
+    continueBtn.addEventListener("click", async () => {
+      continueBtn.disabled = true; continueBtn.textContent = "Restoring…";
+      const ok = await game.resumeSave();
+      if (!ok) { continueBtn.textContent = "Save was unreadable — start fresh"; continueBtn.disabled = false; }
+    });
   });
 
   // Returning from a death (solo): re-arm the menu with the story already shown.

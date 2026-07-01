@@ -331,6 +331,7 @@ export class Player extends Entity {
     }
     // Energy (Pw) regenerates steadily.
     if (this.energy < this.maxEnergy && ++this.energyTimer >= 6) { this.energyTimer = 0; this.energy++; }
+    this.game.autosave(); // suspend point — persist the run after every turn (throttled write)
     const r = this.resolveTurn;
     this.resolveTurn = null;
     if (r) r();

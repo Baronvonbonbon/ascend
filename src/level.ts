@@ -1,6 +1,8 @@
 import * as ROT from "rot-js";
 import type { TileType, ChainDef } from "./data";
+import { CHAINS } from "./data";
 import type { ItemType } from "./items";
+import { serFloorItem, restoreFloorItem } from "./save";
 
 export type LevelKind = "normal" | "bigroom" | "maze" | "cave" | "labyrinth" | "grid" | "swamp" | "sokoban" | "fortress" | "concentric";
 export interface Portal { x: number; y: number; chain: ChainDef; quest?: boolean; }
@@ -66,6 +68,46 @@ export class Level {
     else if (kind === "sokoban") { /* hand-built — left all walls; stamped via loadSokoban() */ }
     else this.generate();
     this.fov = new ROT.FOV.PreciseShadowcasting((x, y) => this.lightPasses(x, y));
+  }
+
+  /** Rebuild the `floors` spawn-cell cache from the tile map (used after a restore). */
+  rebuildFloors(): void {
+    this.floors = [];
+    for (let y = 1; y < this.height - 1; y++) for (let x = 1; x < this.width - 1; x++) if (this.tiles[y][x] === "floor") this.floors.push({ x, y });
+  }
+
+  /** A JSON-able snapshot of the level's persistent state (fov / visibility caches are rebuilt on load). */
+  snapshot(): Record<string, unknown> {
+    return {
+      width: this.width, height: this.height, kind: this.kind,
+      tiles: this.tiles, explored: this.explored, exploredCo: this.exploredCo, lit: this.lit,
+      items: this.items.map((fi) => serFloorItem(fi as unknown as Record<string, unknown>)),
+      graves: this.graves, drawbridges: this.drawbridges, coopTuned: this.coopTuned,
+      traps: this.traps, engravings: this.engravings, boulders: this.boulders,
+      portals: this.portals.map((p) => ({ x: p.x, y: p.y, quest: p.quest, chain: p.chain.id })),
+      branchEntries: this.branchEntries, roomCenters: this.roomCenters,
+      start: this.start, stairs: this.stairs, vault: this.vault, vaultBreach: this.vaultBreach, shop: this.shop,
+    };
+  }
+
+  /** Rebuild a Level from a snapshot without regenerating (the "sokoban" kind skips generation). */
+  static fromSnapshot(d: Record<string, unknown>): Level {
+    const lv = new Level(d.width as number, d.height as number, "sokoban");
+    (lv as { kind: LevelKind }).kind = d.kind as LevelKind; // restore the real kind (declared readonly)
+    lv.tiles = d.tiles as TileType[][]; lv.explored = d.explored as boolean[][];
+    lv.exploredCo = d.exploredCo as boolean[][]; lv.lit = d.lit as boolean[][];
+    lv.items = (d.items as unknown[]).map((x) => restoreFloorItem(x)).filter(Boolean) as unknown as Level["items"];
+    lv.graves = d.graves as Level["graves"]; lv.drawbridges = d.drawbridges as Level["drawbridges"];
+    lv.coopTuned = d.coopTuned as number;
+    lv.traps = d.traps as Level["traps"]; lv.engravings = d.engravings as Level["engravings"]; lv.boulders = d.boulders as Level["boulders"];
+    lv.portals = (d.portals as { x: number; y: number; quest?: boolean; chain: string }[])
+      .map((p) => ({ x: p.x, y: p.y, quest: p.quest, chain: CHAINS.find((c) => c.id === p.chain)! }))
+      .filter((p) => p.chain) as Level["portals"];
+    lv.branchEntries = d.branchEntries as Level["branchEntries"]; lv.roomCenters = d.roomCenters as Level["roomCenters"];
+    lv.start = d.start as { x: number; y: number }; lv.stairs = d.stairs as { x: number; y: number };
+    lv.vault = d.vault as Level["vault"]; lv.vaultBreach = d.vaultBreach as Level["vaultBreach"]; lv.shop = d.shop as Level["shop"];
+    lv.rebuildFloors();
+    return lv;
   }
 
   /** Wipe a half-built layout and fall back to standard rooms (degenerate-generation guard). */

@@ -237,6 +237,9 @@ export class Appearances {
     }
   }
 
+  snapshot(): [string, number][] { return [...this.apIdx.entries()]; }
+  restore(entries: [string, number][]): void { this.apIdx = new Map(entries); }
+
   look(t: ItemType): string {
     const idx = this.apIdx.get(t.id) ?? 0;
     const fant = getFlavor() === "fantasy";
@@ -259,6 +262,8 @@ export class Idents {
     return (t.kind !== "potion" && t.kind !== "scroll" && t.kind !== "gem") || this.known.has(t.id);
   }
   learn(t: ItemType): void { this.known.add(t.id); }
+  snapshot(): string[] { return [...this.known]; }
+  restore(ids: string[]): void { this.known = new Set(ids); }
   name(t: ItemType): string {
     return this.isKnown(t) ? nameOf(t) : this.look(t);
   }

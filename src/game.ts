@@ -1,7 +1,9 @@
 import * as ROT from "rot-js";
 import { Level, Trap, TrapKind, LevelKind, FloorItem } from "./level";
 import { Entity, Player, Monster, Pet, SATIATED, CHOKE } from "./entities";
-import { Item } from "./inventory";
+import { Item, Inventory } from "./inventory";
+import { getFlavor, setFlavor } from "./flavor";
+import { SAVE_VERSION, writeSave, readSave, clearSave, serFields, restoreFields, serItem, restoreItem, serDef, restoreDef, serFloorItem, restoreFloorItem } from "./save";
 import { Log } from "./log";
 import type { LogWho } from "./log";
 import {
@@ -185,6 +187,163 @@ export class Game {
     document.getElementById("splash")?.classList.remove("gone");
     document.body.classList.remove("in-game");
     document.dispatchEvent(new CustomEvent("ascend:menu")); // let main.ts re-arm the menu (story collapsed)
+  }
+
+  // ── suspend & resume (autosave to IndexedDB; one continuable run) ────────────
+  private saveDirty = false;
+  private saving = false;
+  private loadingSave = false;
+
+  /** Mark the run dirty and flush it to storage (coalesced — never more than one write in flight). */
+  autosave(): void {
+    if (this.over || this.loadingSave || !this.player) return;
+    this.saveDirty = true;
+    void this.flushSave();
+  }
+  private async flushSave(): Promise<void> {
+    if (this.saving) return;
+    this.saving = true;
+    try {
+      while (this.saveDirty && !this.over) { this.saveDirty = false; await writeSave(this.buildSnapshot()); }
+    } finally { this.saving = false; }
+  }
+
+  /** Serialize the entire run (all floors, party, pets, identification, RNG) to a JSON-able object. */
+  buildSnapshot(): Record<string, unknown> {
+    this.saveActive(); // fold the live floor back into the slot store first
+    const floors: Record<string, unknown> = {};
+    for (const [key, slot] of this.slots) {
+      floors[key] = { level: slot.level.snapshot(), monsters: slot.monsters.filter((m) => m.alive).map((m) => this.serMonster(m)) };
+    }
+    return {
+      version: SAVE_VERSION,
+      meta: {
+        netRole: this.netRole, coopMode: this.coopMode, coop: this.coop, activeKey: this.activeKey,
+        turn: this.turn, plane: this.plane, currentChain: this.currentChain?.id ?? null, branchFloor: this.branchFloor,
+        gehennomOpen: this.gehennomOpen, jamStolen: this.jamStolen, censorTimer: this.censorTimer,
+        inQuest: this.inQuest, questDone: this.questDone, nextFloorShared: this.nextFloorShared,
+        archetypeId: this.archetypeId, raceId: this.raceId, flavor: getFlavor(),
+        defeatedBosses: [...this.defeatedBosses], loadedRelics: [...this.loadedRelics],
+        genesisAltars: this.genesisAltars, altarEthos: [...this.altarEthos.entries()],
+        downed: [this.downed.has(this.player), this.coPlayer ? this.downed.has(this.coPlayer) : false],
+      },
+      rng: ROT.RNG.getState(),
+      appearances: this.appearances.snapshot(),
+      player: this.serPlayer(this.player),
+      coPlayer: this.coPlayer ? this.serPlayer(this.coPlayer) : null,
+      pets: this.pets.map((p) => this.serPet(p)),
+      floors,
+    };
+  }
+
+  /** Rebuild the whole run from a snapshot (solo). Returns false if the save is unusable. */
+  applySnapshot(data: Record<string, unknown>): boolean {
+    const meta = data.meta as Record<string, unknown>;
+    if ((data.version as number) !== SAVE_VERSION || !meta) return false;
+    this.loadingSave = true;
+    try {
+      setFlavor(meta.flavor === "polkadot" ? "polkadot" : "fantasy");
+      this.netRole = "solo"; this.coop = false; this.coPlayer = null; // solo resume (co-op uses the re-handshake path)
+      this.coopMode = meta.coopMode as CoopMode;
+      this.archetypeId = meta.archetypeId as string; this.raceId = meta.raceId as string;
+      this.turn = meta.turn as number; this.plane = meta.plane as number; this.branchFloor = meta.branchFloor as number;
+      this.gehennomOpen = meta.gehennomOpen as boolean; this.jamStolen = meta.jamStolen as boolean;
+      this.censorTimer = meta.censorTimer as number; this.inQuest = meta.inQuest as boolean; this.questDone = meta.questDone as boolean;
+      this.nextFloorShared = meta.nextFloorShared as boolean;
+      this.currentChain = meta.currentChain ? ([...CHAINS, ...BRANCHES].find((c) => c.id === meta.currentChain) ?? null) : null;
+      this.defeatedBosses = new Set(meta.defeatedBosses as number[]);
+      this.loadedRelics = new Set(meta.loadedRelics as number[]);
+      this.genesisAltars = meta.genesisAltars as typeof this.genesisAltars;
+      this.altarEthos = new Map(meta.altarEthos as [string, Ethos][]);
+
+      // Identification appearances first (a throwaway shuffle), then pin the RNG to the saved state.
+      this.appearances = new Appearances();
+      this.appearances.restore(data.appearances as [string, number][]);
+      ROT.RNG.setState(data.rng as Parameters<typeof ROT.RNG.setState>[0]);
+
+      this.player = this.restorePlayer(data.player as Record<string, unknown>);
+      this.acting = this.player;
+      this.pets = (data.pets as Record<string, unknown>[]).map((p) => this.restorePet(p));
+
+      this.slots.clear();
+      for (const key of Object.keys(data.floors as object)) {
+        const f = (data.floors as Record<string, { level: Record<string, unknown>; monsters: Record<string, unknown>[] }>)[key];
+        this.slots.set(key, { level: Level.fromSnapshot(f.level), monsters: f.monsters.map((m) => this.restoreMonster(m)) });
+      }
+      this.activeKey = meta.activeKey as string;
+      const active = this.slots.get(this.activeKey);
+      if (!active) return false;
+      this.level = active.level; this.monsters = active.monsters;
+
+      this.downed = new Set();
+      this.over = false; this.jamStolen = meta.jamStolen as boolean;
+      this.rebuildSchedule();
+      this.recomputeFOV();
+      this.draw();
+      this.engine = new ROT.Engine(this.scheduler); this.engine.start();
+      this.revealGame();
+      return true;
+    } catch (e) { console.error("resume failed", e); return false; }
+    finally { this.loadingSave = false; }
+  }
+
+  /** Load & resume the saved run (splash "Continue"). Clears the save on load (suspend semantics). */
+  async resumeSave(): Promise<boolean> {
+    const data = await readSave();
+    if (!data) return false;
+    const ok = this.applySnapshot(data);
+    if (ok) { await clearSave(); this.autosave(); } // deleted on resume, rewritten as you play
+    return ok;
+  }
+
+  // ── entity (de)serialization ──
+  private serPlayer(p: Player): Record<string, unknown> {
+    const items = p.inventory.items;
+    const idx = new Map(items.map((it, i) => [it, i] as const));
+    const eq = (it: Item | null) => (it ? idx.get(it) ?? null : null);
+    return {
+      fields: serFields(p, ["inventory", "ident", "weapon", "ring", "amulet", "offhand", "quiver", "wornArmor"]),
+      inv: items.map(serItem),
+      weapon: eq(p.weapon), ring: eq(p.ring), amulet: eq(p.amulet), offhand: eq(p.offhand), quiver: eq(p.quiver),
+      wornArmor: p.wornArmor.map(eq),
+      ident: p.ident.snapshot(),
+    };
+  }
+  private restorePlayer(d: Record<string, unknown>): Player {
+    const p = new Player(this, 0, 0);
+    restoreFields(p, d.fields as Record<string, unknown>);
+    p.inventory = new Inventory();
+    p.inventory.items = (d.inv as unknown[]).map(restoreItem).filter((x): x is Item => !!x);
+    const at = (i: unknown) => (i === null || i === undefined ? null : p.inventory.items[i as number] ?? null);
+    p.weapon = at(d.weapon); p.ring = at(d.ring); p.amulet = at(d.amulet); p.offhand = at(d.offhand); p.quiver = at(d.quiver);
+    p.wornArmor = (d.wornArmor as unknown[]).map(at).filter((x): x is Item => !!x);
+    p.ident = new Idents(this.appearances); p.ident.restore(d.ident as string[]);
+    return p;
+  }
+  private serMonster(m: Monster): Record<string, unknown> {
+    return { def: serDef(m.def), fields: serFields(m, ["def", "stolen", "disguiseType"]),
+      stolen: m.stolen ? serItem(m.stolen) : null, disguiseType: m.disguiseType ? m.disguiseType.id : null };
+  }
+  private restoreMonster(d: Record<string, unknown>): Monster {
+    const def = restoreDef(d.def);
+    const f = d.fields as Record<string, unknown>;
+    const m = new Monster(this, def, (f.x as number) ?? 0, (f.y as number) ?? 0);
+    restoreFields(m, f); // overwrite the constructor's depth-scaled stats with the saved ones
+    m.stolen = d.stolen ? restoreItem(d.stolen) : null;
+    m.disguiseType = d.disguiseType ? (itemById(d.disguiseType as string) ?? null) : null;
+    return m;
+  }
+  private serPet(pet: Pet): Record<string, unknown> {
+    return { def: pet.def ? serDef(pet.def) : null, fields: serFields(pet, ["def", "carrying"]),
+      carrying: pet.carrying ? serFloorItem(pet.carrying as unknown as Record<string, unknown>) : null };
+  }
+  private restorePet(d: Record<string, unknown>): Pet {
+    const f = d.fields as Record<string, unknown>;
+    const pet = new Pet(this, (f.x as number) ?? 0, (f.y as number) ?? 0);
+    if (d.def) pet.adopt(restoreDef(d.def));
+    restoreFields(pet, f);
+    pet.carrying = d.carrying ? (restoreFloorItem(d.carrying) as unknown as Pet["carrying"]) : null;
+    return pet;
   }
 
   // ── lifecycle ──────────────────────────────────────────────────────────────
@@ -2534,6 +2693,7 @@ export class Game {
     this.music.playStinger("death");
     this.draw();
     void bumpDeaths(); // another adventurer fallen — the global memorial ticks up
+    void clearSave(); // permadeath — the suspend is spent (no reloading to undo it)
     void this.recordResult(false);
     void this.showHallOfFame();
   }

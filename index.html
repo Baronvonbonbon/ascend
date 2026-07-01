@@ -87,6 +87,11 @@
       #begin-btn:hover { background: #f0d878; }
       #begin-btn:active { transform: translateY(1px); }
       #begin-btn[hidden] { display: none; }
+      #continue-btn { font-family: inherit; font-size: 16px; font-weight: bold; letter-spacing: 0.5px; color: #0a0a0c;
+        background: #76c66a; border: none; border-radius: 6px; padding: 11px 30px; cursor: pointer; touch-action: manipulation;
+        box-shadow: 0 0 18px rgba(118,198,106,0.35); }
+      #continue-btn:hover { background: #8fd882; }
+      #continue-btn[hidden] { display: none; }
       .setup-hint { color: var(--dim); font-size: 11px; text-align: center; }
       #wallet { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--dim); flex-wrap: wrap; justify-content: center; }
       #connect { font-family: inherit; font-size: 12px; background: #1c1c20; color: var(--gold);
@@ -190,6 +195,7 @@
                 </div>
               </div>
             </div>
+            <button id="continue-btn" type="button" hidden>Continue your descent ▸</button>
             <button id="begin-btn" type="button">Begin Descent ▸</button>
             <div class="setup-hint">Once below: press <b>R</b> to return here · <b>@</b> character sheet · <b>? Controls</b> for the full key list</div>
           </div>
