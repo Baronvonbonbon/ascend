@@ -347,7 +347,7 @@ export const MONSTERS: MonsterDef[] = [
   // ── the deep Gehennom apex — the last terrors before Moloch ──
   { name: "a rollup titan",      fname: "a titan",            ch: "H", fg: "#d0a850", hp: 44, dmg: [7, 12], ai: "chase", minDepth: 30, weight: 1, throws: "rock", speed: 90 },
   { name: "a 51% attacker",      fname: "a minotaur",         ch: "H", fg: "#e05030", hp: 52, dmg: [8, 14], ai: "chase", minDepth: 34, weight: 1, speed: 110 },
-  { name: "a finality reaper",   fname: "a death knight",     ch: "&", fg: "#c03030", hp: 50, dmg: [7, 13], ai: "chase", minDepth: 38, weight: 1, drains: true, fearless: true, muse: true },
+  { name: "a finality reaper",   fname: "a death knight",     ch: "&", fg: "#c03030", hp: 50, dmg: [7, 13], ai: "chase", minDepth: 38, weight: 1, drains: true, fearless: true, muse: true, corpseEffect: "levelup" },
 ];
 
 /** The Marketmaker — a bazaar shopkeeper. Peaceful while you pay; lethal if you shoplift. */
