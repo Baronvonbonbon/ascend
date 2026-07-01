@@ -488,6 +488,7 @@ export class Player extends Entity {
       }
       if (id === "touchstone") return this.game.appraiseGems(this) ? this.endTurn() : false;
       if (id === "crystal") return this.game.applyCrystalBall(this, item) ? this.endTurn() : false;
+      if (id === "tinkit") return this.game.applyTinningKit(this, item) ? this.endTurn() : false;
       if (id === "grease") {
         if ((item.charges ?? 0) <= 0) { this.game.log.add("The can of lubricant is empty.", "dim"); return false; }
         this.pendingGrease = item; this.pending = "grease";

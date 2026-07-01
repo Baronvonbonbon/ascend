@@ -2839,6 +2839,7 @@ export class Game {
     if (type.id === "trickbag") it.charges = ROT.RNG.getUniformInt(5, 12); // a faucet bag's stored monsters
     if (type.id === "camera") it.charges = ROT.RNG.getUniformInt(3, 6); // a snapshot camera's film
     if (type.id === "grease") it.charges = ROT.RNG.getUniformInt(3, 6); // a can of lubricant's uses
+    if (type.id === "tinkit") it.charges = ROT.RNG.getUniformInt(3, 6); // a cold-storage kit's uses
     if (opts?.enchant) it.enchant = opts.enchant;
     if (opts?.relic) it.relic = true;
     it.buc = opts?.buc ?? rollBuc();
@@ -3266,6 +3267,21 @@ export class Game {
     });
     this.log.add(`${this.sub(p)} ${this.verbS(p, "loose")} a breath weapon!`, "good");
     this.draw();
+    return true;
+  }
+
+  /** `a` a cold-storage kit (tinning kit) on a corpse underfoot — seal it into a portable tin. Charged. */
+  applyTinningKit(p: Player, kit: Item): boolean {
+    const fi = this.level.items.find((i) => i.x === p.x && i.y === p.y && i.corpse);
+    if (!fi || !fi.corpse) { this.log.add("You need to stand over a corpse to tin it.", "dim"); return false; }
+    if ((kit.charges ?? 0) <= 0) { this.log.add("The cold-storage kit is spent.", "dim"); return false; }
+    const def = fi.corpse.def;
+    this.level.items = this.level.items.filter((i) => i !== fi);
+    kit.charges = (kit.charges ?? 0) - 1;
+    const tin = itemById("tin")!;
+    if (p.inventory.full) this.level.items.push({ x: p.x, y: p.y, type: tin });
+    else this.giveItem(tin);
+    this.log.add(`You seal the ${def.name} corpse into a tin.${p.inventory.full ? " (it drops at your feet — pack full)" : ""} (kit uses left: ${kit.charges})`, "good");
     return true;
   }
 
