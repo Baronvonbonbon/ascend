@@ -112,6 +112,17 @@ if (screen && logEl) {
     continueBtn.hidden = false;
     if (meta?.coop) continueBtn.title = "This was a co-op run — resuming solo restores your own adventurer.";
     continueBtn.addEventListener("click", async () => {
+      // A co-op run resumes over a fresh peer link: stash the snapshot, flip to Co-op mode so the
+      // lobby shows, and let one player Host (ships the saved run) and the other Join.
+      if (meta?.coop) {
+        game.pendingResume = save;
+        const coopRadio = document.querySelector('input[name="mode"][value="coop"]') as HTMLInputElement | null;
+        if (coopRadio) { coopRadio.checked = true; syncMode(); }
+        continueBtn.hidden = true;
+        const status = document.getElementById("lobby-status");
+        if (status) status.textContent = "Resuming — one of you Hosts (restores the run), the other Joins.";
+        return;
+      }
       continueBtn.disabled = true; continueBtn.textContent = "Restoring…";
       const ok = await game.resumeSave();
       if (!ok) { continueBtn.textContent = "Save was unreadable — start fresh"; continueBtn.disabled = false; }

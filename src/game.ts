@@ -193,6 +193,8 @@ export class Game {
   private saveDirty = false;
   private saving = false;
   private loadingSave = false;
+  pendingResume: Record<string, unknown> | null = null; // a co-op snapshot to restore once the peer relinks
+  private resumeChunks: Record<number, string> = {};    // guest-side reassembly of the host's snapshot
 
   /** Mark the run dirty and flush it to storage (coalesced — never more than one write in flight). */
   autosave(): void {
@@ -236,14 +238,15 @@ export class Game {
     };
   }
 
-  /** Rebuild the whole run from a snapshot (solo). Returns false if the save is unusable. */
-  applySnapshot(data: Record<string, unknown>): boolean {
+  /** Rebuild the whole run from a snapshot. `role` = "solo" (splash Continue) or a co-op role when
+   *  restoring over a re-established peer link (host restores locally + ships this to the guest). */
+  applySnapshot(data: Record<string, unknown>, role: "solo" | "host" | "guest" = "solo"): boolean {
     const meta = data.meta as Record<string, unknown>;
     if ((data.version as number) !== SAVE_VERSION || !meta) return false;
     this.loadingSave = true;
     try {
       setFlavor(meta.flavor === "polkadot" ? "polkadot" : "fantasy");
-      this.netRole = "solo"; this.coop = false; this.coPlayer = null; // solo resume (co-op uses the re-handshake path)
+      this.netRole = role; this.coop = role !== "solo";
       this.coopMode = meta.coopMode as CoopMode;
       this.archetypeId = meta.archetypeId as string; this.raceId = meta.raceId as string;
       this.turn = meta.turn as number; this.plane = meta.plane as number; this.branchFloor = meta.branchFloor as number;
@@ -263,7 +266,9 @@ export class Game {
 
       this.player = this.restorePlayer(data.player as Record<string, unknown>);
       this.acting = this.player;
-      this.pets = (data.pets as Record<string, unknown>[]).map((p) => this.restorePet(p));
+      this.coPlayer = this.coop && data.coPlayer ? this.restorePlayer(data.coPlayer as Record<string, unknown>) : null;
+      this.pets = this.coop ? [] : (data.pets as Record<string, unknown>[]).map((p) => this.restorePet(p)); // co-op v1 has no nominators
+      if (this.coop) this.showChatBar(true);
 
       this.slots.clear();
       for (const key of Object.keys(data.floors as object)) {
@@ -276,6 +281,9 @@ export class Game {
       this.level = active.level; this.monsters = active.monsters;
 
       this.downed = new Set();
+      const dn = meta.downed as [boolean, boolean];
+      if (dn?.[0]) this.downed.add(this.player);
+      if (this.coPlayer && dn?.[1]) this.downed.add(this.coPlayer);
       this.over = false; this.jamStolen = meta.jamStolen as boolean;
       this.rebuildSchedule();
       this.recomputeFOV();
@@ -294,6 +302,12 @@ export class Game {
     const ok = this.applySnapshot(data);
     if (ok) { await clearSave(); this.autosave(); } // deleted on resume, rewritten as you play
     return ok;
+  }
+
+  /** Host → guest: ship the authoritative snapshot over the data channel in ~48KB chunks. */
+  private sendResume(peer: Peer, data: Record<string, unknown>): void {
+    const s = JSON.stringify(data), size = 48000, n = Math.ceil(s.length / size);
+    for (let i = 0; i < n; i++) peer.send({ t: "resume", i, n, s: s.slice(i * size, (i + 1) * size) });
   }
 
   // ── entity (de)serialization ──
@@ -4938,6 +4952,15 @@ export class Game {
     this.wireCoopPeer(peer);
     this.wireCoopLog();
     this.showChatBar(true);
+    // Resuming a suspended co-op run? Ship the host's authoritative snapshot to the guest and restore
+    // it locally — instead of building a fresh world from a seed.
+    if (this.pendingResume) {
+      const data = this.pendingResume; this.pendingResume = null;
+      this.sendResume(peer, data);
+      this.log.add("Co-op resumed — your saved run is restored and shared with your partner.", "sys", "both");
+      this.applySnapshot(data, "host"); void clearSave(); this.autosave();
+      return;
+    }
     const seed = this.freshSeed();
     peer.send({ t: "start", mode, seed, archetype: this.archetypeId }); // share the seed + the Host's class so both build it identically
     this.log.add("Co-op hosted — you are the cream @ (Host); your partner is the teal @ (Guest).", "sys", "both");
@@ -4971,6 +4994,18 @@ export class Game {
   private wireCoopPeer(peer: Peer): void {
     peer.onMessage((m: NetMsg) => {
       if (!m || typeof (m as { t?: unknown }).t !== "string") return; // ignore anything without a message tag
+      // Resume snapshot chunks (part of the re-handshake, not gameplay) — reassembled before the flood guard.
+      if (m.t === "resume" && typeof m.s === "string" && typeof m.i === "number" && typeof m.n === "number") {
+        if (m.n > 400 || m.i < 0 || m.i >= m.n || m.s.length > 60000) return; // bound it — no unbounded buffering
+        this.resumeChunks[m.i] = m.s;
+        if (Object.keys(this.resumeChunks).length === m.n) {
+          const joined = Array.from({ length: m.n }, (_, i) => this.resumeChunks[i] ?? "").join("");
+          this.resumeChunks = {};
+          try { this.applySnapshot(JSON.parse(joined) as Record<string, unknown>, "guest"); void clearSave(); this.autosave(); }
+          catch (e) { console.error("co-op resume (guest) failed", e); this.log.add("Couldn't resume the co-op run — the host may need to restart.", "bad", "both"); }
+        }
+        return;
+      }
       if (!this.allowRemote()) return;                                 // shed a flood (see allowRemote)
       if (m.t === "start" && typeof m.seed === "number" && typeof m.archetype === "string") { this.coopMode = m.mode === "solo" ? "solo" : "coop-ff"; this.archetypeId = m.archetype; this.newGame(m.seed); }
       else if (m.t === "restart" && typeof m.seed === "number" && typeof m.archetype === "string") { this.archetypeId = m.archetype; this.newGame(m.seed); }
