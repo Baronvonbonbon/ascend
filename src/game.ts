@@ -206,6 +206,7 @@ export class Game {
       this.coPlayer = null;
       this.pet = new Pet(this, this.level.start.x, this.level.start.y);
     }
+    this.nextFloorShared = this.coop; // both adventurers begin together on depth 1
     this.enterLevel();
     this.saveActive(); // register depth 1 in the level store
     this.log.add(ROT.RNG.getItem(greetings())!, "sys", "both"); // the shared intro reaches both adventurers
@@ -875,6 +876,7 @@ export class Game {
   }
 
   descend(): void {
+    this.nextFloorShared = this.departingTogether(this.acting); // scale the new floor for two iff a partner is here to follow
     if (this.branch) { this.descendBranch(); return; } // floor-by-floor within a sub-dungeon
     const me = this.acting; // co-op: only the descending adventurer moves
     me.depth++;
@@ -934,6 +936,7 @@ export class Game {
 
   /** XCM call: hop to a parachain branch (its multipliers shape spawns + loot). */
   enterChain(chain: ChainDef): void {
+    this.nextFloorShared = this.departingTogether(this.acting);
     this.currentChain = chain;
     const restored = this.beginLevel(this.levelKey(), (chain.layout as LevelKind) ?? "normal"); // each parachain has a signature layout
     this.acting.x = this.level.start.x;
@@ -1113,6 +1116,7 @@ export class Game {
 
   /** Enter the Quest homeland: your nemesis guards your signature artifact. */
   enterQuest(): void {
+    this.nextFloorShared = this.departingTogether(this.acting);
     const me = this.acting;
     const q = questFor(me.archetype);
     if (this.questDone) {
@@ -1198,6 +1202,7 @@ export class Game {
   /** Enter the n-th Plane of the ascent (1..PLANES.length). The last is the Genesis Plane. */
   private enterPlane(n: number): void {
     if (n > PLANES.length) return; // already atop the Genesis Plane — offer the JAM, don't climb
+    this.nextFloorShared = this.departingTogether(this.acting);
     this.saveActive(); // persist the dungeon/plane level being left (no descent back, but keep its slot live)
     this.activeKey = `plane:${n}`; // the live floor is now this plane — so per-actor setActive finds it
     this.plane = n;
@@ -4374,12 +4379,20 @@ export class Game {
     return ITEMS.filter((i) => isGear(i) && i.weight > 0 && (i.minDepth ?? 0) <= depth);
   }
 
-  /** Co-op threat multiplier: scales a floor's monster budget by the *living* party size so two
-   *  adventurers ganging up still feel solo-per-player pressure (≈1.7× for a full pair). A lone
-   *  survivor (partner downed) drops back to 1× — solo-tuned floors. Solo/other modes = 1×. */
-  private coopFactor(): number { return this.coop ? 1 + 0.7 * (this.livingPlayers().length - 1) : 1; }
-  /** A gentler loot multiplier so neither co-op adventurer is starved splitting one floor's drops. */
-  private coopLootFactor(): number { return this.coop ? 1 + 0.4 * (this.livingPlayers().length - 1) : 1; }
+  /** Were the party together when this floor was entered? Set at each descent/transition from whether
+   *  the *departing* adventurer left a floor a living partner still stood on (only one travels the stairs
+   *  at a time, so the follower will arrive next). A floor generated while split — or after a partner
+   *  fell — is solo-tuned. Read only during generation; persisted floors keep their baked-in scaling. */
+  private nextFloorShared = false;
+  /** True iff `mover` currently shares its floor with a living partner (co-op only). */
+  private departingTogether(mover: Player): boolean {
+    return this.coop && this.livingPlayers().some((p) => p !== mover && p.floorKey === mover.floorKey);
+  }
+  /** Co-op threat multiplier: a *shared* floor gets ≈1.7× the monster budget so two adventurers
+   *  ganging up still feel solo-per-player pressure. Split/solo-tuned floors (and solo play) = 1×. */
+  private coopFactor(): number { return this.coop && this.nextFloorShared ? 1 + 0.7 * (this.livingPlayers().length - 1) : 1; }
+  /** A gentler loot multiplier on shared floors so neither adventurer is starved splitting the drops. */
+  private coopLootFactor(): number { return this.coop && this.nextFloorShared ? 1 + 0.4 * (this.livingPlayers().length - 1) : 1; }
 
   monsterAt(x: number, y: number): Monster | undefined {
     return this.monsters.find((m) => m.alive && m.x === x && m.y === y);
