@@ -130,6 +130,7 @@ export const ITEMS: ItemType[] = [
   { id: "marker",  kind: "tool", name: "a contract deployer", fname: "a magic marker",      ch: "(", fg: "#a0d0e0", weight: 2 }, // writes scrolls (charged)
   { id: "scope",   kind: "tool", name: "a state reader",      fname: "a crystal lens",      ch: "(", fg: "#a0c0a0", weight: 2 }, // probe an adjacent foe
   { id: "mirror",  kind: "tool", name: "a mirror node",       fname: "a mirror",            ch: "(", fg: "#c0d0e0", weight: 2 }, // apply at a foe — scare it; a gazer freezes / a petrifier turns to stone
+  { id: "camera",  kind: "tool", name: "a snapshot camera",    fname: "an expensive camera", ch: "(", fg: "#c8c8d8", weight: 3 }, // apply + direction — a flash blinds foes in a line (charged: film)
   { id: "lamp",    kind: "tool", name: "a block explorer",    fname: "an oil lamp",         ch: "(", fg: "#e0d060", weight: 3 }, // apply to light/douse — full sight in the dark
   { id: "vault",   kind: "tool", name: "a multisig vault",    fname: "a bag of holding",    ch: "(", fg: "#d0c060", weight: 2 }, // bag of holding — #loot to stash beyond the pack
   { id: "trickbag", kind: "tool", name: "a faucet bag",        fname: "a bag of tricks",     ch: "(", fg: "#c060c0", weight: 2 }, // bag of tricks — apply to spit out a monster (charged)

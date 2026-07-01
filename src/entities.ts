@@ -457,9 +457,9 @@ export class Player extends Entity {
       const id = item.type.id;
       if (id === "horn") return this.game.applyHorn(this) ? this.endTurn() : false;
       if (id === "trickbag") return this.game.applyTrickbag(this, item) ? this.endTurn() : false;
-      if (id === "pickaxe" || id === "scope" || id === "mirror") {
+      if (id === "pickaxe" || id === "scope" || id === "mirror" || id === "camera") {
         this.pendingApply = item;
-        const verb = id === "pickaxe" ? "Dig" : id === "scope" ? "Probe" : "Hold up the mirror";
+        const verb = id === "pickaxe" ? "Dig" : id === "scope" ? "Probe" : id === "mirror" ? "Hold up the mirror" : "Aim the camera";
         this.game.log.add(`${verb} in which direction? (a move key, Esc to cancel)`, "sys");
         return false;
       }

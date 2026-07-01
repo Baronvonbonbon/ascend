@@ -2778,6 +2778,7 @@ export class Game {
     if (type.kind === "wand") it.charges = type.id === "wand_wish" ? ROT.RNG.getUniformInt(1, 2) : ROT.RNG.getUniformInt(3, 6); // wishes are precious
     if (type.id === "marker") it.charges = ROT.RNG.getUniformInt(2, 4); // a contract deployer's gas
     if (type.id === "trickbag") it.charges = ROT.RNG.getUniformInt(5, 12); // a faucet bag's stored monsters
+    if (type.id === "camera") it.charges = ROT.RNG.getUniformInt(3, 6); // a snapshot camera's film
     if (opts?.enchant) it.enchant = opts.enchant;
     if (opts?.relic) it.relic = true;
     it.buc = opts?.buc ?? rollBuc();
@@ -3175,6 +3176,22 @@ export class Game {
       if (m.peaceful) { this.log.add(`${cap(m.name)} glances at the mirror node and looks away.`, "dim"); return true; }
       m.frightened = Math.max(m.frightened, ROT.RNG.getUniformInt(4, 8));
       this.log.add(`${cap(m.name)} recoils from its reflection in the mirror node and flees!`, "good");
+      return true;
+    }
+    if (item.type.id === "camera") {
+      if ((item.charges ?? 0) <= 0) { this.log.add("The snapshot camera is out of film.", "dim"); return false; }
+      item.charges = (item.charges ?? 0) - 1;
+      let hits = 0;
+      this.castRay(p.x, p.y, dx, dy, 6, (e) => {
+        if (e instanceof Monster) {
+          e.blindTurns = Math.max(e.blindTurns, ROT.RNG.getUniformInt(6, 12)); hits++;
+          this.log.add(`The flash sears ${e.name} — blinded, it gropes about.`, "good");
+        } else if (e instanceof Player) { // caught in the bounce (a co-op partner, or your own light off a wall)
+          e.blind = Math.max(e.blind, ROT.RNG.getUniformInt(3, 6));
+          this.log.add(`The flash catches ${e.name} full in the face — blinded!`, "bad", e);
+        }
+      });
+      this.log.add(hits ? `The camera flashes. (film left: ${item.charges})` : `The camera flashes into empty air. (film left: ${item.charges})`, hits ? "sys" : "dim");
       return true;
     }
     return false;
