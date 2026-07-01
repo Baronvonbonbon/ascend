@@ -306,6 +306,8 @@ export class MusicEngine {
   private nextChillSwell = 0;    // next ominous low swell (the dread depths)
   private nextChillChime = 0;
   private nextArp = 0;           // Planes / Genesis ascending arpeggios
+  private lowToll = 0;           // dread chimes alternate tension(tritone/m2) ↔ resolution(root/fifth)
+  private swellToll = 0;         // dread swells alternate tension ↔ resolution too — so each tritone breathes
   private droneVoices: { gain: GainNode; base: number }[] = []; // the bed's drones — ducked/breathed during calm
   private padVoices: GainNode[] = [];                            // the bed's pad output gains — breathed alongside the drone
   // ── danger theme (picked on the rising edge of danger, escalated by threat) ──
@@ -517,6 +519,7 @@ export class MusicEngine {
     this.trillIdx = 0; this.tensionStepIdx = this.tensionBassIdx = 0;
     this.nextJam = this.nextChime = this.nextDrip = now + 1;
     this.nextChillChime = this.nextChillSwell = this.nextArp = now + 2;
+    this.lowToll = this.swellToll = 0;
     this.dangerActive = false; this.dangerTheme = null;
   }
 
@@ -847,6 +850,28 @@ export class MusicEngine {
     this.gFilling = false;
     this.curBar = this.resolveBar(t);
     this.gBarLen = this.curBar?.steps ?? (this.gState === "idle" ? this.idleSteps(t) : 16);
+    // Every few idle cycles, drop a complementary ACCENT JAM over the bar to break the loop's monotony.
+    if (this.gState === "idle" && this.gBar > 2 && Math.random() < 0.28) this.renderIdleAccent(t, when);
+  }
+
+  /** A short, complementary lick laid over an idle bar now and then — bright & syncopated in the
+   *  exploration zones; a low, consonant root/fifth relief in the dread depths (also giving the
+   *  tritone room to breathe). Uses the groove's own pitch pool so it never fights the loop. */
+  private renderIdleAccent(t: TrackDef, when: number): void {
+    if (!this.active) return;
+    const gs = IDLE[t.area] ?? IDLE.legacy, g = gs[this.curIdle % gs.length];
+    if (g.arp) return; // the Planes/Genesis already breathe — no accent needed
+    const step = 60 / (t.bpm ?? 110) / 4, steps = g.steps, bus = this.active.bus;
+    const dread = !!(g.low || g.deep);
+    const pool = dread ? [0, 7, 12] : (g.chimeDegs ?? [0, 7, 12]); // dread → consonant relief
+    // a few off-beat placements scaled to the meter (so odd meters get a fitting lilt)
+    const spots = [Math.floor(steps * 0.25) + 1, Math.floor(steps * 0.5) + 1, Math.max(1, Math.floor(steps * 0.75) - 1)].filter((s) => s > 0 && s < steps);
+    spots.forEach((s, i) => {
+      const deg = pool[(i + Math.floor(Math.random() * pool.length)) % pool.length];
+      const w = when + s * step;
+      if (dread) this.note(semi(t.root, deg), w, step * 3, bus, "sine", 0.04, 900);                             // low, consonant, breathes
+      else this.note(semi(t.root, deg) * 2, w, step * 1.6, bus, i % 2 ? "square" : "triangle", 0.045, 2600);    // a bright syncopated lick
+    });
   }
 
   private idleSteps(t: TrackDef): number { const gs = IDLE[t.area] ?? IDLE.legacy; return gs[this.curIdle % gs.length].steps; }
@@ -951,23 +976,30 @@ export class MusicEngine {
     }
     this.nextArp = now;
 
-    // ── looming low swells (the dread grooves that declare a cadence); frequent ones ring longer ──
+    // ── looming low swells (declare a cadence). They ALTERNATE tension → resolution: a tritone/m2
+    //    swell is answered by a root swell, so each dark toll has space to resolve rather than piling up. ──
     if (g.swellEvery) {
       const frequent = g.swellEvery <= 7;
       while (this.nextChillSwell < horizon) {
-        let sf = semi(t.root, g.low ? 6 : 1); while (sf < 30) sf *= 2; // tritone (low) / minor-2nd
+        this.swellToll ^= 1;
+        const deg = this.swellToll ? (g.low ? 6 : 1) : 0; // odd = tension (tritone/m2); even = resolve to root
+        let sf = semi(t.root, deg); while (sf < 30) sf *= 2;
         this.dreadSwell(sf, this.nextChillSwell, frequent ? 7 : 5, bus, frequent ? 0.13 : 0.08);
         this.nextChillSwell += g.swellEvery + Math.random() * g.swellEvery;
       }
     } else this.nextChillSwell = now;
 
-    // ── chimes: low dissonant tolls (dread) or bright octave-up bells (exploration) ──
+    // ── chimes: low dissonant tolls (dread) or bright octave-up bells (exploration). Dread tolls
+    //    alternate too — a tritone/m2 toll is always followed by a resolving root/fifth, giving the
+    //    dissonance room to breathe instead of jumbling across bars. ──
     const degs = g.chimeDegs ?? this.tensionScale(t);
     const low = !!g.low;
     const prob = low ? (g.swellEvery && g.swellEvery <= 7 ? 0.22 : 0.28) : 0.42;
     while (this.nextChillChime < horizon) {
       if (this.active && Math.random() < prob) {
-        const d = degs[Math.floor(Math.random() * degs.length)];
+        let d: number;
+        if (low) { this.lowToll ^= 1; d = this.lowToll ? degs[Math.floor(Math.random() * degs.length)] : (Math.random() < 0.6 ? 0 : 7); }
+        else d = degs[Math.floor(Math.random() * degs.length)];
         this.bellNote(low ? semi(t.root, d) : semi(t.root, d) * 2, this.nextChillChime, low ? 4.4 : 3.3, this.active.bus, low ? 0.035 : 0.045);
       }
       this.nextChillChime += (g.chimeEvery ?? 4) + Math.random() * (g.chimeEvery ?? 4);
