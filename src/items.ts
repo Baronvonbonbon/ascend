@@ -143,6 +143,8 @@ export const ITEMS: ItemType[] = [
   { id: "tinopener", kind: "tool", name: "a block decoder",     fname: "a tin opener",        ch: "(", fg: "#b0b0b0", weight: 1 }, // held, it lets you open (eat) sealed tins
   { id: "lockpick", kind: "tool", name: "a signing key",        fname: "a lock pick",         ch: "(", fg: "#c0c0a0", weight: 1 }, // apply + direction — DEX-gated, pick a locked door/chest (reusable)
   { id: "tinkit",  kind: "tool", name: "a cold-storage kit",    fname: "a tinning kit",       ch: "(", fg: "#b0c0b0", weight: 2 }, // apply on a corpse underfoot — seal it into a tin (charged)
+  { id: "whistle", kind: "tool", name: "a recall beacon",       fname: "a magic whistle",     ch: "(", fg: "#d0d0e0", weight: 1 }, // apply — blink your nominator to your side
+  { id: "leash",   kind: "tool", name: "a delegation cord",     fname: "a leash",             ch: "(", fg: "#a08050", weight: 1 }, // apply — tether your nominator so it keeps to your side
   { id: "lamp",    kind: "tool", name: "a block explorer",    fname: "an oil lamp",         ch: "(", fg: "#e0d060", weight: 3 }, // apply to light/douse — full sight in the dark
   { id: "vault",   kind: "tool", name: "a multisig vault",    fname: "a bag of holding",    ch: "(", fg: "#d0c060", weight: 2 }, // bag of holding — #loot to stash beyond the pack
   { id: "trickbag", kind: "tool", name: "a faucet bag",        fname: "a bag of tricks",     ch: "(", fg: "#c060c0", weight: 2 }, // bag of tricks — apply to spit out a monster (charged)

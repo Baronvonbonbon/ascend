@@ -489,6 +489,8 @@ export class Player extends Entity {
       if (id === "touchstone") return this.game.appraiseGems(this) ? this.endTurn() : false;
       if (id === "crystal") return this.game.applyCrystalBall(this, item) ? this.endTurn() : false;
       if (id === "tinkit") return this.game.applyTinningKit(this, item) ? this.endTurn() : false;
+      if (id === "whistle") return this.game.applyWhistle(this) ? this.endTurn() : false;
+      if (id === "leash") return this.game.applyLeash() ? this.endTurn() : false;
       if (id === "grease") {
         if ((item.charges ?? 0) <= 0) { this.game.log.add("The can of lubricant is empty.", "dim"); return false; }
         this.pendingGrease = item; this.pending = "grease";
@@ -1217,6 +1219,7 @@ export class Monster extends Entity {
 
 /** The player's loyal nominator — follows, and savages adjacent enemies. */
 export class Pet extends Entity {
+  leashed = false; // clipped to a leash — it's pulled to your side if it ever strays too far
   constructor(game: Game, x: number, y: number) {
     super(game);
     this.x = x; this.y = y;
@@ -1236,7 +1239,12 @@ export class Pet extends Entity {
     const foe = this.game.adjacentEnemy(this.x, this.y);
     if (foe) { this.game.attack(this, foe); return; }
 
-    const dist = Math.max(Math.abs(this.x - p.x), Math.abs(this.y - p.y));
+    let dist = Math.max(Math.abs(this.x - p.x), Math.abs(this.y - p.y));
+    // Leashed: if it drifts beyond leash length, the tether yanks it back to your side.
+    if (this.leashed && dist > 2 && p.floorKey === this.floorKey) {
+      const spot = this.game.adjacentFree(p.x, p.y);
+      if (spot) { this.x = spot.x; this.y = spot.y; dist = 1; }
+    }
     if (dist > 1) {
       const dij = new ROT.Path.Dijkstra(p.x, p.y, (x, y) => this.game.level.isPassable(x, y), { topology: 8 });
       const path: [number, number][] = [];

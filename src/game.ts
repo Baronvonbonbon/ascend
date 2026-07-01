@@ -637,7 +637,7 @@ export class Game {
     return this.monsters.find((m) => m.alive && !m.peaceful && Math.max(Math.abs(m.x - x), Math.abs(m.y - y)) === 1);
   }
 
-  private adjacentFree(x: number, y: number): { x: number; y: number } | null {
+  adjacentFree(x: number, y: number): { x: number; y: number } | null {
     const offs = ROT.RNG.shuffle([[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]] as [number, number][]);
     for (const [dx, dy] of offs) {
       const nx = x + dx, ny = y + dy;
@@ -3017,10 +3017,10 @@ export class Game {
       } else if (item.type.id === "wand_speed") {
         hit.speedMod = Math.max(hit.speedMod, 1.5);
         this.scheduler.remove(hit); this.scheduler.add(hit, true); // re-time at the faster speed
-        this.log.add(`${cap(hit.name)} blurs into a faster gear.`, hit.peaceful || hit === this.pet ? "good" : "bad");
+        this.log.add(`${cap(hit.name)} blurs into a faster gear.`, hit.peaceful ? "good" : "bad");
       } else if (item.type.id === "wand_invis") {
         hit.invisible = true;
-        this.log.add(`${cap(hit.name)} shimmers and vanishes from sight.`, hit === this.pet ? "good" : "bad");
+        this.log.add(`${cap(hit.name)} shimmers and vanishes from sight.`, hit.peaceful ? "good" : "bad");
       } else if (item.type.id === "wand_silence") {
         hit.silenced = ROT.RNG.getUniformInt(8, 14);
         this.log.add(`${cap(hit.name)} is wrapped in silence — its voice fails.`, "good");
@@ -3282,6 +3282,27 @@ export class Game {
     if (p.inventory.full) this.level.items.push({ x: p.x, y: p.y, type: tin });
     else this.giveItem(tin);
     this.log.add(`You seal the ${def.name} corpse into a tin.${p.inventory.full ? " (it drops at your feet — pack full)" : ""} (kit uses left: ${kit.charges})`, "good");
+    return true;
+  }
+
+  /** `a` a recall beacon (magic whistle) — blink your nominator to your side. */
+  applyWhistle(p: Player): boolean {
+    const pet = this.pet;
+    if (!pet || !pet.alive) { this.log.add("You sound the recall beacon. Its note fades, unanswered.", "dim"); return true; }
+    const spot = this.adjacentFree(p.x, p.y);
+    if (!spot) { this.log.add("You sound the recall beacon, but there's no room beside you for your nominator.", "dim"); return true; }
+    pet.x = spot.x; pet.y = spot.y; pet.floorKey = this.activeKey;
+    this.recomputeFOV();
+    this.log.add("A shrill note — your nominator blinks to your side.", "good");
+    return true;
+  }
+
+  /** `a` a delegation cord (leash) — clip/unclip your nominator so it keeps to your side. */
+  applyLeash(): boolean {
+    const pet = this.pet;
+    if (!pet || !pet.alive) { this.log.add("You've no nominator to leash.", "dim"); return false; }
+    pet.leashed = !pet.leashed;
+    this.log.add(pet.leashed ? "You clip the delegation cord to your nominator — it will keep to your side now." : "You unclip the delegation cord.", "good");
     return true;
   }
 
