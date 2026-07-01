@@ -3170,7 +3170,19 @@ export class Game {
       p.spells.add(sid);
       this.log.add(`${this.sub(p)} ${this.verbS(p, "grok")} ${s.name}. (Z to cast)`, "good");
     } else {
-      this.log.add(`The runtime's logic eludes ${p.name === "you" ? "you" : p.name} — study fails. Try again.`, "bad");
+      // A hard or cursed runtime can destabilise and explode as you parse it — a backfire that singes
+      // you (and may corrupt the book). INT/epoch guard against it; a cursed runtime is far more volatile.
+      const backfire = book.buc === "cursed" ? 0.6 : Math.max(0.08, 0.3 - abilityMod(p.int) * 0.05 - p.level * 0.02);
+      if (ROT.RNG.getUniform() < backfire) {
+        const d = ROT.RNG.getUniformInt(3, 8) + (s.cost ?? 0);
+        p.hp -= d;
+        p.confused = Math.max(p.confused, ROT.RNG.getUniformInt(2, 5));
+        this.log.add(`The runtime destabilises and explodes as you parse it — ${d} damage, and your head reels!`, "bad");
+        if (book.buc !== "blessed" && ROT.RNG.getUniform() < 0.5) { p.inventory.remove(book); this.log.add(`${cap(this.ident.name(book.type))} is corrupted beyond repair.`, "dim"); }
+        if (p.hp <= 0) { this.killPlayer(p); return true; }
+      } else {
+        this.log.add(`The runtime's logic eludes ${p.name === "you" ? "you" : p.name} — study fails. Try again.`, "bad");
+      }
     }
     return true; // studying spends the turn either way
   }
