@@ -1960,6 +1960,17 @@ export class Game {
     return `The Oracle eyes your thin purse. "Return with coin, seeker." Then, unbidden: "${ROT.RNG.getItem(ORACLE_RUMORS)!}"`;
   }
 
+  /** A shop service: the Marketmaker appraises (identifies) one unknown item in your pack for a fee. */
+  private shopIdentify(p: Player): string | null {
+    const target = p.inventory.items.find((it) => !this.ident.isKnown(it.type) || !it.bucKnown);
+    if (!target) return null;
+    const fee = 120;
+    if (p.gold < fee) return `"An appraisal's ${fee} gold, anon — and your purse won't cover it. Come back with coin."`;
+    p.gold -= fee; this.breakConduct(p, "bankless");
+    this.ident.learn(target.type); target.bucKnown = true;
+    return `The Marketmaker turns ${this.ident.name(target.type)} over: "That's ${target.buc ? target.buc + " " : ""}${target.type.name}. ${fee} gold — pleasure doing business." (${p.gold} left)`;
+  }
+
   /** `#chat` a temple priest: a gold donation buys divine protection (a permanent evasion bonus) + favor.
    *  A full offering (≈400×epoch) grants +2; a partial one +1; a stingy coin is rebuffed. Capped by epoch. */
   private priestDonate(p: Player): string {
@@ -1981,7 +1992,8 @@ export class Game {
     if (d.seer) {
       line = m.peaceful ? this.oracleConsult(this.acting) : "The Oracle, struck and bleeding, screams curses — the springs run red.";
     } else if (d.keeper) {
-      const sale = m.peaceful ? this.sellGems(this.acting) : null; // a peaceful keeper appraises + buys any gems you carry
+      // a peaceful keeper appraises + buys gems, else offers a paid appraisal (identify) of an unknown item
+      const sale = m.peaceful ? (this.sellGems(this.acting) ?? this.shopIdentify(this.acting)) : null;
       line = !m.peaceful
         ? "\"THIEF! You'll settle this in blood, not blocks!\""
         : sale ?? ROT.RNG.getItem([
