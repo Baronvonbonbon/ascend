@@ -54,7 +54,7 @@ export interface ItemType {
   weight: number;          // spawn weight
 }
 
-export type EffectId = "heal" | "harm" | "strength" | "teleport" | "map" | "identify" | "enchant" | "cure" | "uncurse" | "blind" | "polyself" | "detect_obj" | "detect_trap" | "water" | "charge" | "scare" | "gold" | "clairvoyance" | "speed" | "gainlevel" | "enlighten";
+export type EffectId = "heal" | "harm" | "strength" | "teleport" | "map" | "identify" | "enchant" | "cure" | "uncurse" | "blind" | "polyself" | "detect_obj" | "detect_trap" | "water" | "charge" | "scare" | "gold" | "clairvoyance" | "speed" | "gainlevel" | "enlighten" | "taming" | "fireburst" | "genocide";
 
 export const ITEMS: ItemType[] = [
   // ── weapons ── )
@@ -107,6 +107,9 @@ export const ITEMS: ItemType[] = [
   { id: "scare",  kind: "scroll", name: "a scroll of FUD",            fname: "a scroll of scare monster",      ch: "?", fg: "#d0b0b0", effect: "scare",       weight: 3 },
   { id: "gold",   kind: "scroll", name: "a scroll of balance check",  fname: "a scroll of gold detection",     ch: "?", fg: "#e8d060", effect: "gold",        weight: 2 },
   { id: "clair",  kind: "scroll", name: "a scroll of remote view",    fname: "a scroll of clairvoyance",       ch: "?", fg: "#a0d0e0", effect: "clairvoyance", weight: 2 },
+  { id: "tame",   kind: "scroll", name: "a scroll of delegation",     fname: "a scroll of taming",             ch: "?", fg: "#a0e0b0", effect: "taming",      weight: 1 },
+  { id: "fireb",  kind: "scroll", name: "a scroll of immolation",     fname: "a scroll of fire",               ch: "?", fg: "#e06030", effect: "fireburst",   weight: 2 },
+  { id: "geno",   kind: "scroll", name: "a scroll of hard cap",       fname: "a scroll of genocide",           ch: "?", fg: "#f04040", effect: "genocide",    weight: 1 },
   // ── amulets ── " (passive while worn; put on with W, take off with T)
   { id: "amulet_life",    kind: "amulet", name: "a recovery seed",   fname: "an amulet of life saving", ch: "\"", fg: "#f0d060", weight: 1 }, // crumbles to save you from one lethal blow
   { id: "amulet_reflect", kind: "amulet", name: "a consensus mirror", fname: "an amulet of reflection",  ch: "\"", fg: "#b0e0e0", weight: 1 }, // rebounds rays/breath back at the source
@@ -215,8 +218,8 @@ export const WRITABLE_SCROLLS = ["tele", "map", "ident", "ench", "cure", "uncurs
 // Unidentified appearances — fantasy + polkadot, same length so an assigned index maps across both.
 const POTION_LOOKS_F = ["a ruby potion", "a murky potion", "a glowing vial", "a smoking flask", "a bubbling phial", "a milky potion", "an effervescent vial", "a cloudy flask"];
 const POTION_LOOKS_P = ["a fizzy potion", "a murky potion", "a glowing vial", "a smoking flask", "a bubbling phial", "a milky potion", "an effervescent vial", "a cloudy flask"];
-const SCROLL_LOOKS_F = ["a scroll labeled XYZZY", "a scroll labeled ELBERETH", "a scroll labeled NR 9", "a scroll labeled FOOBAR", "a scroll labeled VENZAR", "a scroll labeled THARR", "a scroll labeled JUYED", "a scroll labeled PRATYAVAYAH", "a scroll labeled DAIYEN FOOELS", "a scroll labeled READ ME", "a scroll labeled GARVEN DEH", "a scroll labeled VERR YED HORRE", "a scroll labeled ANDOVA BEGARIN"];
-const SCROLL_LOOKS_P = ["a scroll labeled XYZZY", "a scroll labeled ELBERETH", "a scroll labeled HODL", "a scroll labeled WAGMI", "a scroll labeled GM", "a scroll labeled DYOR", "a scroll labeled REKT", "a scroll labeled SUDO", "a scroll labeled XCM", "a scroll labeled NGMI", "a scroll labeled FUD", "a scroll labeled SER", "a scroll labeled FOMO"];
+const SCROLL_LOOKS_F = ["a scroll labeled XYZZY", "a scroll labeled ELBERETH", "a scroll labeled NR 9", "a scroll labeled FOOBAR", "a scroll labeled VENZAR", "a scroll labeled THARR", "a scroll labeled JUYED", "a scroll labeled PRATYAVAYAH", "a scroll labeled DAIYEN FOOELS", "a scroll labeled READ ME", "a scroll labeled GARVEN DEH", "a scroll labeled VERR YED HORRE", "a scroll labeled ANDOVA BEGARIN", "a scroll labeled KIRJE", "a scroll labeled VE FORBRYDERNE", "a scroll labeled HACKEM MUCHE"];
+const SCROLL_LOOKS_P = ["a scroll labeled XYZZY", "a scroll labeled ELBERETH", "a scroll labeled HODL", "a scroll labeled WAGMI", "a scroll labeled GM", "a scroll labeled DYOR", "a scroll labeled REKT", "a scroll labeled SUDO", "a scroll labeled XCM", "a scroll labeled NGMI", "a scroll labeled FUD", "a scroll labeled SER", "a scroll labeled FOMO", "a scroll labeled LFG", "a scroll labeled APE", "a scroll labeled WEN"];
 const GEM_COLORS = ["white", "red", "green", "blue", "yellow", "violet", "orange", "black"];
 const GEM_LOOKS_F = GEM_COLORS.map((c) => `a ${c} gem`);
 const GEM_LOOKS_P = GEM_COLORS.map((c) => `a ${c} token`);

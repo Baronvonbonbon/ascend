@@ -3960,6 +3960,38 @@ export class Game {
         this.log.add("A full-node sync floods your mind — you see yourself clearly.", "good");
         this.showAudit(); break;
       }
+      case "taming": {
+        let n = 0;
+        for (const m of this.monsters) {
+          if (!m.alive || m.peaceful || m.def.boss || m.def.fearless) continue;
+          if (Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) <= (buc === "blessed" ? 12 : 6)) { m.peaceful = true; m.frightened = 0; n++; }
+        }
+        this.log.add(n ? `A wave of goodwill rolls out — ${n} foe${n > 1 ? "s" : ""} stand down and delegate to you.` : "A wave of goodwill rolls out, but no one near is swayed.", n ? "good" : "dim");
+        break;
+      }
+      case "fireburst": {
+        const R = 3; let n = 0;
+        for (const m of [...this.monsters]) {
+          if (!m.alive || Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) > R) continue;
+          const d = ROT.RNG.getUniformInt(6, 12); m.hp -= d; n++;
+          if (m.hp <= 0) { this.gainXp(p, m.maxHp); this.kill(m); }
+        }
+        if (!this.elementResisted(p, "fire")) { const s = ROT.RNG.getUniformInt(2, 6); p.hp -= s; this.log.add(`A burst of flame erupts around you, searing ${n} foe${n === 1 ? "" : "s"} — and singeing you for ${s}!`, n ? "good" : "bad"); }
+        else this.log.add(`A burst of flame erupts around you, searing ${n} foe${n === 1 ? "" : "s"}.`, n ? "good" : "dim");
+        if (p.hp <= 0) { this.killPlayer(p); break; }
+        break;
+      }
+      case "genocide": {
+        // Hard-cap the nearest hostile's whole species — every one of it on this level is unwritten.
+        let target: Monster | undefined, best = 1e9;
+        for (const m of this.monsters) { if (!m.alive || m.peaceful || m.def.boss) continue; const dd = Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)); if (dd < best) { best = dd; target = m; } }
+        if (!target) { this.log.add("A scroll of hard cap — but there's no eligible species in range.", "dim"); break; }
+        const doomed = this.monsters.filter((m) => m.alive && m.def === target!.def);
+        const name = target.def.name;
+        for (const m of doomed) { m.hp = 0; this.kill(m); }
+        this.log.add(`You invoke a hard cap on ${name} — ${doomed.length} of them wink out of existence.`, "good");
+        break;
+      }
       case "scare": {
         // A wave of dread — nearby foes recoil and flee (bosses/fearless/peaceful are unmoved). Blessed reaches the whole floor.
         const reach = buc === "blessed" ? 999 : 8, turns = buc === "blessed" ? 15 : 8;
