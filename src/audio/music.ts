@@ -67,11 +67,11 @@ const BASES: Base[] = [
   { id: "mempool",   name: "The Mempool",       root: A,        chord: [0, 5, 10],        pad: "sawtooth", drone: "triangle", cutoff: 800,  reverb: 0.35, pulseBpm: 96, detune: 9,  level: 0.45,
     groove: 0.62, bpm: 132, bass: [[0,2],[0,2],[7,2],[0,2],[0,2],[10,2],[7,2],[5,2]] },
   { id: "relay",     name: "Foot of the Relay", root: A * 0.5,  chord: [0, 12],           pad: "sine",     drone: "sine",     cutoff: 400,  reverb: 0.6,  pulseBpm: 0,  detune: 3,  level: 0.5,
-    groove: 0.28, bpm: 72,  bass: [[0,4],[7,4],[0,4],[12,4]] }, // slow, open fifths — gravely spacious
+    groove: 0.28, bpm: 54,  bass: [[0,4],[7,4],[0,4],[12,4]] }, // very slow, open fifths — gravely spacious, heartbeat-deliberate
   { id: "gehennom",  name: "Gehennom",          root: A * 0.5,  chord: [0, 1, 6],         pad: "sawtooth", drone: "sawtooth", cutoff: 460,  reverb: 0.5,  pulseBpm: 50, detune: 18, level: 0.5,
-    groove: 0.3,  bpm: 88,  bass: [[0,4],[1,2],[6,2],[0,4],[6,2],[1,2]] },
+    groove: 0.3,  bpm: 60,  bass: [[0,4],[1,2],[6,2],[0,4],[6,2],[1,2]] }, // grinding + deliberate — a slow heartbeat
   { id: "sanctum",   name: "Moloch's Sanctum",  root: A * 0.5,  chord: [0, 6, 7],         pad: "sawtooth", drone: "sawtooth", cutoff: 620,  reverb: 0.4,  pulseBpm: 84, detune: 16, level: 0.52,
-    groove: 0.32, bpm: 100, bass: [[0,2],[0,2],[7,2],[6,2],[0,2],[0,2],[7,2],[7,2]] },
+    groove: 0.32, bpm: 66,  bass: [[0,2],[0,2],[7,2],[6,2],[0,2],[0,2],[7,2],[7,2]] }, // oppressive doom-toll — slow, deliberate
   { id: "planes",    name: "The Planes",        root: A * 2,    chord: [0, 7, 16, 23],    pad: "triangle", drone: "sine",     cutoff: 1600, reverb: 0.7,  pulseBpm: 0,  detune: 7,  level: 0.42,
     groove: 0.3,  bpm: 92,  bass: [[0,4],[7,4],[16,4],[7,4]] }, // floating, weightless
   { id: "genesis",   name: "The Genesis Plane", root: A * 2,    chord: [0, 4, 7, 11, 14], pad: "triangle", drone: "sine",     cutoff: 2200, reverb: 0.75, pulseBpm: 0,  detune: 4,  level: 0.42,
@@ -528,7 +528,7 @@ export class MusicEngine {
     this.gNext = now + 2.4; this.gStep = 0; this.gBar = 0; this.gBarLen = 16; this.curBar = null;
     this.gState = "off"; this.gPending = null; this.gFillArmed = this.gFilling = false; this.gIntensity = this.gExplore = 0;
     this.curIdle = Math.floor(Math.random() * 5); // a fresh zone → its idle groove is re-rolled when calm settles
-    this.idleBarsHeld = 0; this.idleReroll = 4 + Math.floor(Math.random() * 3);
+    this.idleBarsHeld = 0; this.idleReroll = 8 + Math.floor(Math.random() * 5);
     this.nextTrill = this.nextTensionStep = this.nextTensionBass = now;
     this.trillIdx = 0; this.tensionStepIdx = this.tensionBassIdx = 0;
     this.nextJam = this.nextChime = this.nextDrip = now + 1;
@@ -874,7 +874,7 @@ export class MusicEngine {
   private enterBar(t: TrackDef, when: number): void {
     this.gBar++;
     if (this.gPending !== null && this.gPending !== this.gState) {
-      if (this.gPending === "idle" && this.gState !== "idle") { const n = (IDLE[t.area] ?? IDLE.legacy).length; this.curIdle = Math.floor(Math.random() * n); this.idleBarsHeld = 0; this.idleReroll = 4 + Math.floor(Math.random() * 3); }
+      if (this.gPending === "idle" && this.gState !== "idle") { const n = (IDLE[t.area] ?? IDLE.legacy).length; this.curIdle = Math.floor(Math.random() * n); this.idleBarsHeld = 0; this.idleReroll = 8 + Math.floor(Math.random() * 5); }
       this.gState = this.gPending; this.gPending = null;
       if (this.gState !== "off") this.fillCrash(t, when); // an impact greets the new section's downbeat
     }
@@ -884,7 +884,7 @@ export class MusicEngine {
     if (this.gState === "idle" && ++this.idleBarsHeld >= this.idleReroll) {
       const gs = IDLE[t.area] ?? IDLE.legacy;
       if (gs.length > 1) { let n = this.curIdle; while (n === this.curIdle) n = Math.floor(Math.random() * gs.length); this.curIdle = n; }
-      this.idleBarsHeld = 0; this.idleReroll = 4 + Math.floor(Math.random() * 3); // next section: 4–6 bars
+      this.idleBarsHeld = 0; this.idleReroll = 8 + Math.floor(Math.random() * 5); // next section: 8–12 bars — more deliberate
       switched = true;
     }
     this.gIntensity = this.gExplore; // sample explore density for the whole bar (clean, per-bar steps)
@@ -957,7 +957,10 @@ export class MusicEngine {
     const b = this.curBar!, bus = this.grooveBus, deep = b.deep, ex = b.mode === "explore";
     const gated = b.barGate > 0 && this.gBar % b.barGate !== 0; // sparse dread: only every Nth bar
     if (!gated) {
-      if (b.kick.has(s)) this.kick(when, bus, ex ? 0.5 : 0.32, deep);
+      if (b.kick.has(s)) {
+        this.kick(when, bus, ex ? 0.5 : 0.32, deep);
+        if (deep) this.kick(when + step, bus, 0.17, true); // …a softer echo a 16th later — a heartbeat "lub-dub"
+      }
       if (b.snare.has(s)) {
         if (deep) this.noiseHit(when, 0.22, bus, 0.1, "lowpass", 260, 0.7);
         else this.noiseHit(when, ex ? 0.14 : 0.12, bus, ex ? 0.2 : 0.12, "bandpass", ex ? 1850 : 1750, 0.8);
