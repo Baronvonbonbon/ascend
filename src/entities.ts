@@ -5,7 +5,7 @@ import { fp } from "./flavor";
 import { Inventory, Item } from "./inventory";
 import { bucDelta, ITEMS, ItemType, ArmorSlot, Idents } from "./items";
 
-type Verb = "wield" | "wear" | "takeoff" | "quaff" | "read" | "eat" | "drop" | "zap" | "throw" | "forge" | "apply" | "quiver" | "name" | "offhand" | "dip" | "charge";
+type Verb = "wield" | "wear" | "takeoff" | "quaff" | "read" | "eat" | "drop" | "zap" | "throw" | "forge" | "apply" | "quiver" | "name" | "offhand" | "dip" | "charge" | "grease";
 const VERB_PROMPT: Record<Verb, string> = {
   wield: "Wield which weapon?", wear: "Wear/put on which item?",
   quaff: "Quaff which potion?", read: "Read which scroll?",
@@ -16,6 +16,7 @@ const VERB_PROMPT: Record<Verb, string> = {
   name: "Name which item?", offhand: "Wield which weapon in your off-hand?",
   dip: "Dip which item into the water?",
   charge: "Charge which wand or tool?",
+  grease: "Grease which piece of gear?",
 };
 
 export abstract class Entity {
@@ -174,6 +175,7 @@ export class Player extends Entity {
   private pendingKick = false;              // kick (K) — choosing a direction
   private pendingName: Item | null = null;  // name (N) — the item being labelled
   private pendingCharge: Item | null = null; // charging scroll (read) — remembers its BUC for the target choice
+  private pendingGrease: Item | null = null; // a can of grease awaiting the gear piece to lubricate
   private nameBuf = "";                     // accumulating typed text for #name
   signalledThisTurn = false;                // co-op chat rate limit: one message per your own turn (reset in endTurn)
   private castMenu: string[] = [];          // spell ids in the current cast menu order
@@ -412,10 +414,11 @@ export class Player extends Entity {
     const verb = this.pending!;
     this.pending = null;
     const chargeScroll = this.pendingCharge; this.pendingCharge = null; // consume the remembered charging scroll this resolution
-    if (e.key === "Escape") { this.game.log.add("Never mind.", "dim"); return false; }
+    if (e.key === "Escape") { this.pendingGrease = null; this.game.log.add("Never mind.", "dim"); return false; }
     const item = /^[a-z]$/.test(e.key) ? this.inventory.byLetter(e.key) : undefined;
     if (!item) { this.game.log.add("No such item.", "dim"); return false; }
     if (verb === "charge") return this.game.chargeItem(chargeScroll?.buc ?? "uncursed", item) ? this.endTurn() : false;
+    if (verb === "grease") { const can = this.pendingGrease; this.pendingGrease = null; return can && this.game.greaseItem(can, item) ? this.endTurn() : false; }
     if (verb === "zap") {
       if (item.type.kind !== "wand") { this.game.log.add("That is not a wand.", "dim"); return false; }
       if (item.type.id === "wand_wish") { // the wand of wishing prompts a wish instead of a direction
@@ -476,6 +479,13 @@ export class Player extends Entity {
       }
       if (id === "touchstone") return this.game.appraiseGems(this) ? this.endTurn() : false;
       if (id === "crystal") return this.game.applyCrystalBall(this, item) ? this.endTurn() : false;
+      if (id === "grease") {
+        if ((item.charges ?? 0) <= 0) { this.game.log.add("The can of lubricant is empty.", "dim"); return false; }
+        this.pendingGrease = item; this.pending = "grease";
+        this.game.log.add(`${VERB_PROMPT.grease} (a-${this.inventory.letter(this.inventory.items.length - 1)}, Esc to cancel)`, "sys");
+        this.game.showInventory();
+        return false;
+      }
       if (id === "lamp") {
         item.lit = !item.lit;
         this.game.log.add(item.lit ? "You light the block explorer — its glow pushes back the dark." : "You douse the block explorer.", item.lit ? "good" : "dim");

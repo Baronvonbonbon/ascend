@@ -2822,6 +2822,7 @@ export class Game {
     if (type.id === "marker") it.charges = ROT.RNG.getUniformInt(2, 4); // a contract deployer's gas
     if (type.id === "trickbag") it.charges = ROT.RNG.getUniformInt(5, 12); // a faucet bag's stored monsters
     if (type.id === "camera") it.charges = ROT.RNG.getUniformInt(3, 6); // a snapshot camera's film
+    if (type.id === "grease") it.charges = ROT.RNG.getUniformInt(3, 6); // a can of lubricant's uses
     if (opts?.enchant) it.enchant = opts.enchant;
     if (opts?.relic) it.relic = true;
     it.buc = opts?.buc ?? rollBuc();
@@ -3326,6 +3327,17 @@ export class Game {
     const gain = target.type.id === "wand_wish" ? 1 : buc === "blessed" ? ROT.RNG.getUniformInt(4, 6) : ROT.RNG.getUniformInt(2, 4);
     target.charges = cur + gain;
     this.log.add(`${cap(this.ident.name(target.type))} thrums with fresh charge — now [${target.charges}].`, "good");
+    return true;
+  }
+
+  /** Apply a can of grease to a weapon/armor — work it rust-proof (like an audit), spending a use. */
+  greaseItem(can: Item, target: Item): boolean {
+    if (target.type.kind !== "weapon" && target.type.kind !== "armor") { this.log.add("Only a weapon or armor takes grease to any purpose.", "dim"); return false; }
+    if (target.proofed) { this.log.add(`${cap(this.ident.name(target.type))} is already slick — grease finds no purchase.`, "dim"); return false; }
+    target.proofed = true; target.erosion = 0;
+    can.charges = (can.charges ?? 0) - 1;
+    this.log.add(`You work grease into ${this.ident.name(target.type)} — slick and rust-proof now. (grease left: ${can.charges})`, "good");
+    if ((can.charges ?? 0) <= 0) { this.acting.inventory.remove(can); this.log.add("The can of lubricant sputters empty.", "dim"); }
     return true;
   }
 
