@@ -50,7 +50,8 @@ interface TrackDef {
   level: number;       // track mix level
   // ── the groove layer (every zone has one now — the rhythm IS the exploration texture) ──
   groove: number;      // 0..1 baseline grooviness — how readily drums + bass fade in
-  bpm: number;         // tempo for the drum + bass grid (16th-note steps)
+  bpm: number;         // ACTIVE tempo (explore groove + combat) for the drum + bass grid (16th steps)
+  idleBpm?: number;    // slower settled-idle tempo (the deep zones' deliberate heartbeat); defaults to bpm
   bass: Note[];        // a rhythmic bassline over the bar (degree from root, low register)
 }
 
@@ -67,11 +68,11 @@ const BASES: Base[] = [
   { id: "mempool",   name: "The Mempool",       root: A,        chord: [0, 5, 10],        pad: "sawtooth", drone: "triangle", cutoff: 800,  reverb: 0.35, pulseBpm: 96, detune: 9,  level: 0.45,
     groove: 0.62, bpm: 132, bass: [[0,2],[0,2],[7,2],[0,2],[0,2],[10,2],[7,2],[5,2]] },
   { id: "relay",     name: "Foot of the Relay", root: A * 0.5,  chord: [0, 12],           pad: "sine",     drone: "sine",     cutoff: 400,  reverb: 0.6,  pulseBpm: 0,  detune: 3,  level: 0.5,
-    groove: 0.28, bpm: 54,  bass: [[0,4],[7,4],[0,4],[12,4]] }, // very slow, open fifths — gravely spacious, heartbeat-deliberate
+    groove: 0.28, bpm: 72, idleBpm: 50, bass: [[0,4],[7,4],[0,4],[12,4]] }, // idle = a very slow heartbeat; combat quickens
   { id: "gehennom",  name: "Gehennom",          root: A * 0.5,  chord: [0, 1, 6],         pad: "sawtooth", drone: "sawtooth", cutoff: 460,  reverb: 0.5,  pulseBpm: 50, detune: 18, level: 0.5,
-    groove: 0.3,  bpm: 60,  bass: [[0,4],[1,2],[6,2],[0,4],[6,2],[1,2]] }, // grinding + deliberate — a slow heartbeat
+    groove: 0.3,  bpm: 88, idleBpm: 58, bass: [[0,4],[1,2],[6,2],[0,4],[6,2],[1,2]] }, // idle grinds slow; combat quickens
   { id: "sanctum",   name: "Moloch's Sanctum",  root: A * 0.5,  chord: [0, 6, 7],         pad: "sawtooth", drone: "sawtooth", cutoff: 620,  reverb: 0.4,  pulseBpm: 84, detune: 16, level: 0.52,
-    groove: 0.32, bpm: 66,  bass: [[0,2],[0,2],[7,2],[6,2],[0,2],[0,2],[7,2],[7,2]] }, // oppressive doom-toll — slow, deliberate
+    groove: 0.32, bpm: 100, idleBpm: 64, bass: [[0,2],[0,2],[7,2],[6,2],[0,2],[0,2],[7,2],[7,2]] }, // idle = slow doom-toll; combat quickens
   { id: "planes",    name: "The Planes",        root: A * 2,    chord: [0, 7, 16, 23],    pad: "triangle", drone: "sine",     cutoff: 1600, reverb: 0.7,  pulseBpm: 0,  detune: 7,  level: 0.42,
     groove: 0.3,  bpm: 92,  bass: [[0,4],[7,4],[16,4],[7,4]] }, // floating, weightless
   { id: "genesis",   name: "The Genesis Plane", root: A * 2,    chord: [0, 4, 7, 11, 14], pad: "triangle", drone: "sine",     cutoff: 2200, reverb: 0.75, pulseBpm: 0,  detune: 4,  level: 0.42,
@@ -846,7 +847,10 @@ export class MusicEngine {
    *  idle groove). A change of section is deferred to the next bar line and bridged by the zone's fill,
    *  so the grid never resets mid-bar — no clutter on returns, and the meters stay locked. */
   private scheduleGrooveLayer(t: TrackDef, now: number, horizon: number, want: "off" | "explore" | "idle"): void {
-    const step = 60 / (t.bpm ?? 110) / 4; // the zone's 16th grid
+    // Idle runs at the zone's slow heartbeat (idleBpm); explore/off ride the active bpm — so combat,
+    // which plays in the explore state + the tension layer, stays quick and decoupled from the heartbeat.
+    const bpm = this.gState === "idle" ? (t.idleBpm ?? t.bpm) : (t.bpm ?? 110);
+    const step = 60 / bpm / 4;
     if (this.gNext < now - 1) { this.gNext = now; this.gStep = 0; this.gFilling = false; } // resync after a stall
 
     // Queue a section change — applied on the next downbeat, announced by a fill across this bar.
@@ -902,7 +906,7 @@ export class MusicEngine {
     if (!this.active) return;
     const gs = IDLE[t.area] ?? IDLE.legacy, g = gs[this.curIdle % gs.length];
     if (g.arp) return; // the Planes/Genesis already breathe — no accent needed
-    const step = 60 / (t.bpm ?? 110) / 4, steps = g.steps, bus = this.active.bus;
+    const step = 60 / (t.idleBpm ?? t.bpm ?? 110) / 4, steps = g.steps, bus = this.active.bus; // ride the idle heartbeat
     const dread = !!(g.low || g.deep);
     const pool = dread ? [0, 7, 12] : (g.chimeDegs ?? [0, 7, 12]); // dread → consonant relief
     // a few off-beat placements scaled to the meter (so odd meters get a fitting lilt)
