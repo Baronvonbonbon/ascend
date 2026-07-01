@@ -4,6 +4,7 @@ import { COLORS, MonsterDef, SPELLS, spellById, monName } from "./data";
 import { fp } from "./flavor";
 import { Inventory, Item } from "./inventory";
 import { bucDelta, ITEMS, ItemType, ArmorSlot, Idents } from "./items";
+import { runAi, wanderStep, cheb, MONSTER_BEHAVIORS, PET_BEHAVIORS } from "./ai";
 
 type Verb = "wield" | "wear" | "takeoff" | "quaff" | "read" | "eat" | "drop" | "zap" | "throw" | "forge" | "apply" | "quiver" | "name" | "offhand" | "dip" | "charge" | "grease";
 const VERB_PROMPT: Record<Verb, string> = {
@@ -1083,7 +1084,7 @@ export class Monster extends Entity {
     // Frozen in stasis (a wand of stasis) — it loses the turn.
     if (this.sleepTurns > 0) { this.sleepTurns--; return; }
     // Blinded (a thrown potion of obfuscation) — it gropes about, unable to find you.
-    if (this.blindTurns > 0) { this.blindTurns--; this.wanderStep(); return; }
+    if (this.blindTurns > 0) { this.blindTurns--; wanderStep(this.game, this); return; }
 
     // A dormant honeypot just waits, wearing its loot disguise, until something touches it.
     if (this.def.mimic && !this.revealed) return;
@@ -1096,207 +1097,19 @@ export class Monster extends Entity {
 
     // A watcher eye just floats — it never gives chase or strikes; its danger is the gaze it
     // returns when YOU melee it (handled in attack). Zap it from afar instead.
-    if (this.def.paralyzes) { this.wanderStep(); return; }
+    if (this.def.paralyzes) { wanderStep(this.game, this); return; }
 
     // No adventurer shares this floor (co-op split / partner downed) — a free monster just mills
     // about. Checked AFTER the passive states so a sleeper/dormant mimic/shopkeeper still won't move.
-    if (this.game.playersHere().length === 0) { this.wanderStep(); return; }
+    if (this.game.playersHere().length === 0) { wanderStep(this.game, this); return; }
 
-    // A laden thief (items or gold) wants only to escape — it never turns to fight.
-    if (this.stolen || this.stoleGold > 0) { this.fleeStep(p); return; }
-
-    // Scared by a mirror node (its own reflection): it turns tail until its nerve returns.
-    if (this.frightened > 0) { this.frightened--; this.fleeStep(p); return; }
-
-    // A coward turns tail once badly hurt.
-    if (this.def.cowardly && this.hp < this.maxHp * 0.3) { this.fleeStep(p); return; }
-
-    // muse.c (wear): a soldier/golem standing on a piece of armor dons it — harder to hit thereafter.
-    if (this.def.wears && this.worn < 6) {
-      const it = this.game.level.itemAt(this.x, this.y);
-      if (it && it.type.kind === "armor" && !it.corpse && !it.chest && !it.price) {
-        this.worn += Math.max(1, (it.type.ac ?? 1) + (it.enchant ?? 0));
-        this.game.level.items = this.game.level.items.filter((z) => z !== it);
-        this.game.log.add(`${this.name.charAt(0).toUpperCase() + this.name.slice(1)} dons ${this.game.ident.name(it.type)} — better armored now.`, "bad", p);
-        return; // donning takes its turn
-      }
-    }
-
-    // muse.c: a tough foe gulps a healing draught when badly hurt — a limited supply.
-    if (!this.cancelled && this.def.muse && this.museLeft > 0 && this.hp < this.maxHp * 0.35 && ROT.RNG.getUniform() < 0.45) {
-      this.museLeft--;
-      const h = Math.round(this.maxHp * (0.3 + ROT.RNG.getUniform() * 0.25));
-      this.hp = Math.min(this.maxHp, this.hp + h);
-      this.game.log.add(`${this.name.charAt(0).toUpperCase() + this.name.slice(1)} gulps a draught and steadies — +${h}.`, "bad", p);
-      return;
-    }
-    // muse.c escape: out of draughts and near death, it gulps a teleport draught and blinks across the level.
-    if (!this.cancelled && this.def.muse && this.museLeft === 0 && !this.museEscaped && this.hp < this.maxHp * 0.25 && ROT.RNG.getUniform() < 0.4) {
-      this.museEscaped = true;
-      this.game.museTeleport(this, p);
-      return;
-    }
-
-    // A medic mends a wounded ally within reach instead of fighting.
-    if (!this.cancelled && this.def.heals) {
-      const ally = this.game.monsters.find((o) => o !== this && o.alive && o.hp < o.maxHp && Math.max(Math.abs(o.x - this.x), Math.abs(o.y - this.y)) <= 2 && this.game.hasLineOfSight(this.x, this.y, o.x, o.y));
-      if (ally) {
-        ally.hp = Math.min(ally.maxHp, ally.hp + ROT.RNG.getUniformInt(3, 7));
-        const me = this.name.charAt(0).toUpperCase() + this.name.slice(1);
-        this.game.log.add(`${me} mends ${ally.name}.`, "dim");
-        return;
-      }
-    }
-
-    // A Gray-Paper ward beneath the player holds ordinary foes at bay — they won't
-    // attack or close in. Bosses and the Censor fear no scripture.
-    if (!this.def.boss && !this.def.fearless && this.game.level.engravingAt(p.x, p.y)) {
-      this.wanderStep();
-      return;
-    }
-
-    // The Sybil attack: a sybil with budget left occasionally replicates (bounded). Nullified ones can't.
-    if (!this.cancelled && this.def.splits && this.splitsLeft > 0 && ROT.RNG.getUniform() < 0.05 && this.game.spawnSybilNear(this)) return;
-    // A conjurer summons reinforcements (a verbal casting — magical silence stops it).
-    if (!this.cancelled && this.silenced === 0 && this.def.summons && this.game.level.isVisible(this.x, this.y) && ROT.RNG.getUniform() < 0.1 && this.game.summonNear(this)) return;
-    // Breeders multiply when a mate of their kind is adjacent.
-    if (!this.cancelled && this.def.breeds && ROT.RNG.getUniform() < 0.06) {
-      const mate = this.game.monsters.find((o) => o !== this && o.alive && o.def === this.def && Math.max(Math.abs(o.x - this.x), Math.abs(o.y - this.y)) === 1);
-      if (mate && this.game.breedNear(this)) return;
-    }
-
+    // Every decision from here is a scored behaviour (src/ai.ts). The ordered
+    // MONSTER_BEHAVIORS list reproduces the old priority ladder — flee states,
+    // special attacks (steal/seduce/summon/split/breed/muse), melee, ranged fire,
+    // chase, investigate, wander — and adds the tactical layer: kiting, morale
+    // break & regroup, surround routing, and ganging up on your hound.
     const dist = Math.max(Math.abs(this.x - p.x), Math.abs(this.y - p.y));
-    // The resurrected Censor lunges for the JAM itself — a snatch-and-blink.
-    if (this.isHunter && !this.cancelled && dist === 1 && p.hasJam && ROT.RNG.getUniform() < 0.18) {
-      this.game.censorSteal(this, p);
-      return;
-    }
-    // The rug pull: a thief adjacent to you snatches a pack item and blinks away.
-    if (!this.cancelled && this.def.steals && dist === 1) {
-      const loot = this.game.stealItem(p);
-      if (loot) {
-        this.stolen = loot;
-        const who = this.name.charAt(0).toUpperCase() + this.name.slice(1);
-        this.game.log.add(`${who} rugs you — it rips ${this.game.ident.name(loot.type)} from your pack and bolts!`, "bad", p);
-        this.blinkAway(p);
-        return;
-      }
-      // nothing to take — fall through and just attack
-    }
-    // Seduce: a charmer transfixes you (a lost turn) and slips away with whatever it can lift.
-    if (!this.cancelled && this.def.seduces && dist === 1 && ROT.RNG.getUniform() < 0.6) {
-      const who = this.name.charAt(0).toUpperCase() + this.name.slice(1);
-      if (p.paralyzed === 0 && !p.freeAction) { p.paralyzed = 1; this.game.log.add(`${who} catches your eye — you stand transfixed!`, "bad", p); }
-      const loot = this.game.stealItem(p);
-      if (loot) { this.stolen = loot; this.game.log.add(`${who} slips ${this.game.ident.name(loot.type)} away as you swoon, and is gone.`, "bad", p); this.blinkAway(p); }
-      return;
-    }
-    // The airdrop farmer: adjacent, it snatches a fistful of gold and blinks away.
-    if (!this.cancelled && this.def.stealsGold && dist === 1 && p.gold > 0) {
-      const took = this.game.stealGold(p);
-      if (took > 0) {
-        this.stoleGold += took;
-        const who = this.name.charAt(0).toUpperCase() + this.name.slice(1);
-        this.game.log.add(`${who} swipes ${took} gold and blinks away!`, "bad", p);
-        this.blinkAway(p);
-        return;
-      }
-    }
-    if (dist === 1) { this.game.attack(this, p); return; }
-
-    // If the player's nominator is at our side, swat it.
-    const pet = this.game.pet;
-    if (pet && pet.alive && Math.max(Math.abs(this.x - pet.x), Math.abs(this.y - pet.y)) === 1) { this.game.attack(this, pet); return; }
-
-    // muse.c: a caster zaps a wand-borne debuff at you from range (sleep / blind / confuse) — silence stops it.
-    if (!this.cancelled && this.silenced === 0 && this.def.zaps && !p.stealth && dist >= 2 && dist <= 6 &&
-        this.game.level.isVisible(this.x, this.y) && this.game.hasLineOfSight(this.x, this.y, p.x, p.y) && ROT.RNG.getUniform() < 0.5) {
-      this.game.monsterZap(this, p);
-      return;
-    }
-    // mthrowu.c: a thrower hurls a physical projectile (dart/rock) from range — not magic, so silence/cancel don't stop it.
-    if (this.def.throws && !p.stealth && dist >= 2 && dist <= 6 && this.game.level.isVisible(this.x, this.y) && this.game.hasLineOfSight(this.x, this.y, p.x, p.y)) {
-      this.game.monsterThrow(this);
-      return;
-    }
-    // Ranged foes (oracles) zap the player from a distance with line-of-sight — a cast, stopped by silence.
-    if (!this.cancelled && this.silenced === 0 && this.def.ranged && !p.stealth && dist >= 2 && dist <= 6 && this.game.level.isVisible(this.x, this.y) && this.game.hasLineOfSight(this.x, this.y, p.x, p.y)) {
-      this.game.rangedAttack(this);
-      return;
-    }
-
-    // A dragon breathes a ray when you're roughly in line.
-    if (!this.cancelled && this.def.breath && !p.stealth && dist >= 2 && dist <= 5 && this.game.level.isVisible(this.x, this.y) && this.game.hasLineOfSight(this.x, this.y, p.x, p.y)) {
-      this.game.breathAttack(this);
-      return;
-    }
-
-    // Chase only what the player can see — unless they're cloaked (ring of privacy).
-    // Chase what the player can see — or what's close enough to sense you in the dark (so darkness isn't a free pass).
-    if (this.def.ai === "chase" && !p.stealth && (this.game.level.isVisible(this.x, this.y) || dist <= 5) && dist <= 9) {
-      const dij = new ROT.Path.Dijkstra(p.x, p.y, (x, y) => this.game.level.isPassable(x, y), { topology: 8 });
-      const path: [number, number][] = [];
-      dij.compute(this.x, this.y, (x, y) => path.push([x, y]));
-      path.shift(); // drop current tile
-      if (path.length) {
-        const [nx, ny] = path[0];
-        const tgt = this.game.playerAt(nx, ny);
-        if (tgt) { this.game.attack(this, tgt); return; }
-        if (!this.game.monsterAt(nx, ny) && !this.game.level.boulderAt(nx, ny)) { this.x = nx; this.y = ny; }
-      }
-      return;
-    }
-
-    // Investigate a partner's call it heard — head toward where the noise came from.
-    if (this.heardSound) {
-      if (this.x === this.heardSound.x && this.y === this.heardSound.y) this.heardSound = null; // arrived — nothing here
-      else { this.stepToward(this.heardSound.x, this.heardSound.y); return; }
-    }
-
-    // Wander.
-    this.wanderStep();
-  }
-
-  /** Take one Dijkstra step toward a target tile (for investigating a heard sound). */
-  private stepToward(tx: number, ty: number): void {
-    const dij = new ROT.Path.Dijkstra(tx, ty, (x, y) => this.game.level.isPassable(x, y), { topology: 8 });
-    const path: [number, number][] = [];
-    dij.compute(this.x, this.y, (x, y) => path.push([x, y]));
-    path.shift(); // drop current tile
-    if (path.length) {
-      const [nx, ny] = path[0];
-      if (!this.game.monsterAt(nx, ny) && !this.game.playerAt(nx, ny) && !this.game.level.boulderAt(nx, ny)) { this.x = nx; this.y = ny; }
-    }
-  }
-
-  /** A random shuffle into an open neighbour — never onto a player. */
-  private wanderStep(): void {
-    const d = ROT.RNG.getItem([[-1, 0], [1, 0], [0, -1], [0, 1]] as [number, number][])!;
-    const nx = this.x + d[0], ny = this.y + d[1];
-    if (this.game.level.isPassable(nx, ny) && !this.game.monsterAt(nx, ny) && !this.game.playerAt(nx, ny) && !this.game.level.boulderAt(nx, ny)) {
-      this.x = nx; this.y = ny;
-    }
-  }
-
-  /** Step to the neighbouring tile that puts the most distance between us and the player. */
-  private fleeStep(p: Player): void {
-    let best: [number, number] | null = null, bestD = -1;
-    for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [1, 1], [-1, -1], [1, -1], [-1, 1]] as [number, number][]) {
-      const nx = this.x + dx, ny = this.y + dy;
-      if (!this.game.level.isPassable(nx, ny) || this.game.monsterAt(nx, ny) || this.game.playerAt(nx, ny) || this.game.level.boulderAt(nx, ny)) continue;
-      const d = Math.max(Math.abs(nx - p.x), Math.abs(ny - p.y));
-      if (d > bestD) { bestD = d; best = [nx, ny]; }
-    }
-    if (best) { this.x = best[0]; this.y = best[1]; }
-  }
-
-  /** Vanish to a far corner of the level — the thief's getaway. */
-  private blinkAway(p: Player): void {
-    for (let i = 0; i < 30; i++) {
-      const pos = this.game.level.randomFloor();
-      const d = Math.max(Math.abs(pos.x - p.x), Math.abs(pos.y - p.y));
-      if (d >= 8 && !this.game.monsterAt(pos.x, pos.y) && !this.game.playerAt(pos.x, pos.y)) { this.x = pos.x; this.y = pos.y; return; }
-    }
+    runAi(this.game, this, MONSTER_BEHAVIORS, { p, dist });
   }
 }
 
@@ -1319,24 +1132,15 @@ export class Pet extends Entity {
     const p = this.game.player;
     if (p.riding) { this.x = p.x; this.y = p.y; return; } // ridden — it moves only with its rider
 
-    const foe = this.game.adjacentEnemy(this.x, this.y);
-    if (foe) { this.game.attack(this, foe); return; }
-
-    let dist = Math.max(Math.abs(this.x - p.x), Math.abs(this.y - p.y));
-    // Leashed: if it drifts beyond leash length, the tether yanks it back to your side.
-    if (this.leashed && dist > 2 && p.floorKey === this.floorKey) {
+    // Leashed: if it drifts beyond the tether, it's yanked back to your side before it decides.
+    if (this.leashed && cheb(this.x, this.y, p.x, p.y) > 2 && p.floorKey === this.floorKey) {
       const spot = this.game.adjacentFree(p.x, p.y);
-      if (spot) { this.x = spot.x; this.y = spot.y; dist = 1; }
+      if (spot) { this.x = spot.x; this.y = spot.y; }
     }
-    if (dist > 1) {
-      const dij = new ROT.Path.Dijkstra(p.x, p.y, (x, y) => this.game.level.isPassable(x, y), { topology: 8 });
-      const path: [number, number][] = [];
-      dij.compute(this.x, this.y, (x, y) => path.push([x, y]));
-      path.shift();
-      if (path.length) {
-        const [nx, ny] = path[0];
-        if (!(nx === p.x && ny === p.y) && !this.game.monsterAt(nx, ny)) { this.x = nx; this.y = ny; }
-      }
-    }
+
+    // Its own drives (src/ai.ts): break off when nearly dead, maul what's in reach,
+    // hunt foes it can see, body-block threats to you, then heel around any traps.
+    const dist = Math.max(Math.abs(this.x - p.x), Math.abs(this.y - p.y));
+    runAi(this.game, this, PET_BEHAVIORS, { p, dist });
   }
 }
