@@ -2225,12 +2225,19 @@ export class Game {
     const t = this.level.tileAt(p.x, p.y);
     if (t !== "floor" && t !== "door") { this.log.add("There's no dust here to scratch a sigil into.", "dim"); return false; }
     this.breakConduct(p, "illiterate"); // writing words ends Illiterate
+    // A wielded blade etches the ward into the stone itself — permanent; a bare finger only scuffs the dust.
+    const armed = !!p.weapon && p.weapon.type.kind === "weapon";
     const LIFE = 14;
     const e = this.level.engravingAt(p.x, p.y);
-    if (e) { e.life = LIFE; this.log.add("You re-scratch the Gray-Paper sigil — its lines sharpen.", "sys"); }
-    else {
+    if (e) {
+      if (armed) { e.permanent = true; this.log.add(`You deepen the Gray-Paper sigil with your ${this.ident.name(p.weapon!.type)} — etched into the stone now, it will never scuff.`, "good"); }
+      else { e.life = LIFE; this.log.add("You re-scratch the Gray-Paper sigil — its lines sharpen.", "sys"); }
+    } else if (armed) {
+      this.level.engravings.push({ x: p.x, y: p.y, life: LIFE, permanent: true });
+      this.log.add(`You etch a clause of the Gray Paper into the stone with your ${this.ident.name(p.weapon!.type)}: 'less trust, more truth.' A permanent ward — foes shrink from it.`, "good");
+    } else {
       this.level.engravings.push({ x: p.x, y: p.y, life: LIFE });
-      this.log.add("You scratch a clause of the Gray Paper into the dust: 'less trust, more truth.' Foes shrink from it.", "good");
+      this.log.add("You scratch a clause of the Gray Paper into the dust: 'less trust, more truth.' Foes shrink from it — but it will scuff away.", "good");
     }
     return true;
   }
@@ -2238,8 +2245,8 @@ export class Game {
   /** Engravings scuff away over time (and faster when you fight on them). */
   tickEngravings(): void {
     if (this.level.engravings.length === 0) return;
-    for (const e of this.level.engravings) e.life--;
-    this.level.engravings = this.level.engravings.filter((e) => e.life > 0);
+    for (const e of this.level.engravings) if (!e.permanent) e.life--;
+    this.level.engravings = this.level.engravings.filter((e) => e.permanent || e.life > 0);
   }
 
   private win(winner?: Player): void {

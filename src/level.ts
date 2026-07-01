@@ -9,7 +9,7 @@ export interface FloorItem { x: number; y: number; type: ItemType; price?: numbe
 export type TrapKind = "gas" | "reorg" | "slash" | "fork" | "trapdoor" | "web" | "dart" | "antimagic" | "statue";
 export interface Trap { x: number; y: number; kind: TrapKind; revealed: boolean; detected?: boolean; } // detected = sensed by trap detection (renders out of FOV)
 /** A sigil scratched in the dust (the Gray Paper) that wards monsters from the tile; it scuffs away. */
-export interface Engraving { x: number; y: number; life: number; }
+export interface Engraving { x: number; y: number; life: number; permanent?: boolean; } // permanent = etched into stone (a wielded blade), never scuffs
 
 /** One dungeon level: tiles, fog-of-war, FOV, stairs, items, spawn points. */
 export class Level {
