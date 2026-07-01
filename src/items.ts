@@ -54,7 +54,7 @@ export interface ItemType {
   weight: number;          // spawn weight
 }
 
-export type EffectId = "heal" | "harm" | "strength" | "teleport" | "map" | "identify" | "enchant" | "cure" | "uncurse" | "blind" | "polyself" | "detect_obj" | "detect_trap" | "water" | "charge" | "scare" | "gold" | "clairvoyance";
+export type EffectId = "heal" | "harm" | "strength" | "teleport" | "map" | "identify" | "enchant" | "cure" | "uncurse" | "blind" | "polyself" | "detect_obj" | "detect_trap" | "water" | "charge" | "scare" | "gold" | "clairvoyance" | "speed" | "gainlevel" | "enlighten";
 
 export const ITEMS: ItemType[] = [
   // ── weapons ── )
@@ -81,6 +81,9 @@ export const ITEMS: ItemType[] = [
   { id: "boost",  kind: "potion", name: "a potion of staking",  fname: "a potion of gain strength", ch: "!", fg: "#e0b94d", effect: "strength", weight: 3 },
   { id: "blind",  kind: "potion", name: "a potion of obfuscation", fname: "a potion of blindness", ch: "!", fg: "#707070", effect: "blind", weight: 2 },
   { id: "water",  kind: "potion", name: "a vial of testnet water", fname: "a potion of water",     ch: "!", fg: "#8ac0e0", effect: "water", weight: 4 }, // holy (blessed) / unholy (cursed) — consecrate on Gavin's altar; #dip gear to bless/curse it
+  { id: "speed",  kind: "potion", name: "a potion of overclock",  fname: "a potion of speed",       ch: "!", fg: "#e0e060", effect: "speed",     weight: 3 },
+  { id: "gainlvl",kind: "potion", name: "a potion of epoch-up",   fname: "a potion of gain level",  ch: "!", fg: "#e0a0f0", effect: "gainlevel", weight: 2 },
+  { id: "enlight",kind: "potion", name: "a potion of full-node sync", fname: "a potion of enlightenment", ch: "!", fg: "#a0e0e0", effect: "enlighten", weight: 2 },
   // ── scrolls ── ? (appearance randomised per game)
   { id: "tele",   kind: "scroll", name: "a scroll of teleport",     fname: "a scroll of teleportation", ch: "?", fg: "#c0c0e0", effect: "teleport", weight: 4 },
   { id: "map",    kind: "scroll", name: "a scroll of light client", fname: "a scroll of magic mapping", ch: "?", fg: "#9ac0e0", effect: "map",      weight: 4 },
@@ -201,8 +204,8 @@ export const ITEMS: ItemType[] = [
 export const WRITABLE_SCROLLS = ["tele", "map", "ident", "ench", "cure", "uncurse", "dobj", "dtrap"];
 
 // Unidentified appearances — fantasy + polkadot, same length so an assigned index maps across both.
-const POTION_LOOKS_F = ["a ruby potion", "a murky potion", "a glowing vial", "a smoking flask", "a bubbling phial"];
-const POTION_LOOKS_P = ["a fizzy potion", "a murky potion", "a glowing vial", "a smoking flask", "a bubbling phial"];
+const POTION_LOOKS_F = ["a ruby potion", "a murky potion", "a glowing vial", "a smoking flask", "a bubbling phial", "a milky potion", "an effervescent vial", "a cloudy flask"];
+const POTION_LOOKS_P = ["a fizzy potion", "a murky potion", "a glowing vial", "a smoking flask", "a bubbling phial", "a milky potion", "an effervescent vial", "a cloudy flask"];
 const SCROLL_LOOKS_F = ["a scroll labeled XYZZY", "a scroll labeled ELBERETH", "a scroll labeled NR 9", "a scroll labeled FOOBAR", "a scroll labeled VENZAR", "a scroll labeled THARR", "a scroll labeled JUYED", "a scroll labeled PRATYAVAYAH", "a scroll labeled DAIYEN FOOELS", "a scroll labeled READ ME", "a scroll labeled GARVEN DEH", "a scroll labeled VERR YED HORRE", "a scroll labeled ANDOVA BEGARIN"];
 const SCROLL_LOOKS_P = ["a scroll labeled XYZZY", "a scroll labeled ELBERETH", "a scroll labeled HODL", "a scroll labeled WAGMI", "a scroll labeled GM", "a scroll labeled DYOR", "a scroll labeled REKT", "a scroll labeled SUDO", "a scroll labeled XCM", "a scroll labeled NGMI", "a scroll labeled FUD", "a scroll labeled SER", "a scroll labeled FOMO"];
 const GEM_COLORS = ["white", "red", "green", "blue", "yellow", "violet", "orange", "black"];

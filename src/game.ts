@@ -3943,6 +3943,20 @@ export class Game {
         this.log.add(n ? `Auditing the ledger — you sense ${n} object${n > 1 ? "s" : ""} scattered across the level.` : "You audit the ledger, but sense no objects here.", n ? "good" : "dim");
         break;
       }
+      case "speed": {
+        const turns = buc === "blessed" ? 40 : buc === "cursed" ? 10 : 20;
+        p.hasteTurns = Math.max(p.hasteTurns, turns);
+        this.scheduler.remove(p); this.scheduler.add(p, true);
+        this.log.add("The world slows around you — you surge with speed! (haste)", "good"); break;
+      }
+      case "gainlevel": {
+        this.gainXp(p, Math.max(1, this.xpForLevel(p.level + 1) - p.xp), false);
+        this.log.add("Raw experience floods in — you rise an epoch!", "good"); break;
+      }
+      case "enlighten": {
+        this.log.add("A full-node sync floods your mind — you see yourself clearly.", "good");
+        this.showAudit(); break;
+      }
       case "scare": {
         // A wave of dread — nearby foes recoil and flee (bosses/fearless/peaceful are unmoved). Blessed reaches the whole floor.
         const reach = buc === "blessed" ? 999 : 8, turns = buc === "blessed" ? 15 : 8;
