@@ -110,6 +110,9 @@ export const ITEMS: ItemType[] = [
   { id: "ring_poison", kind: "ring", name: "a ring of antivirus",     fname: "a ring of poison resistance", ch: "=", fg: "#90e070", weight: 2 }, // immune to poison
   { id: "ring_warn",  kind: "ring", name: "a ring of alerts",         fname: "a ring of warning",      ch: "=", fg: "#e07070", weight: 2 }, // sense nearby foes through walls
   { id: "ring_search", kind: "ring", name: "a ring of indexing",      fname: "a ring of searching",    ch: "=", fg: "#c0a0e0", weight: 2 }, // auto-finds hidden traps & doors
+  { id: "ring_firered",  kind: "ring", name: "a ring of heat sinks",    fname: "a ring of fire resistance",  ch: "=", fg: "#e08040", weight: 2 }, // fire resistance while worn
+  { id: "ring_coldred",  kind: "ring", name: "a ring of insulation",    fname: "a ring of cold resistance",  ch: "=", fg: "#80c0f0", weight: 2 }, // cold resistance while worn
+  { id: "ring_shockred", kind: "ring", name: "a ring of grounding",     fname: "a ring of shock resistance", ch: "=", fg: "#f0e070", weight: 2 }, // shock resistance while worn
   // ── wands ── / (directional, charged; zap with z)
   { id: "wand_bolt",   kind: "wand", name: "a wand of finality",     fname: "a wand of striking",      ch: "/", fg: "#90d0e0", weight: 2 },
   { id: "wand_banish", kind: "wand", name: "a wand of banishment",   fname: "a wand of banishment",    ch: "/", fg: "#d090d0", weight: 2 },

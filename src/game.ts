@@ -3121,7 +3121,8 @@ export class Game {
   /** A resistant player takes no elemental (fire/cold/shock) damage — a full shrug, with a note. */
   private elementResisted(e: Entity, element: "fire" | "cold" | "shock"): boolean {
     const key = element === "fire" ? "fireResist" : element === "cold" ? "coldResist" : "shockResist";
-    if (e instanceof Player && e.intrinsics.has(key)) {
+    const ringRes = e instanceof Player && ((element === "fire" && e.ringFireRes) || (element === "cold" && e.ringColdRes) || (element === "shock" && e.ringShockRes));
+    if (e instanceof Player && (e.intrinsics.has(key) || ringRes)) {
       const what = element === "fire" ? "The flames wash over you harmlessly" : element === "cold" ? "The killing cold cannot touch you" : "The current earths itself through you harmlessly";
       this.log.add(`${what} — ${element} resistance!`, "good", e);
       return true;

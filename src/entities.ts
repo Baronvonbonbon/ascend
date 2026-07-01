@@ -78,6 +78,7 @@ export class Player extends Entity {
   ringAcc = 0;         // ring of increase accuracy — to-hit bonus (cursed: penalty)
   ringDmg = 0;         // ring of increase damage — melee damage bonus (cursed: penalty)
   ringPoisonRes = false; // ring of poison resistance — immune to poison while worn
+  ringFireRes = false; ringColdRes = false; ringShockRes = false; // elemental-resistance rings (while worn)
   warning = false;     // ring of warning — sense nearby foes through walls
   autoSearch = false;  // ring of searching — passively reveals adjacent hidden traps & doors
   poison = 0;          // turns of damage-over-time remaining
@@ -157,6 +158,9 @@ export class Player extends Entity {
       case "ring_acc": this.ringAcc = on ? (cursed ? -2 : 2) : 0; break;     // cursed accuracy fights you
       case "ring_dmg": this.ringDmg = on ? (cursed ? -2 : 2) : 0; break;     // cursed damage saps your blows
       case "ring_poison": this.ringPoisonRes = on && !cursed; break;
+      case "ring_firered": this.ringFireRes = on && !cursed; break;
+      case "ring_coldred": this.ringColdRes = on && !cursed; break;
+      case "ring_shockred": this.ringShockRes = on && !cursed; break;
       case "ring_warn": this.warning = on && !cursed; break;
       case "ring_search": this.autoSearch = on && !cursed; break;
     }

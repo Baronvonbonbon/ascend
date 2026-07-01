@@ -66,7 +66,7 @@ Every adaptation routes through this table so the theming stays coherent.
 | Polymorph (self/other) | **fork** (poly self) / **nullify** (poly other via wand) / **lycanthropy** ("you've been forked") | ✅ (Phase 8b self-fork + Phase 7d poly-monster wand + Phase 8f lycanthropy) |
 | Spellbooks + spells + Pw | **runtimes** + extrinsics + **energy/gas** | 🟡 (Phase 8a/8g — `+` study, `Z` cast, 17 extrinsics across 6 schools) |
 | Wands | on-chain **primitives** (bolt, banish, slow, dig, fire, sleep, fork, nullify, probe, silence, cold, lightning, force, death, opening, light, secret-scan, spawning, overclock, cloaking, wishing…) | 🟡 (21; ray engine in) |
-| Rings | **rings** (resilience, regen, privacy, free action, sustain ability, slow digestion, accuracy, damage, poison resist, warning, searching…) | 🟡 (11 of ~28) |
+| Rings | **rings** (resilience, regen, privacy, free action, sustain ability, slow digestion, accuracy, damage, poison resist, warning, searching, fire/cold/shock resist…) | 🟡 (14 of ~28) |
 | Artifacts (Excalibur, Stormbringer…) | legendary **NFT relics** + **named Quest artifacts** + **Polkadot's Edge** (dip-drawn) | ✅ (Phase 13c named/intrinsic artifacts + forge + soulbound deed) |
 | Prayer to your god | **pray** to your Architect (Gavin) | ✅ (Phase 8c/8d — trouble heal, favor, wrath) |
 | Sacrifice on altar | **burn** (`O`) a corpse to your Architect for favor | ✅ (Phase 8c — favor, blessed gifts) |
