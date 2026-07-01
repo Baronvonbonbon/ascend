@@ -3460,7 +3460,13 @@ export class Game {
     this.level.items = this.level.items.filter((i) => i !== fi);
     p.nutrition += Math.max(50, Math.min(600, def.hp * 12));
     this.log.add(`${this.sub(p)} ${this.verbS(p, "eat")} the ${def.name} corpse.`, "good");
-    const rotten = this.turn - born > 60;
+    this.applyMeatEffect(p, def, this.turn - born > 60);
+    if (p.hp <= 0) this.killPlayer(p);
+    return true;
+  }
+
+  /** The nutrition-borne effects of eating meat (a corpse or a tin's contents): intrinsics, poison, illness. */
+  private applyMeatEffect(p: Player, def: MonsterDef, rotten: boolean): void {
     if (def.corpseEffect === "petrify" && !p.intrinsics.has("petrifyResist")) {
       p.stoning = 5;
       this.log.add(`${this.sub(p)} ${this.verbS(p, "start")} to freeze solid — find a cure, fast! (pray, or a cleanse)`, "bad");
@@ -3482,6 +3488,17 @@ export class Game {
       p.intrinsics.add("poisonResist");
       this.log.add("You feel hardier. (poison resistance)", "good");
     }
+  }
+
+  /** Eat a sealed tin — needs a tin opener in the pack. Big nutrition + the packed monster's meat effect. */
+  eatTin(p: Player, tin: Item): boolean {
+    if (!p.inventory.items.some((it) => it.type.id === "tinopener")) { this.log.add("The tin is sealed tight — you need a tin opener to get in.", "dim"); return false; }
+    p.inventory.remove(tin);
+    this.breakConduct(p, "vegetarian"); // tinned meat ends Vegetarian
+    const def = this.pickMonster(p.depth);
+    p.nutrition += 500;
+    this.log.add(`You crank the tin open — ${def.name} meat within. You eat it. Much better.`, "good");
+    this.applyMeatEffect(p, def, false); // tinned meat never rots
     if (p.hp <= 0) this.killPlayer(p);
     return true;
   }

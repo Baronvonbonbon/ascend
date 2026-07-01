@@ -733,6 +733,7 @@ export class Player extends Entity {
         this.game.log.add("You can't wear that.", "dim"); return false;
       case "eat":
         if (t.kind !== "food") { this.game.log.add("That isn't food.", "dim"); return false; }
+        if (t.id === "tin") return this.game.eatTin(this, item) ? this.endTurn() : false;
         this.nutrition += t.nutrition!;
         this.game.log.add(`You eat ${t.name}. Much better.`, "good");
         this.inventory.remove(item); this.unequip(item); return this.endTurn();

@@ -73,6 +73,7 @@ export const ITEMS: ItemType[] = [
   // ── food ── %
   { id: "ration", kind: "food",   name: "a ration of cycles",  fname: "a food ration",       ch: "%", fg: "#c0a050", nutrition: 600, weight: 5 },
   { id: "crumb",  kind: "food",   name: "a stale block",       fname: "a stale crust",       ch: "%", fg: "#8a7a40", nutrition: 220, weight: 4 },
+  { id: "tin",    kind: "food",   name: "a sealed tin",        fname: "a tin",               ch: "%", fg: "#c0c0b0", nutrition: 500, weight: 1 }, // needs a tin opener; big nutrition + a random meat effect
   // ── potions ── ! (appearance randomised per game)
   { id: "heal",   kind: "potion", name: "a potion of finality", fname: "a potion of healing",     ch: "!", fg: "#76c66a", effect: "heal",     weight: 5 },
   { id: "harm",   kind: "potion", name: "a potion of reorg",    fname: "a potion of harming",     ch: "!", fg: "#c75c5c", effect: "harm",     weight: 3 },
@@ -139,6 +140,7 @@ export const ITEMS: ItemType[] = [
   { id: "camera",  kind: "tool", name: "a snapshot camera",    fname: "an expensive camera", ch: "(", fg: "#c8c8d8", weight: 3 }, // apply + direction — a flash blinds foes in a line (charged: film)
   { id: "crystal", kind: "tool", name: "an indexer",           fname: "a crystal ball",      ch: "(", fg: "#b090e0", weight: 2 }, // apply to gaze — INT-gated: reveal every mind on the floor, or gaze too long and reel
   { id: "grease",  kind: "tool", name: "a can of lubricant",    fname: "a can of grease",     ch: "(", fg: "#c8c860", weight: 2 }, // apply to a gear piece — grease it rust-proof (charged)
+  { id: "tinopener", kind: "tool", name: "a block decoder",     fname: "a tin opener",        ch: "(", fg: "#b0b0b0", weight: 1 }, // held, it lets you open (eat) sealed tins
   { id: "lamp",    kind: "tool", name: "a block explorer",    fname: "an oil lamp",         ch: "(", fg: "#e0d060", weight: 3 }, // apply to light/douse — full sight in the dark
   { id: "vault",   kind: "tool", name: "a multisig vault",    fname: "a bag of holding",    ch: "(", fg: "#d0c060", weight: 2 }, // bag of holding — #loot to stash beyond the pack
   { id: "trickbag", kind: "tool", name: "a faucet bag",        fname: "a bag of tricks",     ch: "(", fg: "#c060c0", weight: 2 }, // bag of tricks — apply to spit out a monster (charged)
