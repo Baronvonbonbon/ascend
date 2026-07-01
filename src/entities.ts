@@ -907,6 +907,9 @@ export class Player extends Entity {
       this.game.log.add("You stagger drunkenly.", "dim");
     }
     const nx = this.x + dx, ny = this.y + dy;
+    // A fallen co-op partner lies here — haul them up (a costly revive) instead of stepping onto the body.
+    const fallen = this.game.downedAllyAt(this, nx, ny);
+    if (fallen) return this.game.revivePartner(this, fallen) ? this.endTurn() : false;
     const foe = this.game.monsterAt(nx, ny);
     if (foe && !foe.peaceful) { this.game.attack(this, foe); return this.endTurn(); } // only hostiles get hit
     // Your co-op partner is a friendly NPC: you slip past (swap), never auto-attack. To deliberately

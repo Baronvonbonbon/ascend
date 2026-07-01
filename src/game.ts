@@ -811,6 +811,24 @@ export class Game {
   otherPlayerAt(self: Player, x: number, y: number): Player | undefined {
     return this.playersHere().find((p) => p !== self && p.x === x && p.y === y);
   }
+  /** A downed (0-HP) co-op partner lying on the acting floor at (x,y) — the target of a revive. */
+  downedAllyAt(self: Player, x: number, y: number): Player | undefined {
+    return this.allPlayers().find((p) => p !== self && this.downed.has(p) && p.floorKey === this.activeKey && p.x === x && p.y === y);
+  }
+
+  /** Co-op revive: haul a fallen partner up — costly and rare. The reviver spends an epoch (level drain),
+   *  and the partner returns at a quarter HP, its worst afflictions shaken off. Not while over-hunted. */
+  revivePartner(reviver: Player, fallen: Player): boolean {
+    this.downed.delete(fallen);
+    fallen.hp = Math.max(1, Math.round(fallen.maxHp * 0.25));
+    fallen.poison = fallen.stoning = fallen.illness = fallen.paralyzed = fallen.confused = 0;
+    fallen.engulfedBy = null; fallen.webbed = 0;
+    this.scheduler.add(fallen, true);
+    this.log.add(`${cap(reviver.name)} hauls ${fallen.name} back from the brink — at the cost of an epoch of ${reviver.name === "you" ? "your" : "their"} own.`, "good", "both");
+    this.drainLevel(reviver, "The revival"); // the steep, rare price — a drained epoch
+    this.draw();
+    return true;
+  }
   /** The living party member on this floor closest (Chebyshev) to a point — whom a monster targets. */
   nearestPlayer(x: number, y: number): Player {
     const pool = this.playersHere();
@@ -2895,7 +2913,7 @@ export class Game {
     this.downed.add(p);
     this.scheduler.remove(p);
     if (this.livingPlayers().length === 0) { this.gameOver(); return; }
-    this.log.add(`${cap(p.name)} falls! The other adventurer presses on — recover the JAM.`, "bad", "both");
+    this.log.add(`${cap(p.name)} falls (a dim red @)! The other can press on — or reach the body and step onto it to revive them, at the cost of an epoch.`, "bad", "both");
     this.draw();
   }
 
@@ -4815,7 +4833,8 @@ export class Game {
     }
     if (this.pet && this.pet.alive && this.pet.floorKey === onFloor && vis(this.pet.x, this.pet.y)) cells.push([this.pet.x, this.pet.y, this.pet.ch, this.pet.fg]);
     for (const pl of this.allPlayers()) {
-      if (!pl.alive || pl.floorKey !== onFloor) continue; // only adventurers standing on this viewer's floor
+      if (pl.floorKey !== onFloor) continue; // only adventurers standing on this viewer's floor
+      if (!pl.alive) { if (this.downed.has(pl) && (vis(pl.x, pl.y) || sensed)) cells.push([pl.x, pl.y, "@", "#804040"]); continue; } // a fallen partner's body — dim red @ (step onto it to revive)
       if (pl !== me && !(vis(pl.x, pl.y) || sensed)) continue; // you always see yourself; your partner only when in sight
       const ch = pl.polyForm ? pl.polyForm.ch : "@"; // you wear your fork's shape
       const fg = pl.polyForm ? pl.polyForm.fg : pl === this.player ? pl.fg : PARTNER_FG;
