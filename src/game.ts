@@ -2902,7 +2902,7 @@ export class Game {
   // ── items ──────────────────────────────────────────────────────────────────
   private spawnItems(): void {
     const loot = this.currentChain?.loot ?? 1;
-    const count = Math.round((3 + this.player.depth * 0.7) * loot);
+    const count = Math.round((3 + this.player.depth * 0.7) * loot * this.coopLootFactor());
     for (let i = 0; i < count; i++) {
       const type = pickItemType(this.player.depth);
       let pos = this.level.randomFloor();
@@ -4322,7 +4322,9 @@ export class Game {
     const poolDepth = Math.max(1, this.player.depth + Math.round((diff - 1) * 4));
     // Phase 18: fewer-but-tougher — the per-depth coefficient is gentler (1.5→1.2) and the cap
     // lower (44→40) now that monster HP/damage scale with depth, so deep floors press without grinding.
-    const count = Math.min(40, Math.round((4 + this.player.depth * 1.2) * diff) + (this.player.depth >= 18 ? 4 : 0) + (this.level.kind === "bigroom" ? 12 : 0));
+    const soloCount = Math.min(40, Math.round((4 + this.player.depth * 1.2) * diff) + (this.player.depth >= 18 ? 4 : 0) + (this.level.kind === "bigroom" ? 12 : 0));
+    // Co-op: more threats so two adventurers ganging up on a shared floor still feel solo pressure.
+    const count = Math.round(soloCount * this.coopFactor());
     for (let i = 0; i < count; i++) {
       const def = this.pickMonster(poolDepth);
       let pos = this.level.randomFloor();
@@ -4353,6 +4355,13 @@ export class Game {
   private gearPool(depth = 99): ItemType[] {
     return ITEMS.filter((i) => isGear(i) && i.weight > 0 && (i.minDepth ?? 0) <= depth);
   }
+
+  /** Co-op threat multiplier: scales a floor's monster budget by the *living* party size so two
+   *  adventurers ganging up still feel solo-per-player pressure (≈1.7× for a full pair). A lone
+   *  survivor (partner downed) drops back to 1× — solo-tuned floors. Solo/other modes = 1×. */
+  private coopFactor(): number { return this.coop ? 1 + 0.7 * (this.livingPlayers().length - 1) : 1; }
+  /** A gentler loot multiplier so neither co-op adventurer is starved splitting one floor's drops. */
+  private coopLootFactor(): number { return this.coop ? 1 + 0.4 * (this.livingPlayers().length - 1) : 1; }
 
   monsterAt(x: number, y: number): Monster | undefined {
     return this.monsters.find((m) => m.alive && m.x === x && m.y === y);
