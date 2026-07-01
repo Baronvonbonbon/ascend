@@ -6,7 +6,7 @@ import { Log } from "./log";
 import type { LogWho } from "./log";
 import {
   COLORS, TILE_GLYPH, TileType, MONSTERS, MonsterDef, deaths, greetings,
-  MAX_DEPTH, CENSOR, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, PRIEST, COUNCIL_GUARD, ORACLE, ORACLE_HINTS, ORACLE_RUMORS, realmName, grayPaper, ChainDef, CHAINS, BranchDef, BRANCHES, branchById, questFor,
+  MAX_DEPTH, CENSOR, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, PRIEST, COUNCIL_GUARD, HIGH_PRIEST, ORACLE, ORACLE_HINTS, ORACLE_RUMORS, realmName, grayPaper, ChainDef, CHAINS, BranchDef, BRANCHES, branchById, questFor,
   abilityMod, archetypeById, raceById, raceName, ATTRS, ATTR_LABEL, attrFlavor, spellById, Ethos,
   monName, questHomeland, archetypeName, ethosName, spellName, chainName, branchEnd, branchEntryFlavor,
 } from "./data";
@@ -1208,7 +1208,11 @@ export class Game {
         this.level.tiles[spot.y][spot.x] = "altar";
         this.genesisAltars.push({ x: spot.x, y: spot.y, ethos: e });
         used.push({ x: spot.x, y: spot.y });
+        // each Astral altar is warded by a high priest — a clerical guardian standing beside it
+        const guard = this.adjacentFree(spot.x, spot.y);
+        if (guard) { const hp = new Monster(this, HIGH_PRIEST, guard.x, guard.y); this.monsters.push(hp); }
       }
+      this.log.add("Three altars stand upon the Genesis Plane, each warded by an Astral High Minister (@). Offer the JAM on the one that shares your ethos.", "bad");
     } else {
       const s = this.level.stairs;
       this.level.tiles[s.y][s.x] = "stairsUp"; // climb higher

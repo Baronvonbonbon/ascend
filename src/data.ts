@@ -395,6 +395,11 @@ export const COUNCIL_GUARD: MonsterDef = {
   name: "the Council Guard", fname: "the Vault Guard", ch: "@", fg: "#d0c060", hp: 60, dmg: [6, 12], ai: "chase", minDepth: 1, weight: 0, fearless: true, guard: true,
 };
 
+/** An Astral high priest — each Genesis altar is warded by one of these clerical guardians. */
+export const HIGH_PRIEST: MonsterDef = {
+  name: "an Astral High Minister", fname: "a high priest", ch: "@", fg: "#fff0c0", hp: 56, dmg: [7, 13], ai: "chase", minDepth: 99, weight: 0, fearless: true, summons: true, breath: 12,
+};
+
 /** The honeypot — a mimic. Spawned separately (placeMimics), disguised as loot. */
 export const HONEYPOT: MonsterDef = {
   name: "a honeypot", fname: "a mimic", ch: "m", fg: "#e0b020", hp: 16, dmg: [3, 7], ai: "chase", minDepth: 3, weight: 0, mimic: true, speed: 90,
