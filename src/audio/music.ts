@@ -260,7 +260,12 @@ export interface MusicContext {
   jamNear: boolean;   // the JAM is on the level / held → a deep ominous pulse
   faucet: boolean;    // standing by a faucet → drips (foley)
   altar: boolean;     // standing by an altar → a soft chime (foley)
+  beast?: string;     // category of the nearest hostile in view → an occasional creature cue (foley)
 }
+/** Foley one-shots the game triggers on actions/features. */
+export type Sfx =
+  | "step" | "step-water" | "step-bridge" | "door" | "kick" | "boulder" | "sink" | "throne" | "stairs-down" | "stairs-up"
+  | "pickup" | "coin" | "drop" | "quaff" | "read" | "zap" | "eat" | "equip" | "forge";
 
 export class MusicEngine {
   private ctx: AudioContext | null = null;
@@ -278,6 +283,9 @@ export class MusicEngine {
   // ── unified groove layer: ONE continuous 16th clock; sections (explore / idle) swap only on bar
   //    lines, bridged by a tune-specific fill — nothing resets mid-bar, so returns never clutter ──
   private grooveBus!: GainNode;      // drums + bass — dry, punchy, bypasses the threat murk
+  private sfxBus!: GainNode;         // foley one-shots (footsteps, doors, pickups, ambience, creature cues)
+  private nextAmb = 0;               // next environment-ambience one-shot
+  private nextBeastCue = 0;          // next nearby-creature foley cue
   private gState: "off" | "explore" | "idle" = "off";
   private gPending: "off" | "explore" | "idle" | null = null; // queued section, applied at the next bar line
   private gNext = 0;                 // next 16th step time (never yanked back mid-bar)
@@ -447,6 +455,12 @@ export class MusicEngine {
     const gWet = this.ctx.createGain(); gWet.gain.value = 0.1;
     this.grooveBus.connect(gDry).connect(this.master);
     this.grooveBus.connect(gWet).connect(this.reverb);
+    // the foley/SFX bus — one-shots (footsteps, doors, pickups, ambience, creature cues). Dry so they
+    // read clearly, with a modest reverb send for room. Rides the master, so it obeys the volume slider.
+    this.sfxBus = this.ctx.createGain(); this.sfxBus.gain.value = 0.9;
+    const fWet = this.ctx.createGain(); fWet.gain.value = 0.18;
+    this.sfxBus.connect(this.master);
+    this.sfxBus.connect(fWet).connect(this.reverb);
     // a low rumble (filtered noise) that swells when a boss looms
     this.noiseBuf = this.makeNoise(2);
     const rumble = this.ctx.createBufferSource(); rumble.buffer = this.noiseBuf; rumble.loop = true;
@@ -668,6 +682,8 @@ export class MusicEngine {
       if (c.jamNear && !planesArea) { while (this.nextJam < horizon) { this.pulse(t.root * 0.5, this.nextJam, this.active.bus, 0.16); this.nextJam += 2.4; } } else this.nextJam = now; // no ominous JAM pulse in the weightless Planes
       if (c.altar) { while (this.nextChime < horizon) { this.note(semi(t.root, 12) * 4, this.nextChime, 2.6, this.active.bus, "sine", 0.05, 4000); this.nextChime += 3.5 + Math.random() * 2.5; } } else this.nextChime = now;
       if (c.faucet) { while (this.nextDrip < horizon) { this.drip(this.nextDrip); this.nextDrip += 0.7 + Math.random() * 1.8; } } else this.nextDrip = now;
+      // foley: per-zone environment ambience + an occasional nearby-creature cue
+      if (!stinging) { this.ambientTick(now, horizon); this.beastCue(now, horizon); }
     }
 
     // ── the tension layer: trills + fast beats + a driving bass, scaled by danger ──
@@ -829,6 +845,86 @@ export class MusicEngine {
     g.gain.linearRampToValueAtTime(0, when + 0.21);
     osc.connect(g).connect(this.active.bus);
     osc.start(when); osc.stop(when + 0.22);
+  }
+
+  // ── foley SFX ────────────────────────────────────────────────────────────────
+  /** A one-shot oscillator with a frequency sweep + short envelope (helper for foley timbres). */
+  private tone(f0: number, f1: number, dur: number, type: Wave, peak: number, when: number, bus: GainNode, cutoff = 6000): void {
+    const ctx = this.ctx!; const o = ctx.createOscillator(); o.type = type;
+    o.frequency.setValueAtTime(f0, when); if (Math.abs(f1 - f0) > 0.1) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), when + dur);
+    const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = cutoff;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(peak, when + Math.min(0.04, dur * 0.2));
+    g.gain.exponentialRampToValueAtTime(0.0006, when + dur); g.gain.linearRampToValueAtTime(0, when + dur + 0.03);
+    o.connect(f).connect(g).connect(bus); o.start(when); o.stop(when + dur + 0.05);
+  }
+
+  /** Trigger a foley one-shot for a game action/feature (routed dry through the SFX bus). */
+  sfx(kind: Sfx): void {
+    if (!this._enabled || !this.ctx) return;
+    const now = this.ctx.currentTime, bus = this.sfxBus, r = this.active?.def.root ?? 110;
+    switch (kind) {
+      case "step":        this.noiseHit(now, 0.03, bus, 0.018, "lowpass", 360, 1); break;                                   // a soft low tick
+      case "step-water":  this.noiseHit(now, 0.14, bus, 0.06, "bandpass", 900, 0.6); this.noiseHit(now + 0.03, 0.1, bus, 0.035, "highpass", 3200, 0.5); break; // splash
+      case "step-bridge": this.note(150, now, 0.12, bus, "triangle", 0.05, 700); break;                                     // hollow wooden clonk
+      case "door":        this.tone(200, 130, 0.4, "sawtooth", 0.03, now, bus, 600); this.noiseHit(now + 0.34, 0.05, bus, 0.05, "lowpass", 300, 1); break; // creak + knock
+      case "kick":        this.kick(now, bus, 0.4, true); break;
+      case "boulder":     this.noiseHit(now, 0.55, bus, 0.13, "lowpass", 240, 1); break;                                    // low grinding sweep
+      case "sink":        for (let i = 0; i < 4; i++) this.note(200 + Math.random() * 140, now + i * 0.06, 0.09, bus, "sine", 0.03, 700); break; // gurgle
+      case "throne":      this.tone(r * 0.5, r * 0.5, 0.8, "sine", 0.12, now, bus, 400); break;                             // low hum swell
+      case "stairs-down": this.tone(semi(r, 12), semi(r, 0), 0.4, "triangle", 0.05, now, bus, 2600); break;                 // a falling tone
+      case "stairs-up":   this.tone(semi(r, 0), semi(r, 12), 0.4, "triangle", 0.05, now, bus, 2600); break;                 // a rising tone
+      case "pickup":      this.note(semi(r, 12) * 2, now, 0.08, bus, "square", 0.05, 4200); this.note(semi(r, 19) * 2, now + 0.05, 0.08, bus, "square", 0.05, 4200); break; // bright clink
+      case "coin":        for (let i = 0; i < 3; i++) this.note(semi(r, [12, 16, 19][i]) * 2, now + i * 0.05, 0.13, bus, "triangle", 0.045, 5200); break; // jingle
+      case "drop":        this.noiseHit(now, 0.08, bus, 0.06, "lowpass", 480, 1); break;                                    // soft thud
+      case "quaff":       this.tone(620, 190, 0.28, "sine", 0.06, now, bus, 1400); break;                                   // a glug
+      case "read":        this.noiseHit(now, 0.2, bus, 0.05, "highpass", 4200, 0.4); break;                                 // paper crinkle
+      case "zap":         this.tone(300, 2600, 0.26, "sawtooth", 0.05, now, bus, 5000); break;                              // a whoosh
+      case "eat":         for (let i = 0; i < 3; i++) this.noiseHit(now + i * 0.11, 0.06, bus, 0.05, "bandpass", 800 + Math.random() * 400, 3); break; // crunch
+      case "equip":       this.noiseHit(now, 0.08, bus, 0.06, "highpass", 5200, 0.5); this.note(semi(r, 7) * 2, now, 0.16, bus, "triangle", 0.04, 3000); break; // metallic shing
+      case "forge":       this.noiseHit(now, 0.05, bus, 0.13, "bandpass", 1400, 4); this.noiseHit(now + 0.14, 0.05, bus, 0.1, "bandpass", 1900, 4); this.note(semi(r, 19) * 2, now + 0.14, 0.55, bus, "triangle", 0.05, 4200); break; // anvil clang + ring
+    }
+  }
+
+  /** Environment ambience — per-zone one-shots (drips, machinery, hell rumble, ethereal wind). */
+  private ambientTick(now: number, horizon: number): void {
+    if (this.nextAmb < now - 1) this.nextAmb = now;
+    while (this.nextAmb < horizon) {
+      if (Math.random() < 0.5) this.ambientOne();
+      this.nextAmb += 3.5 + Math.random() * 6;
+    }
+  }
+  private ambientOne(): void {
+    const now = this.ctx!.currentTime, bus = this.sfxBus, r = this.active?.def.root ?? 110;
+    switch (this.area) {
+      case "kusama": case "relay": this.drip(now); break;                                                       // cavern drips
+      case "mempool": case "legacy": this.noiseHit(now, 0.4, bus, 0.028, "bandpass", 220, 2); break;            // low machinery hum
+      case "gehennom": case "sanctum": this.noiseHit(now, 0.9, bus, 0.05, "lowpass", 150, 1); if (Math.random() < 0.3) this.tone(semi(r, 1), semi(r, 1) * 0.98, 1.4, "sawtooth", 0.03, now, bus, 500); break; // hell rumble + distant groan
+      case "planes": case "genesis": this.tone(semi(r, 19) * 2, semi(r, 24) * 2, 1.8, "sine", 0.022, now, bus, 5000); break; // ethereal wind
+      default: if (Math.random() < 0.4) this.drip(now); break;
+    }
+  }
+
+  /** Nearby-creature foley — an occasional cue flavoured by the closest hostile's kind. */
+  private beastCue(now: number, horizon: number): void {
+    const cat = this.c.beast;
+    if (!cat) { this.nextBeastCue = now; return; }
+    if (this.nextBeastCue < now - 1) this.nextBeastCue = now;
+    while (this.nextBeastCue < horizon) {
+      if (Math.random() < 0.5) this.beastOne(cat);
+      this.nextBeastCue += 4 + Math.random() * 7;
+    }
+  }
+  private beastOne(cat: string): void {
+    const now = this.ctx!.currentTime, bus = this.sfxBus, r = this.active?.def.root ?? 110;
+    switch (cat) {
+      case "undead": this.tone(semi(r, 1), semi(r, 0), 1.2, "sine", 0.045, now, bus, 700); break;                          // a low moan
+      case "bot":    for (let i = 0; i < 4; i++) this.noiseHit(now + i * 0.05, 0.02, bus, 0.03, "highpass", 6200, 2); break; // skitter / clicks
+      case "dragon": this.noiseHit(now, 0.6, bus, 0.06, "lowpass", 180, 1); this.tone(semi(r, 0), semi(r, -1), 0.7, "sawtooth", 0.04, now, bus, 500); break; // growl
+      case "ooze":   this.noiseHit(now, 0.25, bus, 0.05, "bandpass", 600, 1.5); break;                                     // a wet squelch
+      case "demon":  this.noiseHit(now, 0.4, bus, 0.03, "highpass", 3000, 0.5); this.tone(semi(r, 6), semi(r, 6) * 1.02, 0.8, "sawtooth", 0.024, now, bus, 3000); break; // hiss / whisper
+      default:       this.noiseHit(now, 0.12, bus, 0.05, "bandpass", 700, 1.5); break;                                     // a growl / snarl
+    }
   }
 
   private pulse(freq: number, when: number, bus: GainNode, peak: number): void {

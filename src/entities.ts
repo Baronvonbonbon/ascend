@@ -789,6 +789,7 @@ export class Player extends Entity {
           return this.endTurn();
         }
         this.weapon = item; this.applyWeapon();
+        this.game.music.sfx("equip");
         this.game.log.add(`You wield ${ident.name(t)}.`, "good");
         if (item.buc === "cursed") { item.bucKnown = true; this.game.log.add(`The ${t.name} welds itself to your hand. It's cursed!`, "bad"); }
         return this.endTurn();
@@ -804,6 +805,7 @@ export class Player extends Entity {
           }
           if (current) this.wornArmor = this.wornArmor.filter((a) => a !== current); // swap out the slot's old piece
           this.wornArmor.push(item); this.recomputeAC();
+          this.game.music.sfx("equip");
           this.game.log.add(`You don ${ident.name(t)}.`, "good");
           if (item.buc === "cursed") { item.bucKnown = true; this.game.log.add(`The ${t.name} clamps shut around you. It's cursed!`, "bad"); }
           return this.endTurn();
@@ -837,19 +839,20 @@ export class Player extends Entity {
       case "eat":
         if (t.kind !== "food") { this.game.log.add("That isn't food.", "dim"); return false; }
         if (t.id === "tin") return this.game.eatTin(this, item) ? this.endTurn() : false;
+        this.game.music.sfx("eat");
         this.game.log.add(`You eat ${t.name}. Much better.`, "good");
         this.game.swallow(this, t.nutrition!);
         this.inventory.remove(item); this.unequip(item); return this.endTurn();
       case "quaff":
         if (t.kind !== "potion") { this.game.log.add("You can't drink that.", "dim"); return false; }
-        ident.learn(t); this.game.log.add(`You drink ${t.name}.`);
+        ident.learn(t); this.game.music.sfx("quaff"); this.game.log.add(`You drink ${t.name}.`);
         this.inventory.remove(item); this.unequip(item);
         this.game.applyEffect(t.effect!, item.buc); return this.endTurn();
       case "read":
         if (t.kind === "spellbook") return this.game.studySpellbook(item) ? this.endTurn() : false;
         if (t.kind !== "scroll") { this.game.log.add("There is nothing to read.", "dim"); return false; }
         this.game.breakConduct(this, "illiterate"); // reading a scroll ends Illiterate
-        ident.learn(t); this.game.log.add(`You read ${t.name}.`);
+        ident.learn(t); this.game.music.sfx("read"); this.game.log.add(`You read ${t.name}.`);
         this.inventory.remove(item); this.unequip(item);
         // A scroll of charging needs a target — pick a wand or a charged tool to top up (the scroll is already spent).
         if (t.effect === "charge") {
@@ -924,6 +927,7 @@ export class Player extends Entity {
     if (tile === "doorClosed") {
       this.game.level.tiles[ny][nx] = "door";
       this.game.recomputeFOV();
+      this.game.music.sfx("door");
       this.game.log.add("You open the door.", "dim");
       this.game.draw();
       return this.endTurn();
@@ -937,6 +941,7 @@ export class Player extends Entity {
     // Push a boulder one tile if the space beyond is clear; otherwise it won't budge.
     const boulder = this.game.level.boulderAt(nx, ny);
     if (boulder) {
+      this.game.music.sfx("boulder");
       const bx = nx + dx, by = ny + dy;
       if (this.game.level.tileAt(bx, by) === "pit" && !this.game.level.boulderAt(bx, by) && !this.game.monsterAt(bx, by) && !this.game.playerAt(bx, by)) {
         // shove the boulder into the chasm — it fills, the boulder is consumed, and you advance
@@ -957,6 +962,7 @@ export class Player extends Entity {
     this.x = nx; this.y = ny;
     const steed = this.game.pet;
     if (this.riding && steed && steed.alive) { steed.x = this.x; steed.y = this.y; } // the steed carries you along
+    if (this === this.game.localPlayer) { const ft = this.game.level.tileAt(this.x, this.y); this.game.music.sfx(ft === "drawbridge" || ft === "drawbridgeUp" ? "step-bridge" : "step"); } // footstep timbre by tile (local only)
     this.game.recomputeFOV();
     const here = this.game.level.itemAt(this.x, this.y);
     if (here) {

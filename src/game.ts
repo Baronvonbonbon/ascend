@@ -481,6 +481,7 @@ export class Game {
     item.relic = true; item.enchant = r.enchant ?? base; item.buc = "blessed"; item.bucKnown = true;
     if (item === this.player.weapon) this.player.applyWeapon();
     else if (this.player.wornArmor.includes(item)) this.player.recomputeAC();
+    this.music.sfx("forge");
     const tier = RARITY[r.rarity ?? 0] ?? "common";
     this.log.add(`✦ You forge a ${tier.toUpperCase()} ${this.ident.name(item.type)} +${item.enchant} — minted as a tradeable NFT you own. It returns in future runs.`, (r.rarity ?? 0) >= 2 ? "good" : "sys");
     // Re-sync owned token ids so loadRelics won't double-add this run.
@@ -1101,8 +1102,9 @@ export class Game {
     const fovOn = (p: Player, co: boolean) => {
       const lvl = p.floorKey === this.activeKey ? this.level : this.slots.get(p.floorKey)?.level;
       if (!lvl) return; // floor not generated yet (mid-build) — the transition will recompute
-      // blind → grope adjacent (lit rooms don't help); else a carried light gives full radius, the dark ~2.
-      const lightRadius = p.blind > 0 ? 1 : this.hasLight(p) ? 8 : 2;
+      // blind → grope adjacent (lit rooms don't help); a carried light gives full radius; unlit and
+      // lightless, you see only the tiles right around you (radius 1) — plus any lit patch in line of sight.
+      const lightRadius = p.blind > 0 ? 1 : this.hasLight(p) ? 8 : 1;
       const useLit = p.blind === 0; // lit rooms reveal whole only while sighted
       if (co) lvl.computeFOVCo(p.x, p.y, lightRadius, useLit); else lvl.computeFOV(p.x, p.y, lightRadius, useLit);
     };
@@ -1112,7 +1114,7 @@ export class Game {
     const lp = this.localPlayer;
     if (!this.darkHinted && lp.alive && lp.blind === 0 && !this.hasLight(lp) && lp.floorKey === this.activeKey && this.level.lit[lp.y]?.[lp.x] === false) {
       this.darkHinted = true;
-      this.log.add("It's dark here — you can see only a step or two. A lit block explorer (an oil lamp; apply it) would light the way.", "sys", lp);
+      this.log.add("It's pitch dark — you can see only what's right beside you. A lit block explorer (an oil lamp; apply it) would light the way.", "sys", lp);
     }
   }
   private darkHinted = false;
@@ -1123,6 +1125,7 @@ export class Game {
   }
 
   descend(): void {
+    this.music.sfx("stairs-down");
     this.nextFloorShared = this.departingTogether(this.acting); // scale the new floor for two iff a partner is here to follow
     if (this.branch) { this.descendBranch(); return; } // floor-by-floor within a sub-dungeon
     const me = this.acting; // co-op: only the descending adventurer moves
@@ -1416,6 +1419,7 @@ export class Game {
   }
 
   ascend(): void {
+    this.music.sfx("stairs-up");
     if (this.inQuest) { this.exitQuest(); return; }
     if (this.branch) { this.ascendBranch(); return; } // climb within / out of a sub-dungeon
     if (this.currentChain) { this.exitChain(); return; }
@@ -1623,7 +1627,26 @@ export class Game {
       for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]) if (this.level.tileAt(p.x + dx, p.y + dy) === tile) return true;
       return false;
     };
-    return { threat, danger: Math.min(1, Math.max(this.dangerLevel(), peril)), bossNear, crowd, jamNear, faucet: onFeat("faucet"), altar: onFeat("altar") };
+    // nearest visible hostile within earshot → an occasional creature foley cue, flavoured by its kind
+    let beast: string | undefined, bd = 7;
+    for (const m of this.monsters) {
+      if (!m.alive || m.peaceful || !vis(m)) continue;
+      const d = Math.min(...here.map((q) => Math.max(Math.abs(m.x - q.x), Math.abs(m.y - q.y))));
+      if (d < bd) { bd = d; beast = this.beastCategory(m); }
+    }
+    return { threat, danger: Math.min(1, Math.max(this.dangerLevel(), peril)), bossNear, crowd, jamNear, faucet: onFeat("faucet"), altar: onFeat("altar"), beast };
+  }
+
+  /** Coarse creature category for foley cues (undead moan, bot skitter, dragon growl, ooze squelch…). */
+  private beastCategory(m: Monster): string {
+    const d = m.def, ch = d.ch;
+    if (d.drains || d.silences || ch === "w" || ch === "W") return "undead";
+    if (d.breath || ch === "D") return "dragon";
+    if (d.corrodes) return "ooze";
+    if (ch === "s" || ch === "x" || ch === "b" || ch === "f") return "bot";
+    const area = this.currentAreaId();
+    if (ch === "&" || ch === "i" || area === "gehennom" || area === "sanctum") return "demon";
+    return "beast";
   }
 
   /** Which level layout a depth uses — the descent rotates through layout zones for variety. */
@@ -2017,6 +2040,7 @@ export class Game {
 
   /** `K` in a direction — kick a foe (damage + maybe stun/knockback), a boulder, a door, or a wall. */
   kick(p: Player, dx: number, dy: number): boolean {
+    this.music.sfx("kick");
     const nx = p.x + dx, ny = p.y + dy;
     // Kicking your co-op partner is the deliberate way to turn on them — a real attack.
     const ally = this.otherPlayerAt(p, nx, ny);
@@ -2449,6 +2473,7 @@ export class Game {
 
   /** Quaff from a burn sink underfoot — foul, mostly; rarely a ring rattles loose in the pipes. */
   quaffSink(p: Player): boolean {
+    this.music.sfx("sink");
     const r = ROT.RNG.getUniform();
     if (r < 0.45) { this.log.add("You take a sip from the burn sink. Foul — that token was worthless.", "dim"); p.nutrition = Math.max(0, p.nutrition - 5); }
     else if (r < 0.62) { this.log.add("The sink quivers and rumbles — something's stuck in the drain. (kick it?)", "sys"); }
@@ -2475,6 +2500,7 @@ export class Game {
 
   /** Sit the Sudo Throne underfoot — raw privilege, for better or worse. */
   sitThrone(p: Player): boolean {
+    this.music.sfx("throne");
     this.breakConduct(p, "atheist"); // claiming a throne ends Self-custodian
     const r = ROT.RNG.getUniform();
     if (r < 0.25) { p.hp = p.maxHp; p.luck = Math.min(13, p.luck + 1); this.log.add(`${this.sub(p)} ${this.verbS(p, "sit")} the Sudo Throne — power flows. (full HP, Fortune up)`, "good"); }
@@ -3215,6 +3241,7 @@ export class Game {
   /** Scoop up a gold pile underfoot. */
   collectGold(p: Player, fi: FloorItem): void {
     p.gold += fi.coins ?? 0;
+    this.music.sfx("coin");
     this.level.items = this.level.items.filter((i) => i !== fi);
     this.log.add(`${this.sub(p)} ${this.verbS(p, "scoop")} up ${fi.coins} gold. (${p.gold} total)`, "good");
   }
@@ -3341,6 +3368,7 @@ export class Game {
   zapWand(item: Item, dx: number, dy: number): void {
     if (!item.charges || item.charges <= 0) { this.log.add("The wand is spent.", "dim"); return; }
     item.charges--;
+    this.music.sfx("zap");
 
     if (item.type.id === "wand_dig") {
       let x = this.acting.x, y = this.acting.y, dug = 0;
@@ -4171,6 +4199,7 @@ export class Game {
     this.giveItem(fi.type, { enchant: fi.enchant, relic: fi.relic, buc: fi.buc, bucKnown: fi.bucKnown });
     this.level.items = this.level.items.filter((i) => i !== fi);
     const tag = fi.relic ? ` +${fi.enchant ?? 0} ✦` : "";
+    this.music.sfx("pickup");
     this.log.add(`You pick up ${this.ident.name(fi.type)}${tag}.`);
     // Claiming your Quest artifact completes the Quest — the homeland portal won't reopen.
     if (fi.type.id.startsWith("art_")) {
