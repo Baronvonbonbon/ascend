@@ -3133,6 +3133,28 @@ export class Game {
       this.log.add(`State-read ${m.name}: ${m.hp}/${m.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       return true;
     }
+    if (item.type.id === "mirror") {
+      const m = this.monsterAt(p.x + dx, p.y + dy);
+      if (!m) { this.log.add("You peer into the mirror node — only your own reflection stares back.", "dim"); return false; }
+      if (m.blindTurns > 0) { this.log.add(`${cap(m.name)} can't see its reflection.`, "dim"); return true; }
+      // A petrifier meets its own gaze — the classic cockatrice fate: it turns to stone.
+      if (m.def.corpseEffect === "petrify" && !m.def.boss) {
+        this.log.add(`${cap(m.name)} meets its own gaze in the mirror node — it turns to stone!`, "good");
+        this.gainXp(p, m.maxHp); this.kill(m); return true;
+      }
+      // A gazer (watcher eye) reflects its own paralyzing stare and freezes.
+      if (m.def.paralyzes) {
+        m.sleepTurns = Math.max(m.sleepTurns, ROT.RNG.getUniformInt(4, 8));
+        this.log.add(`${cap(m.name)} catches its own eye in the mirror node — it freezes, transfixed!`, "good");
+        return true;
+      }
+      // Bosses and the fearless are unmoved; a peaceful one just looks away; everything else flees.
+      if (m.def.boss || m.def.fearless) { this.log.add(`${cap(m.name)} sneers at its reflection, unshaken.`, "dim"); return true; }
+      if (m.peaceful) { this.log.add(`${cap(m.name)} glances at the mirror node and looks away.`, "dim"); return true; }
+      m.frightened = Math.max(m.frightened, ROT.RNG.getUniformInt(4, 8));
+      this.log.add(`${cap(m.name)} recoils from its reflection in the mirror node and flees!`, "good");
+      return true;
+    }
     return false;
   }
 

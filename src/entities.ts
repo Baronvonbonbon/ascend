@@ -447,9 +447,10 @@ export class Player extends Entity {
       const id = item.type.id;
       if (id === "horn") return this.game.applyHorn(this) ? this.endTurn() : false;
       if (id === "trickbag") return this.game.applyTrickbag(this, item) ? this.endTurn() : false;
-      if (id === "pickaxe" || id === "scope") {
+      if (id === "pickaxe" || id === "scope" || id === "mirror") {
         this.pendingApply = item;
-        this.game.log.add(`${id === "pickaxe" ? "Dig" : "Probe"} in which direction? (a move key, Esc to cancel)`, "sys");
+        const verb = id === "pickaxe" ? "Dig" : id === "scope" ? "Probe" : "Hold up the mirror";
+        this.game.log.add(`${verb} in which direction? (a move key, Esc to cancel)`, "sys");
         return false;
       }
       if (id === "marker") {
@@ -876,6 +877,7 @@ export class Monster extends Entity {
   speedMod = 1; // a wand of slowness halves this
   sleepTurns = 0; // a wand of stasis freezes it for a while
   blindTurns = 0; // a thrown potion of obfuscation blinds it — it can't chase
+  frightened = 0; // scared by a mirror node (or its own reflection) — it flees while this lasts
   cancelled = false; // a wand of nullification strips its special powers
   silenced = 0;   // turns of magical silence — can't summon or fire ranged spells
   museLeft = 0;   // healing draughts it still carries (muse.c) — gulped when badly hurt
@@ -959,6 +961,9 @@ export class Monster extends Entity {
 
     // A laden thief (items or gold) wants only to escape — it never turns to fight.
     if (this.stolen || this.stoleGold > 0) { this.fleeStep(p); return; }
+
+    // Scared by a mirror node (its own reflection): it turns tail until its nerve returns.
+    if (this.frightened > 0) { this.frightened--; this.fleeStep(p); return; }
 
     // A coward turns tail once badly hurt.
     if (this.def.cowardly && this.hp < this.maxHp * 0.3) { this.fleeStep(p); return; }
