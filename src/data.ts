@@ -328,6 +328,9 @@ export const MONSTERS: MonsterDef[] = [
   { name: "a cartel enforcer",   fname: "an iron enforcer",   ch: "B", fg: "#d06030", hp: 34, dmg: [6, 10], ai: "chase", minDepth: 13, weight: 2, corrodes: true, speed: 85, muse: true },
   { name: "a darkpool kraken",   fname: "a deepwater horror", ch: "Y", fg: "#5060c0", hp: 30, dmg: [5, 9],  ai: "chase", minDepth: 15, weight: 2, ranged: true, inflict: "confuse" },
   { name: "a sovereign daemon",  fname: "an arch-lich",       ch: "Z", fg: "#e02020", hp: 42, dmg: [6, 11], ai: "chase", minDepth: 17, weight: 1, summons: true, fearless: true, muse: true, zaps: "blind" },
+  // ── rival adventurers (mplayer.c) — other ascendants who came for the JAM and never left; deep only ──
+  { name: "a rogue validator",   fname: "a rogue",            ch: "@", fg: "#c0b070", hp: 40, dmg: [6, 11], ai: "chase", minDepth: 20, weight: 1, steals: true, muse: true, speed: 110 },
+  { name: "a rival ascendant",   fname: "a valkyrie",         ch: "@", fg: "#b8c8e8", hp: 48, dmg: [7, 12], ai: "chase", minDepth: 26, weight: 1, muse: true, throws: "dart", zaps: "sleep" },
 ];
 
 /** The Marketmaker — a bazaar shopkeeper. Peaceful while you pay; lethal if you shoplift. */
