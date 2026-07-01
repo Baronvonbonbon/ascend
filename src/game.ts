@@ -883,6 +883,21 @@ export class Game {
     this.draw();
   }
 
+  /** A level-teleport trap: wrench the victim to a random other main-relay depth within the explored range. */
+  private levelTeleport(me: Player): void {
+    const hi = Math.max(1, Math.min(me.maxDepthReached, MAX_DEPTH - 1)); // stay on the relay proper, not Gehennom/Sanctum
+    let target = me.depth;
+    for (let t = 0; t < 20 && target === me.depth; t++) target = ROT.RNG.getUniformInt(1, hi);
+    me.depth = target;
+    me.maxDepthReached = Math.max(me.maxDepthReached, me.depth);
+    const restored = this.beginLevel(this.levelKey(), this.levelKindFor(me.depth));
+    me.x = this.level.start.x; me.y = this.level.start.y;
+    if (restored) this.restoreEnter();
+    else { this.placeUpStair(); this.enterLevel(); this.saveActive(); }
+    this.log.add(`A level-teleport trap wrenches reality — you stand on depth ${me.depth}, ${realmName(me.depth)}.`, "bad");
+    this.draw();
+  }
+
   // ── XCM: parachain side-branches (each scales difficulty × loot) ────────────
   private placePortals(): void {
     if (this.currentChain || this.acting.depth < 2 || this.acting.depth >= MAX_DEPTH) return; // XCM branches off the relay descent (d2 .. foot of the relay), not Gehennom
@@ -1875,7 +1890,7 @@ export class Game {
     return ({ gas: "gas-fee trap", slash: "slashing trap", reorg: "reorg trap", fork: "fork trap", trapdoor: "trapdoor",
       web: "honeypot web", dart: "front-running dart trap", antimagic: "anti-magic field", statue: "statue trap",
       fire: "fire trap", rust: "rust trap", bear: "bear trap", landmine: "land mine", rockfall: "falling-rock trap", magic: "magic trap",
-      squeak: "squeaky board", spikepit: "spiked pit", boulder: "rolling-boulder trap" } as Record<TrapKind, string>)[k];
+      squeak: "squeaky board", spikepit: "spiked pit", boulder: "rolling-boulder trap", leveltp: "level-teleport trap" } as Record<TrapKind, string>)[k];
   }
 
   /** A ring of searching: each turn, a chance to reveal an adjacent hidden trap or door. */
@@ -4358,7 +4373,7 @@ export class Game {
     const count = 2 + Math.floor(this.player.depth * 0.8);
     const kinds: TrapKind[] = ["gas", "slash", "reorg", "fork", "web", "dart", "antimagic", "statue", "fire", "rust", "bear", "landmine", "rockfall", "magic", "squeak", "spikepit", "boulder"];
     // trapdoors drop you a floor — only on the main relay descent, never where there's no floor below
-    if (!this.currentChain && !this.branch && this.player.depth < MAX_DEPTH) kinds.push("trapdoor");
+    if (!this.currentChain && !this.branch && this.player.depth < MAX_DEPTH) { kinds.push("trapdoor"); if (this.player.maxDepthReached >= 3) kinds.push("leveltp"); }
     for (let i = 0; i < count; i++) {
       let pos = this.level.randomFloor();
       let tries = 0;
@@ -4420,6 +4435,14 @@ export class Game {
         this.log.add(`A trapdoor yawns open beneath you — you plunge through, landing hard for ${d}!`, "bad");
         if (p.hp <= 0) { this.killPlayer(p); return; }
         this.descend(); // fall to the floor below (it draws + recomputes FOV itself)
+        return;
+      }
+      case "leveltp": {
+        if (this.branch || this.currentChain) { // no relay level-graph here — fall back to an in-level blink
+          let pos = this.level.randomFloor(), t = 0; while (t < 40 && (this.monsterAt(pos.x, pos.y) || this.level.tileAt(pos.x, pos.y) === "stairsDown")) { pos = this.level.randomFloor(); t++; }
+          p.x = pos.x; p.y = pos.y; this.recomputeFOV(); this.log.add("A level-teleport trap misfires — you're flung across the level!", "bad"); break;
+        }
+        this.levelTeleport(p);
         return;
       }
       case "fire": {
