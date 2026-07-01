@@ -1852,7 +1852,8 @@ export class Game {
   private trapName(k: TrapKind): string {
     return ({ gas: "gas-fee trap", slash: "slashing trap", reorg: "reorg trap", fork: "fork trap", trapdoor: "trapdoor",
       web: "honeypot web", dart: "front-running dart trap", antimagic: "anti-magic field", statue: "statue trap",
-      fire: "fire trap", rust: "rust trap", bear: "bear trap", landmine: "land mine", rockfall: "falling-rock trap", magic: "magic trap" } as Record<TrapKind, string>)[k];
+      fire: "fire trap", rust: "rust trap", bear: "bear trap", landmine: "land mine", rockfall: "falling-rock trap", magic: "magic trap",
+      squeak: "squeaky board", spikepit: "spiked pit", boulder: "rolling-boulder trap" } as Record<TrapKind, string>)[k];
   }
 
   /** A ring of searching: each turn, a chance to reveal an adjacent hidden trap or door. */
@@ -4255,7 +4256,7 @@ export class Game {
 
   private spawnTraps(): void {
     const count = 2 + Math.floor(this.player.depth * 0.8);
-    const kinds: TrapKind[] = ["gas", "slash", "reorg", "fork", "web", "dart", "antimagic", "statue", "fire", "rust", "bear", "landmine", "rockfall", "magic"];
+    const kinds: TrapKind[] = ["gas", "slash", "reorg", "fork", "web", "dart", "antimagic", "statue", "fire", "rust", "bear", "landmine", "rockfall", "magic", "squeak", "spikepit", "boulder"];
     // trapdoors drop you a floor — only on the main relay descent, never where there's no floor below
     if (!this.currentChain && !this.branch && this.player.depth < MAX_DEPTH) kinds.push("trapdoor");
     for (let i = 0; i < count; i++) {
@@ -4349,6 +4350,24 @@ export class Game {
         if (r < 0.4) { const spot = this.adjacentFree(p.x, p.y); if (spot) { const m = new Monster(this, this.pickMonster(p.depth), spot.x, spot.y); this.monsters.push(m); this.scheduler.add(m, true); } this.log.add("A magic trap flares — something is conjured out of the aether!", "bad"); }
         else if (r < 0.7) { const drain = Math.min(p.energy, ROT.RNG.getUniformInt(3, 8)); p.energy -= drain; this.log.add(`A magic trap flares and siphons ${drain} energy from you!`, "bad"); }
         else { let pos = this.level.randomFloor(), t = 0; while (t < 40 && (this.monsterAt(pos.x, pos.y) || this.level.tileAt(pos.x, pos.y) === "stairsDown")) { pos = this.level.randomFloor(); t++; } p.x = pos.x; p.y = pos.y; this.recomputeFOV(); this.log.add("A magic trap flares and flings you across the level!", "bad"); }
+        break;
+      }
+      case "squeak": {
+        let woke = 0;
+        for (const m of this.monsters) if (m.alive && m.sleepTurns > 0 && Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) <= 8) { m.sleepTurns = 0; woke++; }
+        this.log.add(woke ? `A squeaky board shrieks underfoot — ${woke} sleeper${woke > 1 ? "s" : ""} stir!` : "A squeaky board shrieks underfoot — the noise carries.", "bad");
+        break;
+      }
+      case "spikepit": {
+        const d = ROT.RNG.getUniformInt(4, 8); p.hp -= d;
+        if (p.webbed <= 0) p.webbed = ROT.RNG.getUniformInt(1, 3);
+        this.log.add(`You drop into a spiked pit for ${d} — impaled and stuck! (move to climb out)`, "bad"); break;
+      }
+      case "boulder": {
+        const d = ROT.RNG.getUniformInt(3, 8); p.hp -= d;
+        this.log.add(`A boulder rolls out of the wall and slams into you for ${d}!`, "bad");
+        const spot = this.adjacentFree(p.x, p.y);
+        if (spot && !this.level.boulderAt(spot.x, spot.y)) this.level.boulders.push({ x: spot.x, y: spot.y }); // it comes to rest beside you
         break;
       }
     }
