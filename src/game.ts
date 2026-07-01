@@ -1489,7 +1489,7 @@ export class Game {
       const cells = this.roomCells(c.x, c.y);
       const open = cells.filter((p) => this.level.tileAt(p.x, p.y) === "floor" && !this.monsterAt(p.x, p.y) && !this.level.itemAt(p.x, p.y) && !this.playerAt(p.x, p.y));
       if (cells.length < 6 || open.length < 4) continue;
-      const kind = ROT.RNG.getItem(["temple", "zoo", "vault", "morgue", "oracle", "barracks", "beehive", "lephall", "swamp"])!;
+      const kind = ROT.RNG.getItem(["temple", "zoo", "vault", "morgue", "oracle", "barracks", "beehive", "lephall", "swamp", "anthole"])!;
       if (kind === "temple") this.makeTemple(c, open);
       else if (kind === "zoo") this.makeZoo(open);
       else if (kind === "morgue") this.makeMorgue(open);
@@ -1498,6 +1498,7 @@ export class Game {
       else if (kind === "beehive") this.makeBeehive(open);
       else if (kind === "lephall") this.makeLeprechaunHall(open);
       else if (kind === "swamp") this.makeSwamp(c, open);
+      else if (kind === "anthole") this.makeAnthole(open);
       else this.makeVault(c, open);
       return;
     }
@@ -1550,6 +1551,14 @@ export class Game {
       else if (r < 0.72 && !this.level.itemAt(p.x, p.y)) this.level.items.push({ x: p.x, y: p.y, type: ROT.RNG.getItem(gear)!, buc: rollBuc() });
     }
     if (n) this.log.add("Boots and barked orders ring through the wall — a barracks of mercenary nodes, armed and waiting.", "bad");
+  }
+
+  /** An anthole: a warren packed with breeding vermin (sybil rats) — ignore the cluster and you're swarmed. */
+  private makeAnthole(open: { x: number; y: number }[]): void {
+    const ant = MONSTERS.find((m) => m.fname === "a sewer rat") ?? this.pickMonster(this.player.depth);
+    let n = 0;
+    for (const p of open) if (ROT.RNG.getUniform() < 0.6) { this.monsters.push(new Monster(this, ant, p.x, p.y)); n++; }
+    if (n) this.log.add("A dry skittering seethes through the wall — an anthole, packed with breeding vermin.", "bad");
   }
 
   /** A beehive: a fast-swarming bot hive dripping with healing royal jelly. */
