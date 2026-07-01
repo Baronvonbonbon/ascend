@@ -324,6 +324,13 @@ export const MONSTERS: MonsterDef[] = [
   { name: "a relay medic",     fname: "a healer acolyte", ch: "h", fg: "#80e0c0", hp: 10, dmg: [1, 2], ai: "chase",  minDepth: 5, weight: 2, heals: true },
   { name: "a honeypot siren",  fname: "a succubus",      ch: "n", fg: "#e080b0", hp: 12, dmg: [2, 4], ai: "chase",  minDepth: 6, weight: 2, speed: 105, seduces: true },
   { name: "a dust gremlin",    fname: "a gremlin",       ch: "g", fg: "#90a070", hp: 4,  dmg: [1, 2], ai: "chase",  minDepth: 2, weight: 3, breeds: true },
+  // ── bestiary breadth: rodents, humanoids, the shallow undead (turnable), thieves, slimes ──
+  { name: "a sybil rat",       fname: "a sewer rat",     ch: "r", fg: "#a09070", hp: 3,  dmg: [1, 2], ai: "chase",  minDepth: 1, weight: 3, breeds: true },
+  { name: "a spam kobold",     fname: "a kobold",        ch: "k", fg: "#90b070", hp: 5,  dmg: [1, 3], ai: "chase",  minDepth: 1, weight: 3 },
+  { name: "a legacy zombie",   fname: "a zombie",        ch: "z", fg: "#8090a0", hp: 8,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 2 },
+  { name: "a shill nymph",     fname: "a nymph",         ch: "n", fg: "#e0a0d0", hp: 10, dmg: [1, 3], ai: "chase",  minDepth: 4, weight: 2, steals: true },
+  { name: "a spam slime",      fname: "a green slime",   ch: "j", fg: "#90c060", hp: 12, dmg: [2, 5], ai: "chase",  minDepth: 5, weight: 2, corrodes: true },
+  { name: "a legacy mummy",    fname: "a mummy",         ch: "M", fg: "#c0b080", hp: 20, dmg: [3, 7], ai: "chase",  minDepth: 8, weight: 2 },
   // ── Gehennom demons (Phase 12c) — the Dark Forest's servants of centralization ──
   { name: "a custodian fiend",   fname: "a dungeon fiend",  ch: "&", fg: "#c04040", hp: 22, dmg: [4, 8], ai: "chase", minDepth: 9,  weight: 2, steals: true, speed: 110 },
   { name: "a KYC wraith",        fname: "a watcher wraith", ch: "W", fg: "#a060a0", hp: 18, dmg: [3, 6], ai: "chase", minDepth: 9,  weight: 2, inflict: "confuse", ranged: true },
