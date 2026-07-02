@@ -3,7 +3,6 @@ import { initLobby } from "./net/lobby";
 import { loadCounts } from "./net/counter";
 import { readSave } from "./save";
 import { ARCHETYPES, archetypeName, archetypeBlurb, RACES, raceName, raceBlurb, introStory } from "./data";
-import { fp } from "./flavor";
 
 const screen = document.getElementById("screen");
 const logEl = document.getElementById("log");
@@ -52,9 +51,9 @@ if (screen && logEl) {
   let storyTimers: number[] = [];
 
   const renderSubtitle = () => {
-    const s = fp("— a descent to reclaim the Amulet —", "— a descent to recover the JAM —");
+    const s = "— a descent to reclaim the Amulet —";
     if (subtitle) subtitle.textContent = s;
-    if (titleSub) titleSub.textContent = fp("— reclaim the Amulet of Yendor", "— descend to recover the JAM");
+    if (titleSub) titleSub.textContent = "— reclaim the Amulet of Yendor";
   };
 
   // Reveal the intro line-by-line with a gentle fade + upward drift. `instant` shows it all at

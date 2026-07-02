@@ -1,7 +1,6 @@
 import * as ROT from "rot-js";
 import type { Game } from "./game";
 import { COLORS, MonsterDef, SPELLS, spellById, monName } from "./data";
-import { fp } from "./flavor";
 import { Inventory, Item } from "./inventory";
 import { bucDelta, ITEMS, ItemType, ArmorSlot, Idents } from "./items";
 import { runAi, wanderStep, cheb, MONSTER_BEHAVIORS, PET_BEHAVIORS } from "./ai";
@@ -308,11 +307,11 @@ export class Player extends Entity {
     else if (this.blind > 0 && --this.blind === 0) { this.game.log.add(`${this.name === "you" ? "Your sight returns" : this.name + "'s sight returns"}.`, "good"); this.game.recomputeFOV(); }
     // Petrification & illness are countdowns you must out-race (prayer / a cure).
     if (this.stoning > 0 && --this.stoning === 0) {
-      this.game.log.add(`${this.name === "you" ? "You freeze" : this.name + " freezes"} solid — ${fp("turned to stone", "finality denied")}.`, "bad");
+      this.game.log.add(`${this.name === "you" ? "You freeze" : this.name + " freezes"} solid — ${"turned to stone"}.`, "bad");
       this.game.killPlayer(this);
     }
     if (this.illness > 0 && --this.illness === 0) {
-      this.game.log.add(`${this.name === "you" ? "You succumb" : this.name + " succumbs"} to ${fp("the sickness", "the bad block")}.`, "bad");
+      this.game.log.add(`${this.name === "you" ? "You succumb" : this.name + " succumbs"} to ${"the sickness"}.`, "bad");
       this.game.killPlayer(this);
     }
     this.game.turn++;
@@ -1142,7 +1141,7 @@ export class Pet extends Entity {
   constructor(game: Game, x: number, y: number) {
     super(game);
     this.x = x; this.y = y;
-    this.ch = "d"; this.fg = "#80d080"; this.name = fp("your hound", "your nominator");
+    this.ch = "d"; this.fg = "#80d080"; this.name = "your hound";
     this.hp = this.maxHp = 14;
     this.attackDmg = [2, 4];
     this.profile = { aggression: ROT.RNG.getUniform(), fetch: ROT.RNG.getUniform(), appetite: ROT.RNG.getUniform(), wander: ROT.RNG.getUniform() };

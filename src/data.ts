@@ -1,6 +1,5 @@
 // Glyphs, palette, and the (themed) monster table.
 
-import { fp, getFlavor, nameOf } from "./flavor";
 
 export const COLORS = {
   bg:        "#0a0a0c",
@@ -45,18 +44,15 @@ export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: strin
 export const MAX_DEPTH = 25; // the foot of the relay — the vibrating square; the Invocation opens Gehennom below (NetHack-scale ~25-floor main descent)
 
 // ── Phase 6: the character sheet ─────────────────────────────────────────────
-/** The six attributes, Polkadot-flavored. Stored 3–18; modifier is D&D-style. */
+/** The six attributes. Stored 3–18; modifier is D&D-style. */
 export const ATTRS = ["str", "dex", "con", "int", "wis", "cha"] as const;
 export type Attr = (typeof ATTRS)[number];
 export const ATTR_LABEL: Record<Attr, string> = { str: "STR", dex: "DEX", con: "CON", int: "INT", wis: "WIS", cha: "CHA" };
-export const ATTR_FLAVOR: Record<Attr, string> = {
-  str: "Stake-weight", dex: "Latency", con: "Resilience", int: "Throughput", wis: "Insight", cha: "Reputation",
-};
-const ATTR_FLAVOR_F: Record<Attr, string> = {
+const ATTR_FULL: Record<Attr, string> = {
   str: "Strength", dex: "Dexterity", con: "Constitution", int: "Intelligence", wis: "Wisdom", cha: "Charisma",
 };
-/** The flavored long-name of an attribute (fantasy uses the classic D&D names). */
-export function attrFlavor(a: Attr): string { return getFlavor() === "fantasy" ? ATTR_FLAVOR_F[a] : ATTR_FLAVOR[a]; }
+/** The full long-name of an attribute (the classic D&D names). */
+export function attrFlavor(a: Attr): string { return ATTR_FULL[a]; }
 /** −4..+4 ability modifier (D&D 10 = +0). Feeds to-hit, damage, HP, dodge. */
 export function abilityMod(score: number): number { return Math.floor((score - 10) / 2); }
 
@@ -64,7 +60,7 @@ export function abilityMod(score: number): number { return Math.floor((score - 1
 export type Ethos = "Order" | "Balance" | "Chaos";
 
 export interface Archetype {
-  id: string; name: string; fname: string; blurb: string; fblurb: string;
+  id: string; name: string; blurb: string;
   stats: Record<Attr, number>;
   hp: number;
   start: string[]; // extra starting item ids, beyond the dagger + ration kit
@@ -72,111 +68,111 @@ export interface Archetype {
   ethos: Ethos;
 }
 export const ARCHETYPES: Archetype[] = [
-  { id: "validator", name: "Validator", fname: "Knight", blurb: "Secures the chain — strong and tough.", fblurb: "Sworn to the blade — strong and tough.",
+  { id: "validator", name: "Knight", blurb: "Sworn to the blade — strong and tough.",
     stats: { str: 16, dex: 11, con: 16, int: 9, wis: 11, cha: 10 }, hp: 26, start: ["mace", "vest"], ethos: "Order" },
-  { id: "nominator", name: "Nominator", fname: "Cleric", blurb: "Backs validators — balanced and well-liked.", fblurb: "Keeper of the faith — balanced and well-liked.",
+  { id: "nominator", name: "Cleric", blurb: "Keeper of the faith — balanced and well-liked.",
     stats: { str: 12, dex: 13, con: 13, int: 11, wis: 12, cha: 15 }, hp: 22, start: ["heal"], ethos: "Balance" },
-  { id: "cypherpunk", name: "Cypherpunk", fname: "Rogue", blurb: "Privacy and speed — quick, clever, unseen.", fblurb: "Shadow and speed — quick, clever, unseen.",
+  { id: "cypherpunk", name: "Rogue", blurb: "Shadow and speed — quick, clever, unseen.",
     stats: { str: 10, dex: 16, con: 11, int: 15, wis: 12, cha: 8 }, hp: 18, start: ["ring_priv", "tele"], spell: "tele", ethos: "Chaos" },
-  { id: "builder", name: "Builder", fname: "Wizard", blurb: "Ships primitives — versatile and bright.", fblurb: "Weaver of spells — versatile and bright.",
+  { id: "builder", name: "Wizard", blurb: "Weaver of spells — versatile and bright.",
     stats: { str: 11, dex: 12, con: 12, int: 16, wis: 13, cha: 11 }, hp: 20, start: ["book_map"], spell: "bolt", ethos: "Balance" },
-  { id: "maximalist", name: "Maximalist", fname: "Barbarian", blurb: "A maximalist brute — raw stake and fury.", fblurb: "A wild brute — raw might and fury.",
+  { id: "maximalist", name: "Barbarian", blurb: "A wild brute — raw might and fury.",
     stats: { str: 17, dex: 12, con: 16, int: 8, wis: 10, cha: 8 }, hp: 28, start: ["mace"], ethos: "Chaos" },
-  { id: "watcher", name: "Watcher", fname: "Ranger", blurb: "A keen-eyed node — strikes from range.", fblurb: "A keen-eyed hunter — strikes from range.",
+  { id: "watcher", name: "Ranger", blurb: "A keen-eyed hunter — strikes from range.",
     stats: { str: 12, dex: 16, con: 12, int: 11, wis: 13, cha: 9 }, hp: 20, start: ["dagger", "dagger"], ethos: "Balance" },
-  { id: "solostaker", name: "Solo Staker", fname: "Monk", blurb: "A self-reliant ascetic — fights bare-handed, swift and calm.", fblurb: "A disciplined ascetic — fights bare-handed, swift and serene.",
+  { id: "solostaker", name: "Monk", blurb: "A disciplined ascetic — fights bare-handed, swift and serene.",
     stats: { str: 13, dex: 15, con: 13, int: 11, wis: 16, cha: 10 }, hp: 22, start: [], ethos: "Order" },
-  { id: "auditor", name: "Auditor", fname: "Archeologist", blurb: "A meticulous explorer — armed with tools and insight.", fblurb: "A meticulous delver — armed with tools and insight.",
+  { id: "auditor", name: "Archeologist", blurb: "A meticulous delver — armed with tools and insight.",
     stats: { str: 11, dex: 13, con: 12, int: 15, wis: 14, cha: 10 }, hp: 20, start: ["scope", "lamp", "pickaxe"], ethos: "Order" },
 ];
 
 /** Ecosystem (NetHack race): a stat tweak + a starting intrinsic, on top of the chosen archetype. */
-export interface Race { id: string; name: string; fname: string; blurb: string; fblurb: string; statMod: Partial<Record<Attr, number>>; intrinsics: string[]; }
+export interface Race { id: string; name: string; blurb: string; statMod: Partial<Record<Attr, number>>; intrinsics: string[]; }
 export const RACES: Race[] = [
-  { id: "substrate", name: "Substrate-native", fname: "Human", blurb: "The native chain — balanced and adaptable.", fblurb: "Balanced and adaptable — no innate gifts, no flaws.", statMod: {}, intrinsics: [] },
-  { id: "evm",       name: "EVM",       fname: "Elf",   blurb: "Quick and clever, a touch frail.", fblurb: "Quick and clever, a touch frail.", statMod: { dex: 2, int: 1, con: -1 }, intrinsics: [] },
-  { id: "bitcoiner", name: "Bitcoiner", fname: "Dwarf", blurb: "A tough HODLer — can't be drained.", fblurb: "A tough delver — unshakeable, can't be drained.", statMod: { con: 2, str: 1, dex: -1 }, intrinsics: ["drainResist"] },
-  { id: "kusaman",   name: "Kusaman",   fname: "Orc",   blurb: "Chaos-forged — strong and poison-proof, but abrasive.", fblurb: "War-forged — strong and poison-proof, but abrasive.", statMod: { str: 1, con: 1, cha: -2, int: -1 }, intrinsics: ["poisonResist"] },
-  { id: "botnet",    name: "Botnet",    fname: "Gnome", blurb: "A networked swarm — clever and sensing, but slight.", fblurb: "A clever little folk — sharp-witted and far-sensing, but slight.", statMod: { dex: 1, int: 1, str: -1, con: -1 }, intrinsics: ["telepathy"] },
+  { id: "substrate", name: "Human", blurb: "Balanced and adaptable — no innate gifts, no flaws.", statMod: {}, intrinsics: [] },
+  { id: "evm",       name: "Elf",   blurb: "Quick and clever, a touch frail.", statMod: { dex: 2, int: 1, con: -1 }, intrinsics: [] },
+  { id: "bitcoiner", name: "Dwarf", blurb: "A tough delver — unshakeable, can't be drained.", statMod: { con: 2, str: 1, dex: -1 }, intrinsics: ["drainResist"] },
+  { id: "kusaman",   name: "Orc",   blurb: "War-forged — strong and poison-proof, but abrasive.", statMod: { str: 1, con: 1, cha: -2, int: -1 }, intrinsics: ["poisonResist"] },
+  { id: "botnet",    name: "Gnome", blurb: "A clever little folk — sharp-witted and far-sensing, but slight.", statMod: { dex: 1, int: 1, str: -1, con: -1 }, intrinsics: ["telepathy"] },
 ];
 export function raceById(id: string): Race { return RACES.find((r) => r.id === id) ?? RACES[0]; }
-export function raceName(r: Race): string { return getFlavor() === "fantasy" ? r.fname : r.name; }
-export function raceBlurb(r: Race): string { return getFlavor() === "fantasy" ? r.fblurb : r.blurb; }
+export function raceName(r: Race): string { return r.name; }
+export function raceBlurb(r: Race): string { return r.blurb; }
 export function archetypeById(id: string): Archetype { return ARCHETYPES.find((a) => a.id === id) ?? ARCHETYPES[0]; }
 /** An archetype's class name + blurb, flavored. */
-export function archetypeName(a: Archetype): string { return getFlavor() === "fantasy" ? a.fname : a.name; }
-export function archetypeBlurb(a: Archetype): string { return getFlavor() === "fantasy" ? a.fblurb : a.blurb; }
+export function archetypeName(a: Archetype): string { return a.name; }
+export function archetypeBlurb(a: Archetype): string { return a.blurb; }
 /** Alignment label, flavored: fantasy uses the classic Lawful/Neutral/Chaotic. */
 export function ethosName(e: string): string {
-  return fp(e === "Order" ? "Lawful" : e === "Chaos" ? "Chaotic" : "Neutral", e);
+  return e === "Order" ? "Lawful" : e === "Chaos" ? "Chaotic" : "Neutral";
 }
 
 /** Per-archetype Quest (Phase 13c): a homeland portal, a nemesis, and your signature artifact. */
-export interface Quest { homeland: string; fhomeland: string; portalDepth: number; artifactId: string; nemesis: MonsterDef; }
+export interface Quest { homeland: string; portalDepth: number; artifactId: string; nemesis: MonsterDef; }
 export const QUESTS: Record<string, Quest> = {
   validator: {
-    homeland: "the Validator's Vault", fhomeland: "the Knight's Keep", portalDepth: 14, artifactId: "art_sceptre",
-    nemesis: { name: "the Equivocator", fname: "the Doppel-King", ch: "E", fg: "#ff6060", hp: 42, dmg: [5, 10], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, splits: true },
+    homeland: "the Knight's Keep", portalDepth: 14, artifactId: "art_sceptre",
+    nemesis: { name: "the Doppel-King", ch: "E", fg: "#ff6060", hp: 42, dmg: [5, 10], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, splits: true },
   },
   nominator: {
-    homeland: "the Bonding Hall", fhomeland: "the Cleric's Sanctuary", portalDepth: 14, artifactId: "art_aegis",
-    nemesis: { name: "the Oversubscriber", fname: "the Glutton Lord", ch: "N", fg: "#e0a040", hp: 48, dmg: [5, 9], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, summons: true },
+    homeland: "the Cleric's Sanctuary", portalDepth: 14, artifactId: "art_aegis",
+    nemesis: { name: "the Glutton Lord", ch: "N", fg: "#e0a040", hp: 48, dmg: [5, 9], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, summons: true },
   },
   cypherpunk: {
-    homeland: "the Panopticon", fhomeland: "the Rogue's Warren", portalDepth: 14, artifactId: "art_cipher",
-    nemesis: { name: "the Surveillor", fname: "the Eye Tyrant", ch: "U", fg: "#c060e0", hp: 40, dmg: [4, 8], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, ranged: true },
+    homeland: "the Rogue's Warren", portalDepth: 14, artifactId: "art_cipher",
+    nemesis: { name: "the Eye Tyrant", ch: "U", fg: "#c060e0", hp: 40, dmg: [4, 8], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, ranged: true },
   },
   builder: {
-    homeland: "the Rent Foundry", fhomeland: "the Wizard's Tower", portalDepth: 14, artifactId: "art_compiler",
-    nemesis: { name: "the Rent Extractor", fname: "the Tithe-Reaver", ch: "R", fg: "#e07030", hp: 44, dmg: [5, 9], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, steals: true },
+    homeland: "the Wizard's Tower", portalDepth: 14, artifactId: "art_compiler",
+    nemesis: { name: "the Tithe-Reaver", ch: "R", fg: "#e07030", hp: 44, dmg: [5, 9], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, steals: true },
   },
 };
 /** A quest's homeland name, flavored. */
-export function questHomeland(q: Quest): string { return getFlavor() === "fantasy" ? q.fhomeland : q.homeland; }
+export function questHomeland(q: Quest): string { return q.homeland; }
 /** A monster's display name, flavored. */
-export function monName(d: MonsterDef): string { return nameOf(d); }
+export function monName(d: MonsterDef): string { return d.name; }
 export function questFor(archetypeId: string): Quest { return QUESTS[archetypeId] ?? QUESTS.validator; }
 
 // ── Phase 8: spellcasting ("extrinsics" cast from energy) ────────────────────
-export interface Spell { id: string; name: string; fname: string; cost: number; dir: boolean; school: string; }
+export interface Spell { id: string; name: string; cost: number; dir: boolean; school: string; }
 export const SPELLS: Spell[] = [
-  { id: "bolt",  name: "finality bolt", fname: "force bolt",       cost: 5, dir: true,  school: "attack" },
-  { id: "heal",  name: "self-mend",     fname: "healing",          cost: 6, dir: false, school: "healing" },
-  { id: "map",   name: "light client",  fname: "magic mapping",    cost: 7, dir: false, school: "divination" },
-  { id: "sense", name: "sense minds",   fname: "detect monsters",  cost: 5, dir: false, school: "divination" },
-  { id: "tele",  name: "XCM jump",      fname: "teleport",         cost: 8, dir: false, school: "escape" },
-  { id: "haste", name: "overclock",     fname: "haste self",       cost: 7, dir: false, school: "enchantment" },
-  { id: "fireball", name: "immolation",  fname: "fireball",          cost: 9, dir: true,  school: "attack" },
-  { id: "cure",  name: "cleanse",        fname: "cure sickness",     cost: 6, dir: false, school: "clerical" },
-  { id: "detect", name: "ledger scan",   fname: "detect treasure",   cost: 6, dir: false, school: "divination" },
-  { id: "dig",   name: "excavate",       fname: "dig",               cost: 7, dir: true,  school: "escape" },
-  { id: "slow",  name: "throttle",       fname: "slow monster",      cost: 5, dir: true,  school: "enchantment" },
-  { id: "sleep", name: "stasis field",   fname: "sleep",             cost: 6, dir: true,  school: "enchantment" },
-  { id: "turn",  name: "slash the unfinalized", fname: "turn undead", cost: 7, dir: false, school: "clerical" },
-  { id: "uncurse", name: "formal verification", fname: "remove curse", cost: 8, dir: false, school: "clerical" },
-  { id: "cryo",  name: "cryo-lance",     fname: "cone of cold",      cost: 8, dir: true,  school: "attack" },
-  { id: "charm", name: "delegate",       fname: "charm monster",     cost: 8, dir: true,  school: "enchantment" },
-  { id: "clair", name: "remote sync",    fname: "clairvoyance",      cost: 7, dir: false, school: "divination" },
+  { id: "bolt",  name: "force bolt",       cost: 5, dir: true,  school: "attack" },
+  { id: "heal",  name: "healing",          cost: 6, dir: false, school: "healing" },
+  { id: "map",   name: "magic mapping",    cost: 7, dir: false, school: "divination" },
+  { id: "sense", name: "detect monsters",  cost: 5, dir: false, school: "divination" },
+  { id: "tele",  name: "teleport",         cost: 8, dir: false, school: "escape" },
+  { id: "haste", name: "haste self",       cost: 7, dir: false, school: "enchantment" },
+  { id: "fireball", name: "fireball",          cost: 9, dir: true,  school: "attack" },
+  { id: "cure",  name: "cure sickness",     cost: 6, dir: false, school: "clerical" },
+  { id: "detect", name: "detect treasure",   cost: 6, dir: false, school: "divination" },
+  { id: "dig",   name: "dig",               cost: 7, dir: true,  school: "escape" },
+  { id: "slow",  name: "slow monster",      cost: 5, dir: true,  school: "enchantment" },
+  { id: "sleep", name: "sleep",             cost: 6, dir: true,  school: "enchantment" },
+  { id: "turn",  name: "turn undead", cost: 7, dir: false, school: "clerical" },
+  { id: "uncurse", name: "remove curse", cost: 8, dir: false, school: "clerical" },
+  { id: "cryo",  name: "cone of cold",      cost: 8, dir: true,  school: "attack" },
+  { id: "charm", name: "charm monster",     cost: 8, dir: true,  school: "enchantment" },
+  { id: "clair", name: "clairvoyance",      cost: 7, dir: false, school: "divination" },
 ];
 export function spellById(id: string): Spell | undefined { return SPELLS.find((s) => s.id === id); }
 /** A spell's display name, flavored. */
-export function spellName(s: Spell): string { return getFlavor() === "fantasy" ? s.fname : s.name; }
+export function spellName(s: Spell): string { return s.name; }
 
 /** XCM destinations: each parachain branch scales difficulty + loot vs. the relay. */
 // `layout` = the parachain's signature level generator, so each branch feels distinct.
-export interface ChainDef { id: string; name: string; fname?: string; difficulty: number; loot: number; color: string; layout?: string; }
+export interface ChainDef { id: string; name: string; difficulty: number; loot: number; color: string; layout?: string; }
 export const CHAINS: ChainDef[] = [
-  { id: "kusama",    name: "Kusama",    fname: "the Wildlands",     difficulty: 1.6, loot: 1.6, color: "#e060d0", layout: "maze" }, // chaos, high risk/reward
-  { id: "moonbeam",  name: "Moonbeam",  fname: "the Moonlit Keep",  difficulty: 1.3, loot: 1.4, color: "#53cbc9", layout: "grid" }, // an EVM contract-city
-  { id: "astar",     name: "Astar",     fname: "the Star Vault",    difficulty: 1.2, loot: 1.3, color: "#1b6dff", layout: "grid" },
-  { id: "phala",     name: "Phala",     fname: "the Shrouded Vale", difficulty: 1.1, loot: 1.2, color: "#cdfa50", layout: "maze" }, // privacy/compute — a dark labyrinth
-  { id: "interlay",  name: "Interlay",  fname: "the Coinbridge",    difficulty: 1.0, loot: 1.5, color: "#f7931a", layout: "cave" }, // treasure caverns (BTC bridge)
-  { id: "bifrost",   name: "Bifrost",   fname: "Bifrost",          difficulty: 0.9, loot: 1.0, color: "#5a25f0", layout: "labyrinth" },
-  { id: "hydration", name: "Hydration", fname: "the Drowned Marsh", difficulty: 0.8, loot: 1.1, color: "#f6297c", layout: "swamp" }, // the Liquidity Pools — open water + islands
-  { id: "acala",     name: "Acala",     fname: "the Haven",         difficulty: 0.6, loot: 0.8, color: "#e40c5b", layout: "normal" }, // safe DeFi haven
+  { id: "kusama",    name: "the Wildlands",     difficulty: 1.6, loot: 1.6, color: "#e060d0", layout: "maze" }, // chaos, high risk/reward
+  { id: "moonbeam",  name: "the Moonlit Keep",  difficulty: 1.3, loot: 1.4, color: "#53cbc9", layout: "grid" }, // an EVM contract-city
+  { id: "astar",     name: "the Star Vault",    difficulty: 1.2, loot: 1.3, color: "#1b6dff", layout: "grid" },
+  { id: "phala",     name: "the Shrouded Vale", difficulty: 1.1, loot: 1.2, color: "#cdfa50", layout: "maze" }, // privacy/compute — a dark labyrinth
+  { id: "interlay",  name: "the Coinbridge",    difficulty: 1.0, loot: 1.5, color: "#f7931a", layout: "cave" }, // treasure caverns (BTC bridge)
+  { id: "bifrost",   name: "Bifrost",          difficulty: 0.9, loot: 1.0, color: "#5a25f0", layout: "labyrinth" },
+  { id: "hydration", name: "the Drowned Marsh", difficulty: 0.8, loot: 1.1, color: "#f6297c", layout: "swamp" }, // the Liquidity Pools — open water + islands
+  { id: "acala",     name: "the Haven",         difficulty: 0.6, loot: 0.8, color: "#e40c5b", layout: "normal" }, // safe DeFi haven
 ];
 /** A parachain/realm's display name, flavored. */
-export function chainName(c: ChainDef): string { return getFlavor() === "fantasy" ? (c.fname ?? c.name) : c.name; }
+export function chainName(c: ChainDef): string { return c.name; }
 
 /** A mandatory-feeling sub-dungeon branch off the main descent (NetHack's Mines/Sokoban).
  *  Unlike an XCM parachain it has a fixed run of floors entered by a branch-stair (not a portal),
@@ -187,9 +183,7 @@ export interface BranchDef extends ChainDef {
   floors: number;     // how many floors deep the branch runs
   prizeId: string;    // the guaranteed reward on the end floor
   end: string;        // the themed name of the end floor ("the Storage Caverns' End")
-  fend?: string;      // fantasy name of the end floor
   entryFlavor?: string; // override the entry message (e.g. the Vault "climbs up")
-  fentryFlavor?: string; // fantasy entry message
   sokoban?: boolean;  // hand-built boulder-puzzle floors (the Consensus Vault) instead of procedural
   upward?: boolean;   // a tower you climb (the Validator's Tower) — flips "deeper/up" wording
   bossDef?: MonsterDef; // a unique boss wards the End floor's prize (else a plain guardian)
@@ -197,37 +191,35 @@ export interface BranchDef extends ChainDef {
 }
 export const BRANCHES: BranchDef[] = [
   {
-    id: "mines", name: "the Storage Caverns", fname: "the Gnomish Mines", branch: true, difficulty: 1.15, loot: 1.6, color: "#c9a04a",
-    layout: "cave", entryDepth: 5, floors: 3, prizeId: "hodlstone", end: "the Storage Caverns' End", fend: "the Mines' End",
+    id: "mines", name: "the Gnomish Mines", branch: true, difficulty: 1.15, loot: 1.6, color: "#c9a04a",
+    layout: "cave", entryDepth: 5, floors: 3, prizeId: "hodlstone", end: "the Mines' End",
   }, // a DA/storage parachain rendered as treasure caverns; its End yields a luckstone-grade HODL stone
   {
-    id: "vault", name: "the Consensus Vault", fname: "Sokoban", branch: true, sokoban: true, difficulty: 0.5, loot: 0.5,
-    color: "#7ad0c0", layout: "normal", entryDepth: 9, floors: 1, prizeId: "vault", end: "the Vault's Crown", fend: "Sokoban's Prize",
-    entryFlavor: "You squeeze up into the Consensus Vault — a sealed puzzle of blocks and chasms. Shove the blocks into the gaps; claim the prize at the top.",
-    fentryFlavor: "You squeeze up into Sokoban — a sealed puzzle of boulders and chasms. Shove the boulders into the pits; claim the prize at the top.",
+    id: "vault", name: "Sokoban", branch: true, sokoban: true, difficulty: 0.5, loot: 0.5,
+    color: "#7ad0c0", layout: "normal", entryDepth: 9, floors: 1, prizeId: "vault", end: "Sokoban's Prize",
+    entryFlavor: "You squeeze up into Sokoban — a sealed puzzle of boulders and chasms. Shove the boulders into the pits; claim the prize at the top.",
   }, // a Sokoban-style boulder puzzle; clear it for a guaranteed multisig vault (bag of holding)
   {
-    id: "tower", name: "the Validator's Tower", fname: "Vlad's Tower", branch: true, upward: true,
+    id: "tower", name: "Vlad's Tower", branch: true, upward: true,
     difficulty: 1.4, loot: 1.4, color: "#c04040", layout: "fortress", entryDepth: 16, floors: 3,
-    prizeId: "plate", prizeEnchant: 2, end: "the Tower's Crown", fend: "the Tower's Summit",
-    entryFlavor: "You climb the spiral stair into the Validator's Tower — a slashing lord holds its summit.",
-    fentryFlavor: "You climb the winding stair into Vlad's Tower — a dread lord holds its summit.",
-    bossDef: { name: "the Slashing Lord", fname: "Vlad the Impaler", ch: "L", fg: "#e02020", hp: 72, dmg: [7, 13], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, muse: true },
+    prizeId: "plate", prizeEnchant: 2, end: "the Tower's Summit",
+    entryFlavor: "You climb the winding stair into Vlad's Tower — a dread lord holds its summit.",
+    bossDef: { name: "Vlad the Impaler", ch: "L", fg: "#e02020", hp: 72, dmg: [7, 13], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, muse: true },
   }, // a fortress tower you climb; its Lord wards a +2 blessed plate at the Crown
 ];
 export function branchById(id: string): BranchDef | undefined { return BRANCHES.find((b) => b.id === id); }
 /** A branch's end-floor name + entry flavor, flavored. */
-export function branchEnd(b: BranchDef): string { return getFlavor() === "fantasy" ? (b.fend ?? b.end) : b.end; }
-export function branchEntryFlavor(b: BranchDef): string | undefined { return getFlavor() === "fantasy" ? (b.fentryFlavor ?? b.entryFlavor) : b.entryFlavor; }
+export function branchEnd(b: BranchDef): string { return b.end; }
+export function branchEntryFlavor(b: BranchDef): string | undefined { return b.entryFlavor; }
 
 /** Realms deepen and grow chaotic — a nod to Polkadot → Kusama. */
 export function realmName(depth: number): string {
-  if (depth >= 48) return fp("Moloch's Sanctum", "Moloch's Sanctum");           // GEHENNOM_BOTTOM
-  if (depth >= 26) return fp("Gehennom, the Dark Forest", "Gehennom, the Dark Forest");  // below the foot of the relay
-  if (depth >= 25) return fp("the Castle Gate", "the Foot of the Relay");       // MAX_DEPTH — the vibrating square
-  if (depth >= 18) return fp("the Deep Caverns", "the Kusama Deeps");
-  if (depth >= 9) return fp("the Dungeon Reaches", "the Parachain Reaches");
-  return fp("the Upper Dungeon", "the Legacy Stack");
+  if (depth >= 48) return "Moloch's Sanctum";           // GEHENNOM_BOTTOM
+  if (depth >= 26) return "Gehennom, the Dark Forest";  // below the foot of the relay
+  if (depth >= 25) return "the Castle Gate";       // MAX_DEPTH — the vibrating square
+  if (depth >= 18) return "the Deep Caverns";
+  if (depth >= 9) return "the Dungeon Reaches";
+  return "the Upper Dungeon";
 }
 
 const GRAY_PAPER_F = [
@@ -236,44 +228,29 @@ const GRAY_PAPER_F = [
   "vibrating square: perform the invocation, brave Gehennom, wrest the Amulet",
   "of Yendor from Moloch, then climb back and ASCEND.",
 ];
-const GRAY_PAPER_P = [
-  "From the Gray Paper: 'A chain ascends when it needs no master.'",
-  "Descend the Dungeon of Doom to depth 12 — the foot of the relay. There, the",
-  "vibrating square: invoke the rite, descend Gehennom, wrest the JAM from Moloch,",
-  "then climb back and ASCEND.",
-];
 /** The opening prophecy, flavored. */
-export function grayPaper(): string[] { return getFlavor() === "fantasy" ? GRAY_PAPER_F : GRAY_PAPER_P; }
+export function grayPaper(): string[] { return GRAY_PAPER_F; }
 
 /** The scrolling splash intro — flavor-aware (fantasy vs Polkadot). Blank strings are beats/pauses. */
 export function introStory(): string[] {
   return [
-    fp("In the age before the long dark, one relic kept the realm in accord —",
-       "Before the fork of ages, one ledger kept the chains in consensus —"),
-    fp("the Amulet of Yendor, the heart of all order.",
-       "the JAM, the beating heart of the relay."),
+    "In the age before the long dark, one relic kept the realm in accord —",
+    "the Amulet of Yendor, the heart of all order.",
     "",
-    fp("It was torn from the light and dragged down into the deep,",
-       "It was seized and dragged down into the deep,"),
-    fp("where the dungeon coiled into endless, treacherous halls.",
-       "where the relay shattered into endless, treacherous floors."),
+    "It was torn from the light and dragged down into the deep,",
+    "where the dungeon coiled into endless, treacherous halls.",
     "",
-    fp("The old powers festered below, jealous of the surface world.",
-       "The legacy stack festered below, jealous of the light."),
-    fp("One by one, heroes descended. None returned.",
-       "One by one, validators descended. None returned."),
+    "The old powers festered below, jealous of the surface world.",
+    "One by one, heroes descended. None returned.",
     "",
-    fp("Now the lot falls to you — and the hound that pads at your heel.",
-       "Now the lot falls to you — and the nominator that pads at your heel."),
+    "Now the lot falls to you — and the hound that pads at your heel.",
     "",
-    fp("Descend. Reclaim the Amulet. Climb back into the sun.",
-       "Descend. Recover the JAM. Ascend."),
+    "Descend. Reclaim the Amulet. Climb back into the sun.",
   ];
 }
 
 export interface MonsterDef {
   name: string;        // polkadot flavor
-  fname?: string;      // fantasy flavor (the default skin)
   ch: string;
   fg: string;
   hp: number;
@@ -319,77 +296,77 @@ export interface MonsterDef {
 
 // Themed bestiary — the centralised legacy stack fights back.
 export const MONSTERS: MonsterDef[] = [
-  { name: "a sybil",           fname: "a doppelganger",  ch: "s", fg: "#9a9a9a", hp: 3,  dmg: [1, 2], ai: "chase",  minDepth: 1, weight: 4, splits: true, speed: 105, pack: [2, 4] },
-  { name: "a rust bug",        fname: "a rust monster",  ch: "x", fg: "#7ac06a", hp: 2,  dmg: [1, 1], ai: "wander", minDepth: 1, weight: 5, speed: 90, corrodes: true },
-  { name: "a validator golem", fname: "a stone golem",   ch: "V", fg: "#5c8ad0", hp: 12, dmg: [2, 4], ai: "chase",  minDepth: 2, weight: 3, speed: 85, wears: true },
-  { name: "a fork daemon",     fname: "a quickling",     ch: "f", fg: "#d0a0d0", hp: 7,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 3, speed: 120, corpseEffect: "speed", pack: [2, 3] },
-  { name: "a gas wraith",      fname: "a stench wraith", ch: "w", fg: "#c08adf", hp: 6,  dmg: [2, 3], ai: "chase",  minDepth: 3, weight: 3, inflict: "poison", corpseEffect: "poisonous" },
-  { name: "a freezer",         fname: "a cockatrice",    ch: "c", fg: "#bcd6e6", hp: 10, dmg: [2, 4], ai: "chase",  minDepth: 4, weight: 2, corpseEffect: "petrify" },
-  { name: "a rug puller",      fname: "a treasure nymph", ch: "r", fg: "#d08040", hp: 5,  dmg: [3, 6], ai: "chase",  minDepth: 4, weight: 2, speed: 115, steals: true },
-  { name: "an airdrop farmer", fname: "a leprechaun",    ch: "l", fg: "#40d040", hp: 6,  dmg: [1, 3], ai: "chase",  minDepth: 3, weight: 2, speed: 120, stealsGold: true },
-  { name: "a doubt gremlin",   fname: "a gremlin",       ch: "g", fg: "#5fb0b0", hp: 7,  dmg: [1, 3], ai: "chase",  minDepth: 5, weight: 2, speed: 110, stealsLuck: true, pack: [2, 3] },
-  { name: "a watcher eye",     fname: "a floating eye",  ch: "e", fg: "#d8d040", hp: 14, dmg: [0, 0], ai: "chase",  minDepth: 4, weight: 2, speed: 60,  paralyzes: true },
-  { name: "a censor imp",      fname: "a confusion imp", ch: "i", fg: "#d05c5c", hp: 8,  dmg: [3, 5], ai: "chase",  minDepth: 4, weight: 2, inflict: "confuse", corpseEffect: "telepathy" },
-  { name: "a whale",           fname: "a hill giant",    ch: "O", fg: "#4090c0", hp: 24, dmg: [3, 6], ai: "chase",  minDepth: 5, weight: 2, speed: 60, throws: "rock" },
-  { name: "a front-runner",    fname: "a kobold archer", ch: "k", fg: "#c0a050", hp: 7,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 2, speed: 110, throws: "dart", pack: [2, 3] },
-  { name: "a dilution wraith",  fname: "a barrow-wight",  ch: "W", fg: "#b6b0d4", hp: 16, dmg: [2, 4], ai: "chase",  minDepth: 6, weight: 2, speed: 90, drains: true, corpseEffect: "levelup" },
-  { name: "an oracle",         fname: "a dark seer",     ch: "o", fg: "#e0c040", hp: 9,  dmg: [3, 6], ai: "chase",  minDepth: 5, weight: 2, ranged: true },
-  { name: "a liquidity trap",  fname: "a trapper",       ch: "t", fg: "#6ec0a0", hp: 20, dmg: [3, 6], ai: "chase",  minDepth: 6, weight: 2, speed: 80, engulfs: true },
-  { name: "a 51% attacker",    fname: "a berserker",     ch: "A", fg: "#e05050", hp: 16, dmg: [4, 8], ai: "chase",  minDepth: 6, weight: 2, speed: 110, inflict: "confuse" },
-  { name: "a gag enforcer",    fname: "a silence wraith", ch: "q", fg: "#8090a0", hp: 18, dmg: [2, 4], ai: "chase",  minDepth: 7, weight: 2, speed: 95, silences: true },
-  { name: "a MEV bot",         fname: "a giant bat",     ch: "b", fg: "#80c060", hp: 6,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 3, speed: 135, corpseEffect: "shock", pack: [2, 4] },
-  { name: "a slashing daemon", fname: "a giant serpent", ch: "S", fg: "#e06060", hp: 14, dmg: [4, 8], ai: "chase",  minDepth: 5, weight: 2, muse: true },
-  { name: "a darkpool eel",    fname: "an eel",          ch: ";", fg: "#40a080", hp: 14, dmg: [4, 9], ai: "chase",  minDepth: 5, weight: 2, speed: 110 },
-  { name: "a were-validator",  fname: "a werewolf",      ch: "d", fg: "#c08040", hp: 18, dmg: [3, 6], ai: "chase",  minDepth: 6, weight: 2, speed: 110, infects: true, pack: [2, 3] },
-  { name: "a sudo conjurer",   fname: "a summoner cultist", ch: "&", fg: "#c080e0", hp: 16, dmg: [2, 4], ai: "chase",  minDepth: 6, weight: 2, summons: true },
-  { name: "a hex caster",      fname: "a sorcerer",      ch: "H", fg: "#b060d0", hp: 18, dmg: [3, 6], ai: "chase",  minDepth: 7, weight: 2, zaps: "sleep" },
-  { name: "a thought leech",   fname: "a mind flayer",   ch: "u", fg: "#b060c0", hp: 20, dmg: [2, 5], ai: "chase",  minDepth: 8, weight: 2, speed: 95, drainsStat: true },
-  { name: "a finality dragon", fname: "an ancient dragon", ch: "D", fg: "#ff5040", hp: 34, dmg: [5, 9], ai: "chase",  minDepth: 6, weight: 1, breath: 16, fearless: true, corpseEffect: "fire" },
-  { name: "a panic seller",    fname: "a craven goblin", ch: "p", fg: "#d0d060", hp: 5,  dmg: [1, 3], ai: "chase",  minDepth: 2, weight: 3, cowardly: true },
-  { name: "a mercenary node",  fname: "a soldier",       ch: "@", fg: "#a0a070", hp: 16, dmg: [3, 7], ai: "chase",  minDepth: 4, weight: 2, wears: true },
-  { name: "a malware fly",     fname: "a plague fly",    ch: "a", fg: "#9ac070", hp: 5,  dmg: [1, 3], ai: "chase",  minDepth: 4, weight: 2, speed: 120, diseases: true },
-  { name: "a relay medic",     fname: "a healer acolyte", ch: "h", fg: "#80e0c0", hp: 10, dmg: [1, 2], ai: "chase",  minDepth: 5, weight: 2, heals: true },
-  { name: "a honeypot siren",  fname: "a succubus",      ch: "n", fg: "#e080b0", hp: 12, dmg: [2, 4], ai: "chase",  minDepth: 6, weight: 2, speed: 105, seduces: true },
-  { name: "a dust gremlin",    fname: "a gremlin",       ch: "g", fg: "#90a070", hp: 4,  dmg: [1, 2], ai: "chase",  minDepth: 2, weight: 3, breeds: true },
+  { name: "a doppelganger",  ch: "s", fg: "#9a9a9a", hp: 3,  dmg: [1, 2], ai: "chase",  minDepth: 1, weight: 4, splits: true, speed: 105, pack: [2, 4] },
+  { name: "a rust monster",  ch: "x", fg: "#7ac06a", hp: 2,  dmg: [1, 1], ai: "wander", minDepth: 1, weight: 5, speed: 90, corrodes: true },
+  { name: "a stone golem",   ch: "V", fg: "#5c8ad0", hp: 12, dmg: [2, 4], ai: "chase",  minDepth: 2, weight: 3, speed: 85, wears: true },
+  { name: "a quickling",     ch: "f", fg: "#d0a0d0", hp: 7,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 3, speed: 120, corpseEffect: "speed", pack: [2, 3] },
+  { name: "a stench wraith", ch: "w", fg: "#c08adf", hp: 6,  dmg: [2, 3], ai: "chase",  minDepth: 3, weight: 3, inflict: "poison", corpseEffect: "poisonous" },
+  { name: "a cockatrice",    ch: "c", fg: "#bcd6e6", hp: 10, dmg: [2, 4], ai: "chase",  minDepth: 4, weight: 2, corpseEffect: "petrify" },
+  { name: "a treasure nymph", ch: "r", fg: "#d08040", hp: 5,  dmg: [3, 6], ai: "chase",  minDepth: 4, weight: 2, speed: 115, steals: true },
+  { name: "a leprechaun",    ch: "l", fg: "#40d040", hp: 6,  dmg: [1, 3], ai: "chase",  minDepth: 3, weight: 2, speed: 120, stealsGold: true },
+  { name: "a gremlin",       ch: "g", fg: "#5fb0b0", hp: 7,  dmg: [1, 3], ai: "chase",  minDepth: 5, weight: 2, speed: 110, stealsLuck: true, pack: [2, 3] },
+  { name: "a floating eye",  ch: "e", fg: "#d8d040", hp: 14, dmg: [0, 0], ai: "chase",  minDepth: 4, weight: 2, speed: 60,  paralyzes: true },
+  { name: "a confusion imp", ch: "i", fg: "#d05c5c", hp: 8,  dmg: [3, 5], ai: "chase",  minDepth: 4, weight: 2, inflict: "confuse", corpseEffect: "telepathy" },
+  { name: "a hill giant",    ch: "O", fg: "#4090c0", hp: 24, dmg: [3, 6], ai: "chase",  minDepth: 5, weight: 2, speed: 60, throws: "rock" },
+  { name: "a kobold archer", ch: "k", fg: "#c0a050", hp: 7,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 2, speed: 110, throws: "dart", pack: [2, 3] },
+  { name: "a barrow-wight",  ch: "W", fg: "#b6b0d4", hp: 16, dmg: [2, 4], ai: "chase",  minDepth: 6, weight: 2, speed: 90, drains: true, corpseEffect: "levelup" },
+  { name: "a dark seer",     ch: "o", fg: "#e0c040", hp: 9,  dmg: [3, 6], ai: "chase",  minDepth: 5, weight: 2, ranged: true },
+  { name: "a trapper",       ch: "t", fg: "#6ec0a0", hp: 20, dmg: [3, 6], ai: "chase",  minDepth: 6, weight: 2, speed: 80, engulfs: true },
+  { name: "a berserker",     ch: "A", fg: "#e05050", hp: 16, dmg: [4, 8], ai: "chase",  minDepth: 6, weight: 2, speed: 110, inflict: "confuse" },
+  { name: "a silence wraith", ch: "q", fg: "#8090a0", hp: 18, dmg: [2, 4], ai: "chase",  minDepth: 7, weight: 2, speed: 95, silences: true },
+  { name: "a giant bat",     ch: "b", fg: "#80c060", hp: 6,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 3, speed: 135, corpseEffect: "shock", pack: [2, 4] },
+  { name: "a giant serpent", ch: "S", fg: "#e06060", hp: 14, dmg: [4, 8], ai: "chase",  minDepth: 5, weight: 2, muse: true },
+  { name: "an eel",          ch: ";", fg: "#40a080", hp: 14, dmg: [4, 9], ai: "chase",  minDepth: 5, weight: 2, speed: 110 },
+  { name: "a werewolf",      ch: "d", fg: "#c08040", hp: 18, dmg: [3, 6], ai: "chase",  minDepth: 6, weight: 2, speed: 110, infects: true, pack: [2, 3] },
+  { name: "a summoner cultist", ch: "&", fg: "#c080e0", hp: 16, dmg: [2, 4], ai: "chase",  minDepth: 6, weight: 2, summons: true },
+  { name: "a sorcerer",      ch: "H", fg: "#b060d0", hp: 18, dmg: [3, 6], ai: "chase",  minDepth: 7, weight: 2, zaps: "sleep" },
+  { name: "a mind flayer",   ch: "u", fg: "#b060c0", hp: 20, dmg: [2, 5], ai: "chase",  minDepth: 8, weight: 2, speed: 95, drainsStat: true },
+  { name: "an ancient dragon", ch: "D", fg: "#ff5040", hp: 34, dmg: [5, 9], ai: "chase",  minDepth: 6, weight: 1, breath: 16, fearless: true, corpseEffect: "fire" },
+  { name: "a craven goblin", ch: "p", fg: "#d0d060", hp: 5,  dmg: [1, 3], ai: "chase",  minDepth: 2, weight: 3, cowardly: true },
+  { name: "a soldier",       ch: "@", fg: "#a0a070", hp: 16, dmg: [3, 7], ai: "chase",  minDepth: 4, weight: 2, wears: true },
+  { name: "a plague fly",    ch: "a", fg: "#9ac070", hp: 5,  dmg: [1, 3], ai: "chase",  minDepth: 4, weight: 2, speed: 120, diseases: true },
+  { name: "a healer acolyte", ch: "h", fg: "#80e0c0", hp: 10, dmg: [1, 2], ai: "chase",  minDepth: 5, weight: 2, heals: true },
+  { name: "a succubus",      ch: "n", fg: "#e080b0", hp: 12, dmg: [2, 4], ai: "chase",  minDepth: 6, weight: 2, speed: 105, seduces: true },
+  { name: "a gremlin",       ch: "g", fg: "#90a070", hp: 4,  dmg: [1, 2], ai: "chase",  minDepth: 2, weight: 3, breeds: true },
   // ── bestiary breadth: rodents, humanoids, the shallow undead (turnable), thieves, slimes ──
-  { name: "a sybil rat",       fname: "a sewer rat",     ch: "r", fg: "#a09070", hp: 3,  dmg: [1, 2], ai: "chase",  minDepth: 1, weight: 2, breeds: true },
-  { name: "a spam kobold",     fname: "a kobold",        ch: "k", fg: "#90b070", hp: 5,  dmg: [1, 3], ai: "chase",  minDepth: 1, weight: 2 },
-  { name: "a legacy zombie",   fname: "a zombie",        ch: "z", fg: "#8090a0", hp: 8,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 2 },
-  { name: "a shill nymph",     fname: "a nymph",         ch: "n", fg: "#e0a0d0", hp: 10, dmg: [1, 3], ai: "chase",  minDepth: 4, weight: 2, steals: true },
-  { name: "a spam slime",      fname: "a green slime",   ch: "j", fg: "#90c060", hp: 12, dmg: [2, 5], ai: "chase",  minDepth: 5, weight: 2, corrodes: true },
-  { name: "a legacy mummy",    fname: "a mummy",         ch: "M", fg: "#c0b080", hp: 20, dmg: [3, 7], ai: "chase",  minDepth: 8, weight: 2 },
+  { name: "a sewer rat",     ch: "r", fg: "#a09070", hp: 3,  dmg: [1, 2], ai: "chase",  minDepth: 1, weight: 2, breeds: true },
+  { name: "a kobold",        ch: "k", fg: "#90b070", hp: 5,  dmg: [1, 3], ai: "chase",  minDepth: 1, weight: 2 },
+  { name: "a zombie",        ch: "z", fg: "#8090a0", hp: 8,  dmg: [2, 4], ai: "chase",  minDepth: 3, weight: 2 },
+  { name: "a nymph",         ch: "n", fg: "#e0a0d0", hp: 10, dmg: [1, 3], ai: "chase",  minDepth: 4, weight: 2, steals: true },
+  { name: "a green slime",   ch: "j", fg: "#90c060", hp: 12, dmg: [2, 5], ai: "chase",  minDepth: 5, weight: 2, corrodes: true },
+  { name: "a mummy",         ch: "M", fg: "#c0b080", hp: 20, dmg: [3, 7], ai: "chase",  minDepth: 8, weight: 2 },
   // ── Gehennom demons (Phase 12c) — the Dark Forest's servants of centralization ──
-  { name: "a custodian fiend",   fname: "a dungeon fiend",  ch: "&", fg: "#c04040", hp: 22, dmg: [4, 8], ai: "chase", minDepth: 9,  weight: 2, steals: true, speed: 110 },
-  { name: "a KYC wraith",        fname: "a watcher wraith", ch: "W", fg: "#a060a0", hp: 18, dmg: [3, 6], ai: "chase", minDepth: 9,  weight: 2, inflict: "confuse", ranged: true },
-  { name: "a permission daemon", fname: "a warden demon",   ch: "P", fg: "#d05050", hp: 24, dmg: [4, 7], ai: "chase", minDepth: 9,  weight: 2, summons: true },
-  { name: "a rent-seeker imp",   fname: "a snatch imp",     ch: "j", fg: "#d0a040", hp: 12, dmg: [3, 5], ai: "chase", minDepth: 9,  weight: 3, steals: true, speed: 120 },
-  { name: "a censorship demon",  fname: "a hellfire demon", ch: "X", fg: "#e03030", hp: 30, dmg: [5, 9], ai: "chase", minDepth: 10, weight: 2, breath: 14, fearless: true },
+  { name: "a dungeon fiend",  ch: "&", fg: "#c04040", hp: 22, dmg: [4, 8], ai: "chase", minDepth: 9,  weight: 2, steals: true, speed: 110 },
+  { name: "a watcher wraith", ch: "W", fg: "#a060a0", hp: 18, dmg: [3, 6], ai: "chase", minDepth: 9,  weight: 2, inflict: "confuse", ranged: true },
+  { name: "a warden demon",   ch: "P", fg: "#d05050", hp: 24, dmg: [4, 7], ai: "chase", minDepth: 9,  weight: 2, summons: true },
+  { name: "a snatch imp",     ch: "j", fg: "#d0a040", hp: 12, dmg: [3, 5], ai: "chase", minDepth: 9,  weight: 3, steals: true, speed: 120 },
+  { name: "a hellfire demon", ch: "X", fg: "#e03030", hp: 30, dmg: [5, 9], ai: "chase", minDepth: 10, weight: 2, breath: 14, fearless: true },
   // ── deep Gehennom (Phase 18) — the back half of the descent gets fresh terrors, not just scaled-up shallows ──
-  { name: "a cartel enforcer",   fname: "an iron enforcer",   ch: "B", fg: "#d06030", hp: 34, dmg: [6, 10], ai: "chase", minDepth: 13, weight: 2, corrodes: true, speed: 85, muse: true },
-  { name: "a darkpool kraken",   fname: "a deepwater horror", ch: "Y", fg: "#5060c0", hp: 30, dmg: [5, 9],  ai: "chase", minDepth: 15, weight: 2, ranged: true, inflict: "confuse", corpseEffect: "cold" },
-  { name: "a sovereign daemon",  fname: "an arch-lich",       ch: "Z", fg: "#e02020", hp: 42, dmg: [6, 11], ai: "chase", minDepth: 17, weight: 1, summons: true, fearless: true, muse: true, zaps: "blind" },
+  { name: "an iron enforcer",   ch: "B", fg: "#d06030", hp: 34, dmg: [6, 10], ai: "chase", minDepth: 13, weight: 2, corrodes: true, speed: 85, muse: true },
+  { name: "a deepwater horror", ch: "Y", fg: "#5060c0", hp: 30, dmg: [5, 9],  ai: "chase", minDepth: 15, weight: 2, ranged: true, inflict: "confuse", corpseEffect: "cold" },
+  { name: "an arch-lich",       ch: "Z", fg: "#e02020", hp: 42, dmg: [6, 11], ai: "chase", minDepth: 17, weight: 1, summons: true, fearless: true, muse: true, zaps: "blind" },
   // ── rival adventurers (mplayer.c) — other ascendants who came for the JAM and never left; deep only ──
-  { name: "a rogue validator",   fname: "a rogue",            ch: "@", fg: "#c0b070", hp: 40, dmg: [6, 11], ai: "chase", minDepth: 20, weight: 1, steals: true, muse: true, speed: 110 },
-  { name: "a rival ascendant",   fname: "a valkyrie",         ch: "@", fg: "#b8c8e8", hp: 48, dmg: [7, 12], ai: "chase", minDepth: 26, weight: 1, muse: true, throws: "dart", zaps: "sleep" },
+  { name: "a rogue",            ch: "@", fg: "#c0b070", hp: 40, dmg: [6, 11], ai: "chase", minDepth: 20, weight: 1, steals: true, muse: true, speed: 110 },
+  { name: "a valkyrie",         ch: "@", fg: "#b8c8e8", hp: 48, dmg: [7, 12], ai: "chase", minDepth: 26, weight: 1, muse: true, throws: "dart", zaps: "sleep" },
   // ── the deep Gehennom apex — the last terrors before Moloch ──
-  { name: "a rollup titan",      fname: "a titan",            ch: "H", fg: "#d0a850", hp: 44, dmg: [7, 12], ai: "chase", minDepth: 30, weight: 1, throws: "rock", speed: 90 },
-  { name: "a 51% attacker",      fname: "a minotaur",         ch: "H", fg: "#e05030", hp: 52, dmg: [8, 14], ai: "chase", minDepth: 34, weight: 1, speed: 110 },
-  { name: "a finality reaper",   fname: "a death knight",     ch: "&", fg: "#c03030", hp: 50, dmg: [7, 13], ai: "chase", minDepth: 38, weight: 1, drains: true, fearless: true, muse: true, corpseEffect: "levelup" },
+  { name: "a titan",            ch: "H", fg: "#d0a850", hp: 44, dmg: [7, 12], ai: "chase", minDepth: 30, weight: 1, throws: "rock", speed: 90 },
+  { name: "a minotaur",         ch: "H", fg: "#e05030", hp: 52, dmg: [8, 14], ai: "chase", minDepth: 34, weight: 1, speed: 110 },
+  { name: "a death knight",     ch: "&", fg: "#c03030", hp: 50, dmg: [7, 13], ai: "chase", minDepth: 38, weight: 1, drains: true, fearless: true, muse: true, corpseEffect: "levelup" },
 ];
 
 /** The Marketmaker — a bazaar shopkeeper. Peaceful while you pay; lethal if you shoplift. */
 export const SHOPKEEPER: MonsterDef = {
-  name: "the Marketmaker", fname: "the Shopkeeper", ch: "$", fg: "#e8c84a", hp: 54, dmg: [6, 11], ai: "chase", minDepth: 1, weight: 0, fearless: true, keeper: true,
+  name: "the Shopkeeper", ch: "$", fg: "#e8c84a", hp: 54, dmg: [6, 11], ai: "chase", minDepth: 1, weight: 0, fearless: true, keeper: true,
 };
 
 /** A temple priest — peaceful keeper of a shrine's altar; turns lethal if struck or robbed. */
 export const PRIEST: MonsterDef = {
-  name: "the Gavin priest", fname: "the temple priest", ch: "@", fg: "#d6d0f4", hp: 30, dmg: [4, 8], ai: "chase", minDepth: 1, weight: 0, fearless: true, priest: true,
+  name: "the temple priest", ch: "@", fg: "#d6d0f4", hp: 30, dmg: [4, 8], ai: "chase", minDepth: 1, weight: 0, fearless: true, priest: true,
 };
 
 /** The Oracle — a peaceful seer in a spring-ringed chamber; #chat (with coin) for a consultation. */
 export const ORACLE: MonsterDef = {
-  name: "the Oracle", fname: "the Oracle", ch: "@", fg: "#c060e0", hp: 32, dmg: [4, 8], ai: "chase", minDepth: 1, weight: 0, fearless: true, seer: true,
+  name: "the Oracle", ch: "@", fg: "#c060e0", hp: 32, dmg: [4, 8], ai: "chase", minDepth: 1, weight: 0, fearless: true, seer: true,
 };
 
 /** Major consultations — genuinely useful guidance (skin() reflavors the proper nouns). */
@@ -419,33 +396,33 @@ export const ORACLE_RUMORS = [
 
 /** The Council Guard — keeper of the Treasury vault. Peaceful escort; lethal if you strike it. */
 export const COUNCIL_GUARD: MonsterDef = {
-  name: "the Council Guard", fname: "the Vault Guard", ch: "@", fg: "#d0c060", hp: 60, dmg: [6, 12], ai: "chase", minDepth: 1, weight: 0, fearless: true, guard: true,
+  name: "the Vault Guard", ch: "@", fg: "#d0c060", hp: 60, dmg: [6, 12], ai: "chase", minDepth: 1, weight: 0, fearless: true, guard: true,
 };
 
 /** An Astral high priest — each Genesis altar is warded by one of these clerical guardians. */
 export const HIGH_PRIEST: MonsterDef = {
-  name: "an Astral High Minister", fname: "a high priest", ch: "@", fg: "#fff0c0", hp: 56, dmg: [7, 13], ai: "chase", minDepth: 99, weight: 0, fearless: true, summons: true, breath: 12,
+  name: "a high priest", ch: "@", fg: "#fff0c0", hp: 56, dmg: [7, 13], ai: "chase", minDepth: 99, weight: 0, fearless: true, summons: true, breath: 12,
 };
 
 /** The honeypot — a mimic. Spawned separately (placeMimics), disguised as loot. */
 export const HONEYPOT: MonsterDef = {
-  name: "a honeypot", fname: "a mimic", ch: "m", fg: "#e0b020", hp: 16, dmg: [3, 7], ai: "chase", minDepth: 3, weight: 0, mimic: true, speed: 90,
+  name: "a mimic", ch: "m", fg: "#e0b020", hp: 16, dmg: [3, 7], ai: "chase", minDepth: 3, weight: 0, mimic: true, speed: 90,
 };
 
 /** The Censor — high keeper of the vibrating square at the foot of the relay (MAX_DEPTH). */
 export const CENSOR: MonsterDef = {
-  name: "THE CENSOR", fname: "THE WARDEN", ch: "C", fg: "#ff3b3b", hp: 48, dmg: [6, 11], ai: "chase", minDepth: 99, weight: 0, fearless: true,
+  name: "THE WARDEN", ch: "C", fg: "#ff3b3b", hp: 48, dmg: [6, 11], ai: "chase", minDepth: 99, weight: 0, fearless: true,
 };
 
 /** MOLOCH, the Central Planner — the final tyrant who hoards the JAM at the bottom of Gehennom. */
 export const MOLOCH: MonsterDef = {
-  name: "MOLOCH, the Central Planner", fname: "MOLOCH, the Dark Lord", ch: "&", fg: "#ff2020", hp: 80, dmg: [8, 14], ai: "chase", minDepth: 99, weight: 0, fearless: true, boss: true, summons: true, breath: 20,
+  name: "MOLOCH, the Dark Lord", ch: "&", fg: "#ff2020", hp: 80, dmg: [8, 14], ai: "chase", minDepth: 99, weight: 0, fearless: true, boss: true, summons: true, breath: 20,
 };
 
 /** Realm mini-bosses — one guards a specific depth and drops a prize when slain. */
 export const MINIBOSSES: Record<number, MonsterDef> = {
-  8:  { name: "the Forkmaster", fname: "the Mirror Fiend", ch: "F", fg: "#ff80ff", hp: 30, dmg: [4, 7], ai: "chase", minDepth: 99, weight: 0, boss: true, splits: true },
-  18: { name: "the Sudo Key",   fname: "the Iron Warden",  ch: "K", fg: "#ffd040", hp: 44, dmg: [5, 9], ai: "chase", minDepth: 99, weight: 0, boss: true, speed: 90 },
+  8:  { name: "the Mirror Fiend", ch: "F", fg: "#ff80ff", hp: 30, dmg: [4, 7], ai: "chase", minDepth: 99, weight: 0, boss: true, splits: true },
+  18: { name: "the Iron Warden",  ch: "K", fg: "#ffd040", hp: 44, dmg: [5, 9], ai: "chase", minDepth: 99, weight: 0, boss: true, speed: 90 },
 };
 
 const DEATHS_F = [
@@ -455,25 +432,13 @@ const DEATHS_F = [
   "Cut down to nothing.",
   "Cast into oblivion.",
 ];
-const DEATHS_P = [
-  "Your stack overflowed.",
-  "Finalised — but not as you'd hoped.",
-  "The chain forked you off.",
-  "Slashed to nothing.",
-  "Reorged into oblivion.",
-];
 /** Death epitaphs, flavored. */
-export function deaths(): string[] { return getFlavor() === "fantasy" ? DEATHS_F : DEATHS_P; }
+export function deaths(): string[] { return DEATHS_F; }
 
 const GREETINGS_F = [
   "You descend into the dungeon. Recover the Amulet of Yendor, and ascend.",
   "The dungeon breathes an ancient dread. Hold to your purpose.",
   "Welcome, Seeker. The old prophecy says: trust no master.",
 ];
-const GREETINGS_P = [
-  "You descend into the legacy stack. Recover the JAM, and ascend.",
-  "The dungeon hums with centralised dread. Stay independent.",
-  "Welcome, Seeker. The Gray Paper says: trust no single node.",
-];
 /** Opening greetings, flavored. */
-export function greetings(): string[] { return getFlavor() === "fantasy" ? GREETINGS_F : GREETINGS_P; }
+export function greetings(): string[] { return GREETINGS_F; }

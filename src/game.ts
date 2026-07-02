@@ -2,7 +2,6 @@ import * as ROT from "rot-js";
 import { Level, Trap, TrapKind, LevelKind, FloorItem } from "./level";
 import { Entity, Player, Monster, Pet, SATIATED, CHOKE } from "./entities";
 import { Item, Inventory } from "./inventory";
-import { getFlavor, setFlavor } from "./flavor";
 import { SAVE_VERSION, writeSave, readSave, clearSave, serFields, restoreFields, serItem, restoreItem, serDef, restoreDef, serFloorItem, restoreFloorItem } from "./save";
 import { Log } from "./log";
 import type { LogWho } from "./log";
@@ -12,7 +11,7 @@ import {
   abilityMod, archetypeById, raceById, raceName, ATTRS, ATTR_LABEL, attrFlavor, spellById, Ethos,
   monName, questHomeland, archetypeName, ethosName, spellName, chainName, branchEnd, branchEntryFlavor,
 } from "./data";
-import { fp, skin } from "./flavor";
+import { skin } from "./flavor";
 import { Idents, Appearances, ITEMS, JAM, CORPSE, CHEST, GOLD, WRITABLE_SCROLLS, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
 import { connectWallet, Wallet } from "./chain/wallet";
 import { walletBalancePas, buyDirect } from "./chain/bank";
@@ -50,11 +49,11 @@ const MAP_H = 30;
 const H = MAP_H + 2; // + a blank row + the status line
 const MEMPOOL_DEPTH = 13; // the Big Room special level — "the Mempool"
 const GEHENNOM_BOTTOM = 48; // after the Invocation the dungeon opens to here — Moloch + the JAM (Gehennom spans MAX_DEPTH+1 .. here)
-const PLANES = [ // the ascent above the surface — climb them with the JAM to the Genesis altar
-  { name: "the Plane of Consensus", flavor: "The ground itself votes; agreement hums beneath your feet." },
-  { name: "the Plane of Finality", flavor: "Nothing here can be undone — every step is irreversible." },
-  { name: "the Plane of Light Clients", flavor: "Proofs drift like motes of dust; the whole sky is one header." },
-  { name: "the Genesis Plane", flavor: "The first block hangs frozen above an altar of pure intent. Offer the JAM (O)." },
+const PLANES = [ // the ascent above the surface — climb the Elemental Planes with the Amulet to the Astral altars
+  { name: "the Plane of Earth", flavor: "Stone presses in on every side; you push through a churning mass of rock." },
+  { name: "the Plane of Fire", flavor: "A searing waste of flame and ash — the very air burns." },
+  { name: "the Plane of Water", flavor: "Endless dark water in all directions; bubbles rise where up should be." },
+  { name: "the Astral Plane", flavor: "Three high altars stand in a starlit void. Offer the Amulet (O) at the one that shares your alignment." },
 ];
 const RELIC_DEPTH: Record<number, string> = { 14: "bell", 18: "candelabrum", 22: "graybook" }; // the three Invocation relics, spread across the back half of the relay descent (all before MAX_DEPTH)
 // Per-Plane layouts for the ascent (Phase 17): each Plane reads as its own place, the Genesis a ringed sanctum.
@@ -229,7 +228,7 @@ export class Game {
         turn: this.turn, plane: this.plane, currentChain: this.currentChain?.id ?? null, branchFloor: this.branchFloor,
         gehennomOpen: this.gehennomOpen, jamStolen: this.jamStolen, censorTimer: this.censorTimer,
         inQuest: this.inQuest, questDone: this.questDone, nextFloorShared: this.nextFloorShared,
-        archetypeId: this.archetypeId, raceId: this.raceId, flavor: getFlavor(),
+        archetypeId: this.archetypeId, raceId: this.raceId,
         defeatedBosses: [...this.defeatedBosses], loadedRelics: [...this.loadedRelics],
         genesisAltars: this.genesisAltars, altarEthos: [...this.altarEthos.entries()],
         downed: [this.downed.has(this.player), this.coPlayer ? this.downed.has(this.coPlayer) : false],
@@ -250,7 +249,6 @@ export class Game {
     if ((data.version as number) !== SAVE_VERSION || !meta) return false;
     this.loadingSave = true;
     try {
-      setFlavor(meta.flavor === "polkadot" ? "polkadot" : "fantasy");
       this.netRole = role; this.coop = role !== "solo";
       this.coopMode = meta.coopMode as CoopMode;
       this.archetypeId = meta.archetypeId as string; this.raceId = meta.raceId as string;
@@ -594,8 +592,8 @@ export class Game {
     this.log.add(`  HP ${p.hp}/${p.maxHp}  AC ${p.ac}  Fortune ${this.luckOf(p) >= 0 ? "+" : ""}${this.luckOf(p)}  XP ${p.xp}/${this.xpForLevel(p.level + 1)}`, "dim");
     const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", drainResist: "drain resist", fireResist: "fire resist", coldResist: "cold resist", shockResist: "shock resist", fast: "fast", telepathy: "telepathy" } as Record<string, string>)[i] ?? i);
     if (intr.length) this.log.add(`  Intrinsics: ${intr.join(", ")}.`, "good");
-    if (p.spells.size) this.log.add(`  Energy ${p.energy}/${p.maxEnergy}. ${fp("Spells", "Extrinsics")}: ${[...p.spells].map((id) => { const s = spellById(id); return s ? spellName(s) : id; }).join(", ")}. (Z to cast)`, "sys");
-    this.log.add(`  ${fp("Alignment", "Ethos")}: ${ethosName(p.ethos)}, favor ${p.favor}${p.crowned ? ` — ${fp("Knighted", "Technical Fellowship")} ${p.title}` : ""}.`, "dim");
+    if (p.spells.size) this.log.add(`  Energy ${p.energy}/${p.maxEnergy}. ${"Spells"}: ${[...p.spells].map((id) => { const s = spellById(id); return s ? spellName(s) : id; }).join(", ")}. (Z to cast)`, "sys");
+    this.log.add(`  ${"Alignment"}: ${ethosName(p.ethos)}, favor ${p.favor}${p.crowned ? ` — ${"Knighted"} ${p.title}` : ""}.`, "dim");
     const kept = CONDUCTS.filter((c) => p.conducts.has(c.id));
     if (kept.length) this.log.add(`  Vows kept: ${kept.map((c) => c.label).join(", ")}.`, "good");
     else this.log.add("  Vows kept: none — you walk no narrow path.", "dim");
@@ -604,8 +602,8 @@ export class Game {
   /** `#audit` (A) — a full enlightenment dump: everything the character sheet has, and more. A free read. */
   showAudit(): void {
     const p = this.acting;
-    this.log.add(`— ${fp("Character record", "Audit report")}: ${p.name === "you" ? "you" : p.name}, ${p.title ? p.title + " " : ""}${raceName(raceById(p.race))} ${archetypeName(archetypeById(p.archetype))} —`, "sys");
-    this.log.add(`  ${ethosName(p.ethos)} · epoch ${p.level} · XP ${p.xp}/${this.xpForLevel(p.level + 1)}${p.crowned ? ` · ${fp("Knighted", "Technical Fellowship")} ${p.title}` : ""}.`, "dim");
+    this.log.add(`— ${"Character record"}: ${p.name === "you" ? "you" : p.name}, ${p.title ? p.title + " " : ""}${raceName(raceById(p.race))} ${archetypeName(archetypeById(p.archetype))} —`, "sys");
+    this.log.add(`  ${ethosName(p.ethos)} · epoch ${p.level} · XP ${p.xp}/${this.xpForLevel(p.level + 1)}${p.crowned ? ` · ${"Knighted"} ${p.title}` : ""}.`, "dim");
     this.log.add(`  ${ATTRS.map((a) => `${ATTR_LABEL[a]} ${p[a]}`).join("  ")}`, "dim");
     this.log.add(`  HP ${p.hp}/${p.maxHp}  AC ${p.ac}  En ${p.energy}/${p.maxEnergy}  Speed ${p.getSpeed()}  Fortune ${this.luckOf(p) >= 0 ? "+" : ""}${this.luckOf(p)}.`, "dim");
     this.log.add(`  Load ${p.carriedWeight()}/${p.carryCap()}${p.encumbrance().level ? ` — ${p.encumbrance().level}` : " — unencumbered"}.`, "dim");
@@ -1204,7 +1202,7 @@ export class Game {
       }
       this.saveActive();
     }
-    this.log.add(`${fp("You enter", "XCM →")} ${chainName(chain)}: difficulty ×${chain.difficulty}, loot ×${chain.loot}. (< to return to ${fp("the dungeon", "the relay")})`, chain.difficulty >= 1 ? "bad" : "sys");
+    this.log.add(`${"You enter"} ${chainName(chain)}: difficulty ×${chain.difficulty}, loot ×${chain.loot}. (< to return to ${"the dungeon"})`, chain.difficulty >= 1 ? "bad" : "sys");
     this.draw();
   }
 
@@ -1255,7 +1253,7 @@ export class Game {
   /** Enter a branch at its mouth (floor 1); progress runs via > toward the prize on the End floor. */
   enterBranch(def: BranchDef): void {
     this.enterBranchFloor(def, 1, "down");
-    this.log.add(`${branchEntryFlavor(def) ?? `You clamber down into ${chainName(def)}.`} (< to climb back toward ${fp("the dungeon", "the relay")})`, "bad");
+    this.log.add(`${branchEntryFlavor(def) ?? `You clamber down into ${chainName(def)}.`} (< to climb back toward ${"the dungeon"})`, "bad");
     this.draw();
   }
 
@@ -1497,7 +1495,7 @@ export class Game {
   noteTile(p: Player): void {
     if (this.plane === PLANES.length) {
       const a = this.genesisAltars.find((g) => g.x === p.x && g.y === p.y);
-      if (a) this.log.add(`This altar resonates with ${ethosName(a.ethos)}.${a.ethos === p.ethos ? ` It is yours — offer the ${fp("Amulet", "JAM")} (O).` : " Not your alignment."}`, a.ethos === p.ethos ? "good" : "dim");
+      if (a) this.log.add(`This altar resonates with ${ethosName(a.ethos)}.${a.ethos === p.ethos ? ` It is yours — offer the ${"Amulet"} (O).` : " Not your alignment."}`, a.ethos === p.ethos ? "good" : "dim");
       return;
     }
     // A dungeon altar announces its alignment as you step on — a cross-aligned one can be converted by sacrifice.
@@ -1854,7 +1852,7 @@ export class Game {
 
   /** A barracks: a garrison of armed mercenary nodes (the @ soldier line), with weapons + armor strewn about. */
   private makeBarracks(open: { x: number; y: number }[]): void {
-    const soldier = MONSTERS.find((m) => m.fname === "a soldier") ?? this.pickMonster(this.player.depth);
+    const soldier = MONSTERS.find((m) => m.name === "a soldier") ?? this.pickMonster(this.player.depth);
     const gear = this.gearPool(this.player.depth);
     let n = 0;
     for (const p of open) {
@@ -1879,7 +1877,7 @@ export class Game {
 
   /** An anthole: a warren packed with breeding vermin (sybil rats) — ignore the cluster and you're swarmed. */
   private makeAnthole(open: { x: number; y: number }[]): void {
-    const ant = MONSTERS.find((m) => m.fname === "a sewer rat") ?? this.pickMonster(this.player.depth);
+    const ant = MONSTERS.find((m) => m.name === "a sewer rat") ?? this.pickMonster(this.player.depth);
     let n = 0;
     for (const p of open) if (ROT.RNG.getUniform() < 0.6) { this.monsters.push(new Monster(this, ant, p.x, p.y)); n++; }
     if (n) this.log.add("A dry skittering seethes through the wall — an anthole, packed with breeding vermin.", "bad");
@@ -1913,7 +1911,7 @@ export class Game {
   /** A swamp: brackish bog pools (impassable water) churning with eels and serpents, a prize in the muck. */
   private makeSwamp(center: { x: number; y: number }, open: { x: number; y: number }[]): void {
     const eel = MONSTERS.find((m) => m.ch === ";") ?? this.pickMonster(this.player.depth);
-    const serpent = MONSTERS.find((m) => m.fname === "a giant serpent") ?? eel;
+    const serpent = MONSTERS.find((m) => m.name === "a giant serpent") ?? eel;
     let beasts = 0;
     for (const p of open) {
       if (p.x === center.x && p.y === center.y) continue; // keep the core dry so the room stays crossable
@@ -2604,7 +2602,7 @@ export class Game {
     if (this.plane === PLANES.length && p.hasJam) {
       const altar = this.genesisAltars.find((g) => g.x === p.x && g.y === p.y);
       if (altar && altar.ethos === p.ethos) {
-        this.log.add(`You lay the ${fp("Amulet", "JAM")} upon the ${ethosName(altar.ethos)} altar of pure intent. It dissolves into first light.`, "good");
+        this.log.add(`You lay the ${"Amulet"} upon the ${ethosName(altar.ethos)} altar of pure intent. It dissolves into first light.`, "good");
         this.win(p);
         return true;
       }
@@ -3755,7 +3753,7 @@ export class Game {
     let n = 0;
     for (const m of [...this.monsters]) {
       if (!m.alive || m.peaceful) continue;
-      if (!/wraith|wight|lich|undead|zombie|skeleton|ghost|mummy|barrow/i.test(`${m.def.name} ${m.def.fname ?? ""}`)) continue;
+      if (!/wraith|wight|lich|undead|zombie|skeleton|ghost|mummy|barrow/i.test(`${m.def.name}`)) continue;
       if (Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) > 5) continue;
       const d = ROT.RNG.getUniformInt(5, 10); m.hp -= d; m.frightened = Math.max(m.frightened, 8); n++;
       if (m.hp <= 0) { this.gainXp(p, m.maxHp); this.kill(m); }
@@ -3885,7 +3883,7 @@ export class Game {
   /** Starved past the last of its loyalty, the nominator turns feral and rounds on you. */
   petGoesFeral(pet: Pet): void {
     if (pet.carrying) { pet.carrying.x = pet.x; pet.carrying.y = pet.y; if (!this.level.itemAt(pet.x, pet.y)) this.level.items.push(pet.carrying); pet.carrying = null; }
-    const feralDef: MonsterDef = pet.def ?? { name: "a feral hound", fname: "a feral hound", ch: "d", fg: "#a06848", hp: pet.maxHp, dmg: pet.attackDmg, ai: "chase", minDepth: 1, weight: 0, cowardly: true };
+    const feralDef: MonsterDef = pet.def ?? { name: "a feral hound", ch: "d", fg: "#a06848", hp: pet.maxHp, dmg: pet.attackDmg, ai: "chase", minDepth: 1, weight: 0, cowardly: true };
     const m = new Monster(this, feralDef, pet.x, pet.y);
     m.hp = Math.max(1, pet.hp); m.floorKey = pet.floorKey;
     this.monsters.push(m); this.scheduler.add(m, true);
