@@ -550,7 +550,7 @@ export class Game {
     this.log.add(`— ${p.name === "you" ? "You" : p.name}, ${p.title ? p.title + " " : ""}${raceName(raceById(p.race))} ${archetypeName(archetypeById(p.archetype))} · ${ethosName(p.ethos)} · level ${p.level} —`, "sys");
     this.log.add(`  ${ATTRS.map((a) => `${ATTR_LABEL[a]} ${p[a]}`).join("  ")}`, "dim");
     this.log.add(`  HP ${p.hp}/${p.maxHp}  AC ${p.ac}  Fortune ${this.luckOf(p) >= 0 ? "+" : ""}${this.luckOf(p)}  XP ${p.xp}/${this.xpForLevel(p.level + 1)}`, "dim");
-    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", drainResist: "drain resist", fireResist: "fire resist", coldResist: "cold resist", shockResist: "shock resist", fast: "fast", telepathy: "telepathy", seeInvis: "see invisible" } as Record<string, string>)[i] ?? i);
+    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", drainResist: "drain resist", fireResist: "fire resist", coldResist: "cold resist", shockResist: "shock resist", fast: "fast", telepathy: "telepathy", seeInvis: "see invisible", infravision: "infravision" } as Record<string, string>)[i] ?? i);
     if (intr.length) this.log.add(`  Intrinsics: ${intr.join(", ")}.`, "good");
     if (p.spells.size) this.log.add(`  Energy ${p.energy}/${p.maxEnergy}. ${"Spells"}: ${[...p.spells].map((id) => { const s = spellById(id); return s ? spellName(s) : id; }).join(", ")}. (Z to cast)`, "sys");
     this.log.add(`  ${"Alignment"}: ${ethosName(p.ethos)}, favor ${p.favor}${p.crowned ? ` — ${"Knighted"} ${p.title}` : ""}.`, "dim");
@@ -571,7 +571,7 @@ export class Game {
     const skills = Object.keys(p.skillXp);
     if (skills.length) this.log.add(`  Skills: ${skills.map((c) => `${SKILL_LABEL[c] ?? c} ${SKILL_RANKS[p.skillRank[c] ?? 0]}`).join(", ")}.`, "dim");
     // intrinsics + spells
-    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", drainResist: "drain resist", fireResist: "fire resist", coldResist: "cold resist", shockResist: "shock resist", fast: "fast", telepathy: "telepathy", seeInvis: "see invisible" } as Record<string, string>)[i] ?? i);
+    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", drainResist: "drain resist", fireResist: "fire resist", coldResist: "cold resist", shockResist: "shock resist", fast: "fast", telepathy: "telepathy", seeInvis: "see invisible", infravision: "infravision" } as Record<string, string>)[i] ?? i);
     if (intr.length) this.log.add(`  Intrinsics: ${intr.join(", ")}.`, "good");
     if (p.spells.size) this.log.add(`  Extrinsics: ${[...p.spells].map((id) => spellById(id)?.name ?? id).join(", ")}.`, "dim");
     // active afflictions / timeouts
@@ -1595,6 +1595,13 @@ export class Game {
     const sr = this.level.specialRoom;
     const room = sr && sr.cells.has(`${p.x},${p.y}`) ? sr.kind : undefined; // the special room the local adventurer stands in
     return { threat, danger: Math.min(1, Math.max(this.dangerLevel(), peril)), bossNear, crowd, amuletNear, fountain: onFeat("fountain"), altar: onFeat("altar"), beast, room };
+  }
+
+  /** Cold-blooded/heatless creatures give infravision nothing to see — the undead, constructs, slimes,
+   *  and the phase stalker. Everything else is warm and glows to warmth-sight in the dark. */
+  private coldBlooded(def: MonsterDef): boolean {
+    if (def.drains || def.silences || def.corrodes || def.acidic || def.startsInvisible) return true;
+    return "zwWMZVBjgxe".includes(def.ch); // zombies/wraiths/mummies/liches, golems, oozes, gremlins, rust monsters, eyes
   }
 
   /** Coarse creature category for foley cues (ghost voices, undead moans, growls, skitters, hisses…). */
@@ -5413,12 +5420,16 @@ export class Game {
     const sensed = !!me && ((me.blind > 0 && me.intrinsics.has("telepathy")) || me.senseTurns > 0 || me.amulet?.type.id === "amulet_esp");
     const seeInvis = !!me && (me.intrinsics.has("seeInvis") || me.amulet?.type.id === "amulet_seeinvis" || me.ring?.type.id === "ring_seeinv"); // reveals cloaked foes within normal sight
     const warn = !!me && me.warning; // a ring of warning shows nearby foes through walls
+    const infra = !!me && me.intrinsics.has("infravision"); // warmth-sight — warm-blooded foes glow in the dark within LOS
     for (const m of mons) {
       const near = warn && Math.max(Math.abs(m.x - me!.x), Math.abs(m.y - me!.y)) <= 5;
-      if (!m.alive || !(vis(m.x, m.y) || sensed || near)) continue;
+      const warmth = infra && !this.coldBlooded(m.def) && Math.max(Math.abs(m.x - me!.x), Math.abs(m.y - me!.y)) <= 5 && this.hasLineOfSight(me!.x, me!.y, m.x, m.y);
+      if (!m.alive || !(vis(m.x, m.y) || sensed || near || warmth)) continue;
       if (m.invisible && !sensed && !near && !(seeInvis && vis(m.x, m.y))) continue; // cloaked — only ESP/warning, or see-invisible within sight, reveals it
       const dormant = m.def.mimic && !m.revealed && !near; // warning reveals a mimic for what it is
-      cells.push([m.x, m.y, dormant ? m.disguiseCh : m.ch, dormant ? m.disguiseFg : m.fg]);
+      // in the dark, an infravision-only sighting shows a dim warm glyph (you sense heat, not detail)
+      const infraOnly = warmth && !vis(m.x, m.y) && !sensed;
+      cells.push([m.x, m.y, dormant ? m.disguiseCh : m.ch, infraOnly ? "#a05030" : dormant ? m.disguiseFg : m.fg]);
     }
     for (const pet of this.livingPets()) if (pet.floorKey === onFloor && vis(pet.x, pet.y)) cells.push([pet.x, pet.y, pet.ch, pet.fg]);
     for (const pl of this.allPlayers()) {

@@ -91,9 +91,9 @@ export interface Race { id: string; name: string; blurb: string; statMod: Partia
 export const RACES: Race[] = [
   { id: "human", name: "Human", blurb: "Balanced and adaptable — no innate gifts, no flaws.", statMod: {}, intrinsics: [] },
   { id: "elf",       name: "Elf",   blurb: "Quick and clever, a touch frail.", statMod: { dex: 2, int: 1, con: -1 }, intrinsics: [] },
-  { id: "dwarf", name: "Dwarf", blurb: "A tough delver — unshakeable, can't be drained.", statMod: { con: 2, str: 1, dex: -1 }, intrinsics: ["drainResist"] },
-  { id: "orc",   name: "Orc",   blurb: "War-forged — strong and poison-proof, but abrasive.", statMod: { str: 1, con: 1, cha: -2, int: -1 }, intrinsics: ["poisonResist"] },
-  { id: "gnome",    name: "Gnome", blurb: "A clever little folk — sharp-witted and far-sensing, but slight.", statMod: { dex: 1, int: 1, str: -1, con: -1 }, intrinsics: ["telepathy"] },
+  { id: "dwarf", name: "Dwarf", blurb: "A tough delver — unshakeable, can't be drained, and sees warmth in the dark.", statMod: { con: 2, str: 1, dex: -1 }, intrinsics: ["drainResist", "infravision"] },
+  { id: "orc",   name: "Orc",   blurb: "War-forged — strong, poison-proof, and warmth-sighted, but abrasive.", statMod: { str: 1, con: 1, cha: -2, int: -1 }, intrinsics: ["poisonResist", "infravision"] },
+  { id: "gnome",    name: "Gnome", blurb: "A clever little folk — sharp-witted, far-sensing, and warmth-sighted, but slight.", statMod: { dex: 1, int: 1, str: -1, con: -1 }, intrinsics: ["telepathy", "infravision"] },
 ];
 export function raceById(id: string): Race { return RACES.find((r) => r.id === id) ?? RACES[0]; }
 export function raceName(r: Race): string { return r.name; }
