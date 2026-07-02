@@ -61,6 +61,11 @@ const CONDUCTS: { id: string; label: string; note: string }[] = [
   { id: "bankless",   label: "Bankless",       note: "bought nothing, forged nothing — touched no market" },
 ];
 const VAULT_CAP = 12; // a bag of holding holds up to this many stashed items
+// Erosion severity tags by kind (index 0 unused; 1..3 = light/medium/heavy).
+const EROSION_TAGS: Record<"rust" | "burn", string[]> = {
+  rust: ["", "rusty", "corroded", "badly corroded"],
+  burn: ["", "singed", "burnt", "badly burnt"],
+};
 // Hand-built Sokoban (Sokoban) floors. A 1-wide tunnel of alternating boulders (O) and
 // chasms (_): you can only push forward, so each boulder fills the next pit — unbrickable by design.
 // `<` start/exit · `>` goal (the prize) · `#` wall · `.` floor · `O` boulder · `_` pit.
@@ -2485,8 +2490,8 @@ export class Game {
     }
     // Marduk also burnishes away rust and corrosion from your worn gear.
     let repaired = 0;
-    for (const it of [p.weapon, ...p.wornArmor].filter((x): x is Item => !!x)) if (it.erosion) { it.erosion = 0; repaired++; }
-    if (repaired) { p.recomputeAC(); p.applyWeapon(); this.log.add("Rust and corrosion flake away — your gear is restored.", "good"); }
+    for (const it of [p.weapon, ...p.wornArmor].filter((x): x is Item => !!x)) if (it.erosion) { it.erosion = 0; it.erosionKind = undefined; repaired++; }
+    if (repaired) { p.recomputeAC(); p.applyWeapon(); this.log.add("Rust, char, and corrosion flake away — your gear is restored.", "good"); }
     if (ROT.RNG.getUniform() < 0.4) {
       for (const it of p.inventory.items) this.ident.learn(it.type);
       this.log.add("Truth is revealed — your pack is identified.", "sys");
@@ -2969,14 +2974,26 @@ export class Game {
   /** A metal weapon that rust/acid can bite — excludes the wood-and-leather ones (whip, quarterstaff). */
   private corrodibleWeapon(it: Item): boolean { return it.type.kind === "weapon" && !it.proofed && !it.relic && !["whip", "quarterstaff"].includes(it.type.id); }
 
-  /** Erode one piece of gear a step (rust/corrosion): armor loses evasion, a weapon loses bite. */
-  private erodeItem(p: Player, it: Item): void {
+  /** Erode one piece of gear a step: rust/corrosion or fire-burn. Armor loses evasion, a weapon loses bite.
+   *  A piece keeps the first kind that scarred it (a burnt piece stays "burnt" even if later rusted). */
+  private erodeItem(p: Player, it: Item, kind: "rust" | "burn" = "rust"): void {
     if (it.proofed || (it.erosion ?? 0) >= 3) return;
     it.erosion = (it.erosion ?? 0) + 1;
+    if (!it.erosionKind) it.erosionKind = kind;
     if (it === p.weapon) p.applyWeapon(); else p.recomputeAC();
-    const tag = ["", "rusty", "corroded", "badly corroded"][it.erosion];
-    this.log.add(`${p.name === "you" ? "Your" : p.name + "'s"} ${this.ident.name(it.type)} corrodes — now ${tag}.`, "bad");
-    if (p === this.localPlayer) this.music.sfx("fx-acid");
+    const tag = EROSION_TAGS[it.erosionKind][it.erosion];
+    const verb = it.erosionKind === "burn" ? "chars" : "corrodes";
+    this.log.add(`${p.name === "you" ? "Your" : p.name + "'s"} ${this.ident.name(it.type)} ${verb} — now ${tag}.`, "bad");
+    if (p === this.localPlayer) this.music.sfx(it.erosionKind === "burn" ? "fx-fire" : "fx-acid");
+  }
+
+  /** A fire source (a fire trap, a firebolt, a dragon's breath) chars a worn piece — unless you shrug
+   *  the flames (fire resistance) or the piece is proofed. Fire-proof weapons/wood don't burn. */
+  private burnGear(p: Player): void {
+    if (p.intrinsics.has("fireResist") || p.ringFireRes) return; // the fire never touches your gear
+    const pool = p.wornArmor.filter((it) => !it.proofed && (it.erosion ?? 0) < 3);
+    if (p.weapon && this.corrodibleWeapon(p.weapon) && (p.weapon.erosion ?? 0) < 3) pool.push(p.weapon);
+    if (pool.length && ROT.RNG.getUniform() < 0.4) this.erodeItem(p, ROT.RNG.getItem(pool)!, "burn");
   }
 
   /** A rust attacker's touch erodes a random unproofed worn piece — or the wielded metal weapon. */
@@ -3114,7 +3131,7 @@ export class Game {
       }
       if (this.elementResisted(e, "fire")) return; // a fire-resistant target shrugs off the searing breath
       e.hp -= d;
-      if (e instanceof Player) { this.log.add(`The breath sears ${e.name} for ${d}!`, "bad", e); if (e.hp <= 0) this.killPlayer(e); }
+      if (e instanceof Player) { this.log.add(`The breath sears ${e.name} for ${d}!`, "bad", e); if (e.hp <= 0) this.killPlayer(e); else this.burnGear(e); }
       else if (e instanceof Monster && e.hp <= 0) this.kill(e);
     });
   }
@@ -3381,6 +3398,7 @@ export class Game {
         const d = ROT.RNG.getUniformInt(6, 12); e.hp -= d;
         this.log.add(e instanceof Player ? `The firebolt scorches ${e.name} for ${d}!` : `The firebolt sears ${e.name} for ${d}.`, e instanceof Player ? "bad" : "good");
         if (e.hp <= 0) { if (e instanceof Monster) this.gainXp(this.acting, e.maxHp); this.kill(e); }
+        else if (e instanceof Player) this.burnGear(e);
       });
     } else if (item.type.id === "wand_cold") {
       this.music.sfx("fx-cold");
@@ -3608,6 +3626,7 @@ export class Game {
           const d = ROT.RNG.getUniformInt(7, 14); e.hp -= d;
           this.log.add(e instanceof Player ? `The fireball scorches ${e.name} for ${d}!` : `The fireball engulfs ${e.name} for ${d}.`, e instanceof Player ? "bad" : "good");
           if (e.hp <= 0) { if (e instanceof Monster) this.gainXp(p, e.maxHp); this.kill(e); }
+          else if (e instanceof Player) this.burnGear(e);
         });
         break;
       }
@@ -4179,7 +4198,7 @@ export class Game {
   greaseItem(can: Item, target: Item): boolean {
     if (target.type.kind !== "weapon" && target.type.kind !== "armor") { this.log.add("Only a weapon or armor takes grease to any purpose.", "dim"); return false; }
     if (target.proofed) { this.log.add(`${cap(this.ident.name(target.type))} is already slick — grease finds no purchase.`, "dim"); return false; }
-    target.proofed = true; target.erosion = 0;
+    target.proofed = true; target.erosion = 0; target.erosionKind = undefined;
     can.charges = (can.charges ?? 0) - 1;
     this.log.add(`You work grease into ${this.ident.name(target.type)} — slick and rust-proof now. (grease left: ${can.charges})`, "good");
     if ((can.charges ?? 0) <= 0) { this.acting.inventory.remove(can); this.log.add("The can of lubricant sputters empty.", "dim"); }
@@ -4458,7 +4477,7 @@ export class Game {
       const ch = it.charges != null ? ` [${it.charges}]` : it.type.id === "vault" ? ` {${it.contents?.length ?? 0} held}` : it.type.id === "lamp" ? ` (${it.lit ? "lit, " : ""}oil ${it.fuel ?? LAMP_FUEL_MAX})` : "";
       const relic = it.relic ? ` +${it.enchant ?? 0} ✦` : "";
       const buc = it.bucKnown && it.buc ? `${it.buc} ` : "";
-      const ero = it.erosion ? (["", "rusty ", "corroded ", "very corroded "][it.erosion] ?? "") : (it.proofed ? "blessed " : "");
+      const ero = it.erosion ? `${EROSION_TAGS[it.erosionKind ?? "rust"][it.erosion] ?? ""} ` : (it.proofed ? "blessed " : "");
       const unpaid = it.unpaid ? ` (unpaid, ${it.unpaid} gold)` : "";
       const tone = it.unpaid ? "bad" : it.bucKnown && it.buc === "cursed" ? "bad" : it.bucKnown && it.buc === "blessed" ? "good" : it.relic ? "sys" : "dim";
       this.log.add(`  ${inv.letter(i)}) ${buc}${ero}${this.ident.name(it.type)}${relic}${ch}${lbl}${eq}${unpaid}`, tone);
@@ -4646,7 +4665,7 @@ export class Game {
         for (const it of p.inventory.items) {
           if (it.buc === "cursed") { it.buc = wash ? "blessed" : "uncursed"; n++; }
           it.bucKnown = true;
-          if (it.type.kind === "armor" || it.type.kind === "weapon") { it.erosion = 0; it.proofed = true; } // blessed = rust-proof
+          if (it.type.kind === "armor" || it.type.kind === "weapon") { it.erosion = 0; it.erosionKind = undefined; it.proofed = true; } // blessed = erosion-proof
         }
         p.applyWeapon(); p.recomputeAC();
         this.log.add(n > 0 ? `Verification passes — ${n} curse${n > 1 ? "s" : ""} lifted; your pack is blessed.` : "Verification passes — your gear is clean.", "good");
@@ -4988,7 +5007,8 @@ export class Game {
       case "fire": {
         if (this.elementResisted(p, "fire")) { this.log.add("A fire trap erupts — the flames wash over you harmlessly!", "good"); break; }
         const d = ROT.RNG.getUniformInt(4, 10); p.hp -= d;
-        this.log.add(`A fire trap erupts in a column of flame — ${d}!`, "bad"); break;
+        this.log.add(`A fire trap erupts in a column of flame — ${d}!`, "bad");
+        this.burnGear(p); break; // the flames may char a worn piece
       }
       case "rust": {
         this.log.add("A rust trap sprays corrosive brine over you!", "bad");

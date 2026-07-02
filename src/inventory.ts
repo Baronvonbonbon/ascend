@@ -1,6 +1,6 @@
 import type { ItemType, Buc } from "./items";
 
-export interface Item { type: ItemType; charges?: number; enchant?: number; relic?: boolean; buc?: Buc; bucKnown?: boolean; erosion?: number; proofed?: boolean; contents?: Item[]; label?: string; lit?: boolean; fuel?: number; unpaid?: number; } // unpaid = gold owed for a shop ware carried on your bill (settled at the door) // charges for wands; enchant/relic for artifacts; buc = sanctity; erosion 0–3 = rust/corrosion; proofed = rust-proofed; contents = a bag's stash; label = player-given #name; fuel = a lit lamp's remaining oil
+export interface Item { type: ItemType; charges?: number; enchant?: number; relic?: boolean; buc?: Buc; bucKnown?: boolean; erosion?: number; erosionKind?: "rust" | "burn"; proofed?: boolean; contents?: Item[]; label?: string; lit?: boolean; fuel?: number; unpaid?: number; } // unpaid = gold owed for a shop ware carried on your bill (settled at the door) // charges for wands; enchant/relic for artifacts; buc = sanctity; erosion 0–3 severity; erosionKind = rust/corrosion vs fire-burn; proofed = erosion-proofed; contents = a bag's stash; label = player-given #name; fuel = a lit lamp's remaining oil
 
 /** Letter-indexed pack (a, b, c, …). */
 export class Inventory {
