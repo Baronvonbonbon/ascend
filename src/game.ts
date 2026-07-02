@@ -2,7 +2,7 @@ import * as ROT from "rot-js";
 import { Level, Trap, TrapKind, LevelKind, FloorItem } from "./level";
 import { Entity, Player, Monster, Pet, SATIATED, CHOKE, PET_HUNGRY, PET_MAX_BOND, PET_MAX_LOYAL, BOND_LABELS } from "./entities";
 import { Item, Inventory } from "./inventory";
-import { SAVE_VERSION, writeSave, readSave, clearSave, serFields, restoreFields, serItem, restoreItem, serDef, restoreDef, serFloorItem, restoreFloorItem } from "./save";
+import { SAVE_VERSION, migrateSave, writeSave, readSave, clearSave, serFields, restoreFields, serItem, restoreItem, serDef, restoreDef, serFloorItem, restoreFloorItem } from "./save";
 import { Log } from "./log";
 import type { LogWho } from "./log";
 import {
@@ -246,7 +246,9 @@ export class Game {
    *  restoring over a re-established peer link (host restores locally + ships this to the guest). */
   applySnapshot(data: Record<string, unknown>, role: "solo" | "host" | "guest" = "solo"): boolean {
     const meta = data.meta as Record<string, unknown>;
-    if ((data.version as number) !== SAVE_VERSION || !meta) return false;
+    // Upgrade an older save in place rather than rejecting it (never lose a run to a schema bump);
+    // only bail on a missing meta or a save from a NEWER build than this one (migrateSave → false).
+    if (!meta || !migrateSave(data)) return false;
     this.loadingSave = true;
     try {
       this.netRole = role; this.coop = role !== "solo";

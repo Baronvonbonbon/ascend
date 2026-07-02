@@ -8,6 +8,7 @@ const screen = document.getElementById("screen");
 const logEl = document.getElementById("log");
 if (screen && logEl) {
   const game = new Game(screen, logEl);
+  (window as unknown as { game: Game }).game = game; // debug handle — inspect live state from the console
   initLobby(game); // co-op (P2P) lobby — Stage 1: connection + channel self-test
 
   const archetype = document.getElementById("archetype") as HTMLSelectElement | null;

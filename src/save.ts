@@ -12,7 +12,33 @@ import { Item } from "./inventory";
 import { MONSTERS, MonsterDef, CHAINS, BRANCHES } from "./data";
 import type { Level } from "./level";
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
+
+// ── version migrations ───────────────────────────────────────────────────────
+// Each entry upgrades a save FROM version N to N+1; they run in sequence so a save from any past
+// version is brought current — a schema change never discards a run. Keep them small and data-only
+// (mutate the parsed snapshot in place). Structural entity/level drift is handled defensively at
+// restore time (entities construct-then-overwrite; Level.fromSnapshot defaults every field), so most
+// migrations are just a version bump; register one here only when the SHAPE of the data must change.
+const MIGRATIONS: Record<number, (d: Record<string, Json>) => void> = {
+  // v1 → v2: room lighting became source-driven (a `lightSources` list per floor). Old floors lack it;
+  // Level.fromSnapshot reconstructs the sources from the lit room centers, so there's nothing to
+  // rewrite at the top level — advancing the version is enough.
+  1: (_d) => { /* self-healed in Level.fromSnapshot */ },
+};
+
+/** Bring a parsed save up to the current SAVE_VERSION in place. Returns false only when the save is
+ *  from a NEWER build than this one (a future schema we must not guess at) — the caller then leaves
+ *  it untouched so the newer build can still load it. A save with no version is treated as v1. */
+export function migrateSave(data: Record<string, Json>): boolean {
+  let v = typeof data.version === "number" ? (data.version as number) : 1;
+  if (v > SAVE_VERSION) return false; // from the future — don't downgrade or corrupt it
+  while (v < SAVE_VERSION) {
+    MIGRATIONS[v]?.(data);
+    data.version = ++v;
+  }
+  return true;
+}
 
 // ── reference-type identity sets (shared, immutable defs) ────────────────────
 const itemTypeSet = new Set<object>(ITEMS);
@@ -138,8 +164,8 @@ export function restoreDef(d: Json): MonsterDef {
   return o.$mdefv as MonsterDef;
 }
 
-// ── IndexedDB storage (one continuable save at a fixed key) ──────────────────
-const DB = "ascend", STORE = "save", KEY = "run";
+// ── IndexedDB storage (a continuable save + a one-write-behind backup) ───────
+const DB = "ascend", STORE = "save", KEY = "run", BAK = "run.bak";
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB, 1);
@@ -156,9 +182,41 @@ async function tx<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBReq
     req.onerror = () => reject(req.error);
   });
 }
-export async function writeSave(data: object): Promise<void> { try { await tx("readwrite", (s) => s.put(data, KEY)); } catch { /* storage blocked — skip */ } }
-export async function readSave(): Promise<Record<string, Json> | null> { try { return (await tx<Record<string, Json>>("readonly", (s) => s.get(KEY))) ?? null; } catch { return null; } }
-export async function clearSave(): Promise<void> { try { await tx("readwrite", (s) => s.delete(KEY)); } catch { /* ignore */ } }
+/** Run several store ops in one transaction, resolving when the whole transaction commits. */
+async function txAll(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => void): Promise<void> {
+  const db = await openDB();
+  return new Promise<void>((resolve, reject) => {
+    const t = db.transaction(STORE, mode);
+    fn(t.objectStore(STORE));
+    t.oncomplete = () => resolve();
+    t.onerror = () => reject(t.error);
+    t.onabort = () => reject(t.error);
+  });
+}
+/** A save is usable only if it round-trips to a shape we recognize (an object with meta + a version). */
+function looksValid(d: unknown): d is Record<string, Json> {
+  return !!d && typeof d === "object" && !Array.isArray(d)
+    && "meta" in (d as object) && !!(d as Record<string, Json>).meta
+    && (typeof (d as Record<string, Json>).version === "number" || (d as Record<string, Json>).version === undefined);
+}
+async function readKey(key: string): Promise<Record<string, Json> | null> {
+  try { const d = await tx<Record<string, Json>>("readonly", (s) => s.get(key)); return looksValid(d) ? d : null; }
+  catch { return null; }
+}
+
+/** Persist the run, rotating the previous good save into a backup first — so a bad or interrupted
+ *  primary write is always recoverable to the state one action ago (autosave writes every turn). */
+export async function writeSave(data: object): Promise<void> {
+  try {
+    const prev = await tx<Record<string, Json>>("readonly", (s) => s.get(KEY)).catch(() => null);
+    await txAll("readwrite", (s) => { if (looksValid(prev)) s.put(prev, BAK); s.put(data, KEY); });
+  } catch { /* storage blocked / quota — skip this write, the last good save stands */ }
+}
+/** Load the continuable save; if the primary is missing or unreadable, fall back to the backup. */
+export async function readSave(): Promise<Record<string, Json> | null> {
+  return (await readKey(KEY)) ?? (await readKey(BAK));
+}
+export async function clearSave(): Promise<void> { try { await txAll("readwrite", (s) => { s.delete(KEY); s.delete(BAK); }); } catch { /* ignore */ } }
 
 // Level type re-export dodge for callers that build $level payloads.
 export type { Level };

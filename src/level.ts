@@ -91,24 +91,44 @@ export class Level {
     };
   }
 
-  /** Rebuild a Level from a snapshot without regenerating (the "sokoban" kind skips generation). */
+  /** Rebuild a Level from a snapshot without regenerating (the "sokoban" kind skips generation).
+   *  Defensive by design: the constructor seeds every field with a valid default, and each restore
+   *  below DEFAULTS anything missing (arrays → [], 2-D grids → rebuilt) — so a dropped, renamed, or
+   *  corrupt field can never crash the load or silently blank a floor. */
   static fromSnapshot(d: Record<string, unknown>): Level {
-    const lv = new Level(d.width as number, d.height as number, "sokoban");
-    (lv as { kind: LevelKind }).kind = d.kind as LevelKind; // restore the real kind (declared readonly)
-    lv.tiles = d.tiles as TileType[][]; lv.explored = d.explored as boolean[][];
-    lv.exploredCo = d.exploredCo as boolean[][]; lv.lit = d.lit as boolean[][];
-    lv.items = (d.items as unknown[]).map((x) => restoreFloorItem(x)).filter(Boolean) as unknown as Level["items"];
-    lv.graves = d.graves as Level["graves"]; lv.drawbridges = d.drawbridges as Level["drawbridges"];
-    lv.coopTuned = d.coopTuned as number;
-    lv.traps = d.traps as Level["traps"]; lv.engravings = d.engravings as Level["engravings"]; lv.boulders = d.boulders as Level["boulders"];
-    lv.portals = (d.portals as { x: number; y: number; quest?: boolean; chain: string }[])
+    const w = Number(d.width) > 0 ? (d.width as number) : 80;
+    const h = Number(d.height) > 0 ? (d.height as number) : 30;
+    const lv = new Level(w, h, "sokoban");
+    const grid = <T>(g: unknown, fill: T): T[][] =>
+      Array.isArray(g) && g.length === h && Array.isArray(g[0]) ? (g as T[][])
+        : Array.from({ length: h }, () => Array.from({ length: w }, () => fill));
+    const arr = <T>(a: unknown): T[] => (Array.isArray(a) ? (a as T[]) : []);
+    (lv as { kind: LevelKind }).kind = (d.kind as LevelKind) ?? "normal"; // restore the real kind (declared readonly)
+    lv.tiles = grid<TileType>(d.tiles, "wall");
+    lv.explored = grid<boolean>(d.explored, false);
+    lv.exploredCo = grid<boolean>(d.exploredCo, false);
+    lv.lit = grid<boolean>(d.lit, false);
+    lv.items = arr(d.items).map((x) => restoreFloorItem(x)).filter(Boolean) as unknown as Level["items"];
+    lv.graves = arr(d.graves) as Level["graves"]; lv.drawbridges = arr(d.drawbridges) as Level["drawbridges"];
+    lv.coopTuned = (d.coopTuned as number) ?? 0;
+    lv.traps = arr(d.traps) as Level["traps"]; lv.engravings = arr(d.engravings) as Level["engravings"]; lv.boulders = arr(d.boulders) as Level["boulders"];
+    lv.portals = arr<{ x: number; y: number; quest?: boolean; chain: string }>(d.portals)
       .map((p) => ({ x: p.x, y: p.y, quest: p.quest, chain: CHAINS.find((c) => c.id === p.chain)! }))
       .filter((p) => p.chain) as Level["portals"];
-    lv.branchEntries = d.branchEntries as Level["branchEntries"]; lv.roomCenters = d.roomCenters as Level["roomCenters"];
-    lv.lightSources = (d.lightSources as Level["lightSources"]) ?? [];
-    lv.start = d.start as { x: number; y: number }; lv.stairs = d.stairs as { x: number; y: number };
+    lv.branchEntries = arr(d.branchEntries) as Level["branchEntries"]; lv.roomCenters = arr(d.roomCenters) as Level["roomCenters"];
+    lv.lightSources = arr(d.lightSources) as Level["lightSources"];
+    lv.start = (d.start as { x: number; y: number }) ?? { x: 1, y: 1 }; lv.stairs = (d.stairs as { x: number; y: number }) ?? lv.start;
     lv.vault = d.vault as Level["vault"]; lv.vaultBreach = d.vaultBreach as Level["vaultBreach"]; lv.shop = d.shop as Level["shop"];
     lv.rebuildFloors();
+    if (lv.floors.length && lv.tiles[lv.start.y]?.[lv.start.x] !== "floor") lv.start = lv.floors[0]; // a corrupt start snaps to real ground
+    // Self-heal pre-v2 lighting: a floor saved before source-driven lighting has a lit map but no
+    // `lightSources`, so the first door-open would rebuild lighting from nothing and blank the whole
+    // floor. Reconstruct the sources from the room centers that are currently lit, so computeLighting
+    // reproduces the glow. (Legitimately dark floors have no lit centers → they correctly stay dark.)
+    if (lv.lightSources.length === 0) {
+      const relit = lv.roomCenters.filter((c) => lv.lit[c.y]?.[c.x]);
+      if (relit.length) lv.lightSources = relit;
+    }
     return lv;
   }
 
@@ -422,9 +442,20 @@ export class Level {
    *  lit map from them. The sources are abstract points — no fixture is drawn; the room simply glows. */
   markLighting(litChance: number): void {
     this.lightSources = [];
-    if (this.kind === "bigroom") { for (const f of this.floors) this.lit[f.y][f.x] = true; return; } // the whole cavern is lit
+    if (this.kind === "bigroom") { for (const f of this.floors) { this.lit[f.y][f.x] = true; this.litBounds(f.x, f.y); } return; } // the whole cavern is lit, walls and all
     for (const c of this.roomCenters) if (ROT.RNG.getUniform() < litChance) this.lightSources.push({ x: c.x, y: c.y });
     this.computeLighting();
+  }
+
+  /** Light the walls & closed doors bounding a lit floor tile — their inner face glows, so a lit room
+   *  reads as a lit room (walls and all) even from across the floor, while light never floods THROUGH
+   *  them (propagation stays on open tiles). Without this, only the floor lit and walls needed touching. */
+  private litBounds(x: number, y: number): void {
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue;
+      const t = this.tiles[y + dy]?.[x + dx];
+      if (t === "wall" || t === "doorClosed" || t === "doorLocked" || t === "doorHidden") this.lit[y + dy][x + dx] = true;
+    }
   }
 
   /** (Re)compute the lit map as the union of radial light from each source, spilling through OPEN doors
@@ -437,6 +468,7 @@ export class Level {
       const seen = new Set<string>([`${s.x},${s.y}`]); const q = [{ x: s.x, y: s.y, d: 0 }];
       while (q.length) {
         const cur = q.shift()!; this.lit[cur.y][cur.x] = true;
+        this.litBounds(cur.x, cur.y); // …and glow the walls/closed doors that hem this tile in
         if (cur.d >= radius) continue;
         for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]) {
           const nx = cur.x + dx, ny = cur.y + dy, k = `${nx},${ny}`;
