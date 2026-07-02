@@ -96,7 +96,7 @@ export class Player extends Entity {
   webbed = 0;          // turns caught in a honeypot web — struggle (STR) to tear free before you can move
   silenced = 0;        // turns of magical silence — can't cast extrinsics; in co-op, can't be heard (no chat)
   statDrain: Record<string, number> = {}; // attribute points drained by a mind flayer — restored by prayer
-  intrinsics = new Set<string>(); // poisonResist, petrifyResist, drainResist, fireResist, coldResist, shockResist, fast, telepathy, seeInvis, infravision (corpses/race)
+  intrinsics = new Set<string>(); // poisonResist, petrifyResist, drainResist, fire/cold/shock/disintResist, fast, telepathy, seeInvis, infravision (corpses/race)
   skillXp: Record<string, number> = {};   // landed hits per weapon-skill class (#enhance)
   skillRank: Record<string, number> = {};  // 0 Unskilled · 1 Basic · 2 Skilled · 3 Expert
   offhand: Item | null = null;             // a second weapon for #twoweapon (X)

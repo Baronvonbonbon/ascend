@@ -264,11 +264,12 @@ export interface MonsterDef {
   inflict?: "poison" | "confuse"; // status applied on a hit (30% chance)
   ranged?: boolean;      // fires at the player from a distance with line-of-sight
   breath?: number;       // a dragon-style breath ray (max damage) down a line
+  breathElement?: "fire" | "cold" | "shock" | "disint"; // what the breath deals (default fire); disint destroys armor / near-kills
   summons?: boolean;     // conjures more monsters
   cowardly?: boolean;    // flees once badly hurt
   heals?: boolean;       // a medic — mends wounded allies instead of fighting
   breeds?: boolean;      // multiplies when a pair of its kind is adjacent
-  corpseEffect?: "poisonous" | "petrify" | "speed" | "telepathy" | "levelup" | "fire" | "cold" | "shock" | "seeInvis"; // what eating its corpse does
+  corpseEffect?: "poisonous" | "petrify" | "speed" | "telepathy" | "levelup" | "fire" | "cold" | "shock" | "seeInvis" | "disint"; // what eating its corpse does
   corrodes?: boolean | number; // its touch may rust/corrode a worn armor piece — true = default chance (0.35), or a per-hit probability 0..1
   drains?: boolean;      // a barrow-wight (wraith) — its touch saps an level (XP level); eat its corpse to regain one
   steals?: boolean;      // a thief — snatches a pack item and flees (the the theft)
@@ -360,6 +361,7 @@ export const MONSTERS: MonsterDef[] = [
   // ── the deep Gehennom apex — the last terrors before Moloch ──
   { name: "a titan",            ch: "H", fg: "#d0a850", hp: 44, dmg: [7, 12], ai: "chase", minDepth: 30, weight: 1, throws: "rock", speed: 90 },
   { name: "a minotaur",         ch: "H", fg: "#e05030", hp: 52, dmg: [8, 14], ai: "chase", minDepth: 34, weight: 1, speed: 110 },
+  { name: "a void dragon",      ch: "D", fg: "#8040c0", hp: 56, dmg: [8, 14], ai: "chase", minDepth: 40, weight: 1, breath: 20, breathElement: "disint", fearless: true, corpseEffect: "disint" }, // breathes unmaking — destroys armor or near-kills; its corpse grants disintegration resistance
   { name: "a death knight",     ch: "&", fg: "#c03030", hp: 50, dmg: [7, 13], ai: "chase", minDepth: 38, weight: 1, drains: true, fearless: true, muse: true, corpseEffect: "levelup" },
 ];
 

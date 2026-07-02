@@ -550,7 +550,7 @@ export class Game {
     this.log.add(`— ${p.name === "you" ? "You" : p.name}, ${p.title ? p.title + " " : ""}${raceName(raceById(p.race))} ${archetypeName(archetypeById(p.archetype))} · ${ethosName(p.ethos)} · level ${p.level} —`, "sys");
     this.log.add(`  ${ATTRS.map((a) => `${ATTR_LABEL[a]} ${p[a]}`).join("  ")}`, "dim");
     this.log.add(`  HP ${p.hp}/${p.maxHp}  AC ${p.ac}  Fortune ${this.luckOf(p) >= 0 ? "+" : ""}${this.luckOf(p)}  XP ${p.xp}/${this.xpForLevel(p.level + 1)}`, "dim");
-    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", drainResist: "drain resist", fireResist: "fire resist", coldResist: "cold resist", shockResist: "shock resist", fast: "fast", telepathy: "telepathy", seeInvis: "see invisible", infravision: "infravision" } as Record<string, string>)[i] ?? i);
+    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", drainResist: "drain resist", fireResist: "fire resist", coldResist: "cold resist", shockResist: "shock resist", fast: "fast", telepathy: "telepathy", seeInvis: "see invisible", infravision: "infravision", disintResist: "disintegration resist" } as Record<string, string>)[i] ?? i);
     if (intr.length) this.log.add(`  Intrinsics: ${intr.join(", ")}.`, "good");
     if (p.spells.size) this.log.add(`  Energy ${p.energy}/${p.maxEnergy}. ${"Spells"}: ${[...p.spells].map((id) => { const s = spellById(id); return s ? spellName(s) : id; }).join(", ")}. (Z to cast)`, "sys");
     this.log.add(`  ${"Alignment"}: ${ethosName(p.ethos)}, favor ${p.favor}${p.crowned ? ` — ${"Knighted"} ${p.title}` : ""}.`, "dim");
@@ -571,7 +571,7 @@ export class Game {
     const skills = Object.keys(p.skillXp);
     if (skills.length) this.log.add(`  Skills: ${skills.map((c) => `${SKILL_LABEL[c] ?? c} ${SKILL_RANKS[p.skillRank[c] ?? 0]}`).join(", ")}.`, "dim");
     // intrinsics + spells
-    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", drainResist: "drain resist", fireResist: "fire resist", coldResist: "cold resist", shockResist: "shock resist", fast: "fast", telepathy: "telepathy", seeInvis: "see invisible", infravision: "infravision" } as Record<string, string>)[i] ?? i);
+    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", drainResist: "drain resist", fireResist: "fire resist", coldResist: "cold resist", shockResist: "shock resist", fast: "fast", telepathy: "telepathy", seeInvis: "see invisible", infravision: "infravision", disintResist: "disintegration resist" } as Record<string, string>)[i] ?? i);
     if (intr.length) this.log.add(`  Intrinsics: ${intr.join(", ")}.`, "good");
     if (p.spells.size) this.log.add(`  Extrinsics: ${[...p.spells].map((id) => spellById(id)?.name ?? id).join(", ")}.`, "dim");
     // active afflictions / timeouts
@@ -3171,7 +3171,8 @@ export class Game {
     const p = this.nearestPlayer(m.x, m.y);
     const dx = Math.sign(p.x - m.x), dy = Math.sign(p.y - m.y);
     if (dx === 0 && dy === 0) return;
-    this.log.add(`${cap(m.name)} breathes a searing gout of restoration!`, "bad", p);
+    const element = m.def.breathElement ?? "fire";
+    this.log.add(element === "disint" ? `${cap(m.name)} breathes a beam of unmaking!` : `${cap(m.name)} breathes a searing gout of restoration!`, "bad", p);
     const max = m.def.breath ?? 10;
     this.castRay(m.x, m.y, dx, dy, 6, (e) => {
       if (e === m) return;
@@ -3179,13 +3180,27 @@ export class Game {
       if (e instanceof Player && this.reflects(e)) { // the breath rebounds off the mirror onto the dragon
         e.amulet!.bucKnown = true;
         m.hp -= d;
-        this.log.add(`The breath rebounds off ${e.name === "you" ? "your" : e.name + "'s"} mirror, searing ${m.name} for ${d}!`, "good", e);
+        this.log.add(`The breath rebounds off ${e.name === "you" ? "your" : e.name + "'s"} mirror, ${element === "disint" ? "unmaking" : "searing"} ${m.name} for ${d}!`, "good", e);
         if (m.hp <= 0) this.kill(m);
         return;
       }
-      if (this.elementResisted(e, "fire")) return; // a fire-resistant target shrugs off the searing breath
+      if (this.elementResisted(e, element)) return; // a resistant target shrugs off the breath
+      // Disintegration: a worn armor piece takes the blast and crumbles (saving you once); with nothing
+      // worn, the unmaking tears through for near-lethal damage.
+      if (element === "disint" && e instanceof Player) {
+        if (e.wornArmor.length) {
+          const gone = ROT.RNG.getItem(e.wornArmor)!;
+          e.wornArmor = e.wornArmor.filter((a) => a !== gone); e.inventory.remove(gone); e.recomputeAC();
+          this.log.add(`The beam of unmaking strikes ${e.name} — ${this.ident.name(gone.type)} crumbles to nothing, absorbing the blast!`, "bad", e);
+        } else {
+          const dd = Math.max(d, e.maxHp); e.hp -= dd;
+          this.log.add(`The beam of unmaking tears through ${e.name} for ${dd} — nothing to shield you!`, "bad", e);
+          if (e.hp <= 0) this.killPlayer(e);
+        }
+        return;
+      }
       e.hp -= d;
-      if (e instanceof Player) { this.log.add(`The breath sears ${e.name} for ${d}!`, "bad", e); if (e.hp <= 0) this.killPlayer(e); else this.burnGear(e); }
+      if (e instanceof Player) { this.log.add(`The breath sears ${e.name} for ${d}!`, "bad", e); if (e.hp <= 0) this.killPlayer(e); else if (element === "fire") this.burnGear(e); }
       else if (e instanceof Monster && e.hp <= 0) this.kill(e);
     });
   }
@@ -3575,14 +3590,14 @@ export class Game {
   /** Trace a ray that bounces off walls, calling onHit for each entity (monster or player)
    *  it passes through — so a careless shot down a short corridor can carom back onto you. */
   /** A resistant player takes no elemental (fire/cold/shock) damage — a full shrug, with a note. */
-  private elementResisted(e: Entity, element: "fire" | "cold" | "shock"): boolean {
-    const key = element === "fire" ? "fireResist" : element === "cold" ? "coldResist" : "shockResist";
+  private elementResisted(e: Entity, element: "fire" | "cold" | "shock" | "disint"): boolean {
+    const key = element === "fire" ? "fireResist" : element === "cold" ? "coldResist" : element === "shock" ? "shockResist" : "disintResist";
     const ringRes = e instanceof Player && ((element === "fire" && e.ringFireRes) || (element === "cold" && e.ringColdRes) || (element === "shock" && e.ringShockRes));
-    const scaleId = element === "fire" ? "scale_red" : element === "cold" ? "scale_white" : "scale_blue";
-    const scaleRes = e instanceof Player && e.wornArmor.some((a) => a.type.id === scaleId); // dragon-scale mail grants the matching resistance while worn
+    const scaleId = element === "fire" ? "scale_red" : element === "cold" ? "scale_white" : element === "shock" ? "scale_blue" : null;
+    const scaleRes = e instanceof Player && scaleId != null && e.wornArmor.some((a) => a.type.id === scaleId); // dragon-scale mail grants the matching resistance while worn
     if (e instanceof Player && (e.intrinsics.has(key) || ringRes || scaleRes)) {
-      const what = element === "fire" ? "The flames wash over you harmlessly" : element === "cold" ? "The killing cold cannot touch you" : "The current earths itself through you harmlessly";
-      this.log.add(`${what} — ${element} resistance!`, "good", e);
+      const what = element === "fire" ? "The flames wash over you harmlessly" : element === "cold" ? "The killing cold cannot touch you" : element === "shock" ? "The current earths itself through you harmlessly" : "The unmaking washes over you and passes on";
+      this.log.add(`${what} — ${element === "disint" ? "disintegration" : element} resistance!`, "good", e);
       return true;
     }
     return false;
@@ -4439,6 +4454,8 @@ export class Game {
       if (!p.intrinsics.has("shockResist") && ROT.RNG.getUniform() < 0.5) { p.intrinsics.add("shockResist"); this.log.add("Static crackles off you harmlessly — shock resistance!", "good"); }
     } else if (def.corpseEffect === "seeInvis") {
       if (!p.intrinsics.has("seeInvis")) { p.intrinsics.add("seeInvis"); this.log.add("The unseen swims into focus — you can see invisible things now.", "good"); }
+    } else if (def.corpseEffect === "disint") {
+      if (!p.intrinsics.has("disintResist") && ROT.RNG.getUniform() < 0.5) { p.intrinsics.add("disintResist"); this.log.add("Your form knits itself against unmaking — disintegration resistance!", "good"); }
     } else if (rotten && !(p.intrinsics.has("poisonResist") || p.ringPoisonRes) && ROT.RNG.getUniform() < 0.5) {
       p.illness = 8;
       this.log.add("That was rotten — a bad block churns in you. (cure it before it's fatal)", "bad");
