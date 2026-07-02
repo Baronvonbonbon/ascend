@@ -49,6 +49,7 @@ export abstract class Entity {
 // Chebyshev (8-dir) movement deltas keyed by KeyboardEvent.key.
 export const SATIATED = 2000; // over-full: eating more warns, then risks choking
 export const CHOKE = 2900;     // gorge past this and you choke on your food
+export const LAMP_FUEL_MAX = 800; // turns of oil a fresh lit lamp burns before it guts out
 
 const MOVES: Record<string, [number, number]> = {
   ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
@@ -354,6 +355,7 @@ export class Player extends Entity {
     this.game.checkShopBill(this);   // left the shop carrying unpaid wares? settle the bill (or be named a thief)
     if (this.autoSearch) this.game.autoSearchAround(this); // ring of searching — reveal adjacent hidden things
     if (this.senseTurns > 0) this.senseTurns--;
+    this.tickLampFuel();
     if (this.hasteTurns > 0 && --this.hasteTurns === 0) this.game.log.add(`${this.name === "you" ? "You slow" : this.name + " slows"} back to normal.`, "dim");
     if (this.slowTurns > 0 && --this.slowTurns === 0) this.game.log.add(`${this.name === "you" ? "The congestion clears — your stride returns" : this.name + "'s stride returns"}.`, "good");
     // Natural regeneration (faster with a ring of regeneration; not while starving/poisoned).
@@ -367,6 +369,20 @@ export class Player extends Entity {
     this.resolveTurn = null;
     if (r) r();
     return true;
+  }
+
+  /** A lit oil lamp burns its oil each turn; low on fuel it flickers a warning, and when it runs dry
+   *  it gutters out. A doused lamp keeps whatever oil is left; a spent one (fuel 0) can't be relit. */
+  private tickLampFuel(): void {
+    for (const it of this.inventory.items) {
+      if (it.type.id !== "lamp" || !it.lit) continue;
+      it.fuel = (it.fuel ?? LAMP_FUEL_MAX) - 1;
+      if (it.fuel <= 0) {
+        it.fuel = 0; it.lit = false;
+        this.game.log.add(`${this.name === "you" ? "Your" : this.name + "'s"} lamp sputters and dies — out of oil.`, "bad", this);
+        this.game.recomputeFOV(); this.game.draw();
+      } else if (it.fuel === 60) this.game.log.add(`${this.name === "you" ? "Your" : this.name + "'s"} lamp flame gutters — the oil is running low.`, "sys", this);
+    }
   }
 
   private tickHunger(): void {
@@ -572,8 +588,10 @@ export class Player extends Entity {
         return false;
       }
       if (id === "lamp") {
+        if (item.fuel === undefined) item.fuel = LAMP_FUEL_MAX; // a fresh lamp starts with a full reservoir
+        if (!item.lit && item.fuel <= 0) { this.game.log.add("The lamp is bone-dry — no oil left to light.", "dim"); return false; }
         item.lit = !item.lit;
-        this.game.log.add(item.lit ? "You light the lamp — its glow pushes back the dark." : "You douse the lamp.", item.lit ? "good" : "dim");
+        this.game.log.add(item.lit ? "You light the lamp — its glow pushes back the dark." : "You douse the lamp — saving what oil is left.", item.lit ? "good" : "dim");
         this.game.recomputeFOV(); this.game.draw();
         return this.endTurn();
       }

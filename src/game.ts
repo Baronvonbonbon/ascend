@@ -1,6 +1,6 @@
 import * as ROT from "rot-js";
 import { Level, Trap, TrapKind, LevelKind, FloorItem } from "./level";
-import { Entity, Player, Monster, Pet, SATIATED, CHOKE, PET_HUNGRY, PET_MAX_BOND, PET_MAX_LOYAL, BOND_LABELS } from "./entities";
+import { Entity, Player, Monster, Pet, SATIATED, CHOKE, PET_HUNGRY, PET_MAX_BOND, PET_MAX_LOYAL, BOND_LABELS, LAMP_FUEL_MAX } from "./entities";
 import { Item, Inventory } from "./inventory";
 import { SAVE_VERSION, migrateSave, writeSave, readSave, clearSave, serFields, restoreFields, serItem, restoreItem, serDef, restoreDef, serFloorItem, restoreFloorItem } from "./save";
 import { Log } from "./log";
@@ -4455,7 +4455,7 @@ export class Game {
       const welded = who.isWelded(it);
       const eq = welded ? " (welded)" : it === who.weapon ? " (wielded)" : it === who.offhand ? " (off-hand)" : who.wornArmor.includes(it) ? " (worn)" : it === who.ring ? " (on hand)" : it === who.amulet ? " (around your neck)" : it === who.quiver ? " (at the ready)" : "";
       const lbl = it.label ? ` named "${it.label}"` : "";
-      const ch = it.charges != null ? ` [${it.charges}]` : it.type.id === "vault" ? ` {${it.contents?.length ?? 0} held}` : "";
+      const ch = it.charges != null ? ` [${it.charges}]` : it.type.id === "vault" ? ` {${it.contents?.length ?? 0} held}` : it.type.id === "lamp" ? ` (${it.lit ? "lit, " : ""}oil ${it.fuel ?? LAMP_FUEL_MAX})` : "";
       const relic = it.relic ? ` +${it.enchant ?? 0} ✦` : "";
       const buc = it.bucKnown && it.buc ? `${it.buc} ` : "";
       const ero = it.erosion ? (["", "rusty ", "corroded ", "very corroded "][it.erosion] ?? "") : (it.proofed ? "blessed " : "");

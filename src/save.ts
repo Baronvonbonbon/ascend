@@ -191,7 +191,7 @@ export function restoreFields(target: object, data: Record<string, Json>): void 
 export function serItem(it: Item): Json {
   return {
     type: it.type.id, charges: it.charges, enchant: it.enchant, relic: it.relic, buc: it.buc, bucKnown: it.bucKnown,
-    erosion: it.erosion, proofed: it.proofed, label: it.label, lit: it.lit, unpaid: it.unpaid,
+    erosion: it.erosion, proofed: it.proofed, label: it.label, lit: it.lit, fuel: it.fuel, unpaid: it.unpaid,
     contents: it.contents ? it.contents.map(serItem) : undefined,
   };
 }
@@ -200,7 +200,7 @@ export function restoreItem(d: Json): Item | null {
   const type = itemById(o.type as string);
   if (!type) return null;
   const it: Item = { type };
-  for (const k of ["charges", "enchant", "relic", "buc", "bucKnown", "erosion", "proofed", "label", "lit", "unpaid"] as const) {
+  for (const k of ["charges", "enchant", "relic", "buc", "bucKnown", "erosion", "proofed", "label", "lit", "fuel", "unpaid"] as const) {
     if (o[k] !== undefined && o[k] !== null) (it as unknown as Record<string, Json>)[k] = o[k];
   }
   if (o.contents) it.contents = (o.contents as Json[]).map(restoreItem).filter((x): x is Item => !!x);
