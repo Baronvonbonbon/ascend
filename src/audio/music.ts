@@ -300,7 +300,8 @@ export class MusicEngine {
   // ── unified groove layer: ONE continuous 16th clock; sections (explore / idle) swap only on bar
   //    lines, bridged by a tune-specific fill — nothing resets mid-bar, so returns never clutter ──
   private grooveBus!: GainNode;      // drums + bass — dry, punchy, bypasses the threat murk
-  private sfxBus!: GainNode;         // foley one-shots (footsteps, doors, pickups, ambience, creature cues)
+  private sfxBus!: GainNode;         // foley one-shots (footsteps, doors, pickups, combat, effects)
+  private ambBus!: GainNode;         // ambience + creature cues — a louder makeup sub-bus feeding sfxBus
   private nextAmb = 0;               // next environment-ambience one-shot
   private nextBeastCue = 0;          // next nearby-creature foley cue
   private gState: "off" | "explore" | "idle" = "off";
@@ -350,16 +351,26 @@ export class MusicEngine {
   private shuffleUntil = 0;
 
   private _volume = 1;
+  // SFX (foley/combat/ambience) is its OWN channel — separate enable + volume, routed past the music
+  // master so it plays even with the music off and can be balanced independently.
+  private _sfxEnabled = true;
+  private _sfxVolume = 1;
+  private sfxMaster!: GainNode;
   constructor() {
     this._enabled = localStorage.getItem("ascend.audio") === "on";
     this._mode = localStorage.getItem("ascend.audio.mode") || "auto";
     const v = parseFloat(localStorage.getItem("ascend.audio.vol") ?? "1");
     this._volume = isNaN(v) ? 1 : Math.max(0, Math.min(1, v));
+    this._sfxEnabled = localStorage.getItem("ascend.sfx") !== "off"; // SFX default ON (music defaults off)
+    const sv = parseFloat(localStorage.getItem("ascend.sfx.vol") ?? "1");
+    this._sfxVolume = isNaN(sv) ? 1 : Math.max(0, Math.min(1, sv));
   }
 
   get enabled(): boolean { return this._enabled; }
   get mode(): string { return this._mode; }
   get volume(): number { return this._volume; }
+  get sfxEnabled(): boolean { return this._sfxEnabled; }
+  get sfxVolume(): number { return this._sfxVolume; }
 
   /** Master volume 0..1 (scales the base mix level). Persisted; applied live. */
   setVolume(v: number): void {
@@ -367,10 +378,27 @@ export class MusicEngine {
     localStorage.setItem("ascend.audio.vol", String(this._volume));
     if (this.master && this.ctx) this.master.gain.setTargetAtTime(0.6 * this._volume, this.ctx.currentTime, 0.08);
   }
+
+  /** Toggle the SFX channel independently of the music. Enabling it also unlocks the audio context. */
+  toggleSfx(): boolean { this.setSfxEnabled(!this._sfxEnabled); return this._sfxEnabled; }
+  setSfxEnabled(on: boolean): void {
+    this._sfxEnabled = on;
+    localStorage.setItem("ascend.sfx", on ? "on" : "off");
+    if (on) { this.ensureContext(); this.resume(); }
+  }
+  /** SFX volume 0..1 — independent of the music slider; a healthy makeup keeps foley clear over the mix. */
+  setSfxVolume(v: number): void {
+    this._sfxVolume = Math.max(0, Math.min(1, v));
+    localStorage.setItem("ascend.sfx.vol", String(this._sfxVolume));
+    if (this.sfxMaster && this.ctx) this.sfxMaster.gain.setTargetAtTime(1.35 * this._sfxVolume, this.ctx.currentTime, 0.05);
+  }
   get trackList(): { id: string; name: string }[] { return BASES.map((t) => ({ id: t.id, name: t.name })); }
 
   /** Resume the context after a user gesture (autoplay policy). */
   resume(): void { if (this.ctx && this.ctx.state === "suspended") void this.ctx.resume(); }
+
+  /** Create + resume the audio context on a user gesture — so SFX can play even when the music is off. */
+  unlock(): void { this.ensureContext(); this.resume(); }
 
   toggle(): boolean { this.setEnabled(!this._enabled); return this._enabled; }
 
@@ -472,12 +500,19 @@ export class MusicEngine {
     const gWet = this.ctx.createGain(); gWet.gain.value = 0.1;
     this.grooveBus.connect(gDry).connect(this.master);
     this.grooveBus.connect(gWet).connect(this.reverb);
-    // the foley/SFX bus — one-shots (footsteps, doors, pickups, ambience, creature cues). Dry so they
-    // read clearly, with a modest reverb send for room. Rides the master, so it obeys the volume slider.
-    this.sfxBus = this.ctx.createGain(); this.sfxBus.gain.value = 0.9;
-    const fWet = this.ctx.createGain(); fWet.gain.value = 0.18;
-    this.sfxBus.connect(this.master);
+    // the foley/SFX bus — one-shots (footsteps, doors, pickups, ambience, creature cues). Routed through
+    // its OWN master (sfxMaster) straight to the destination — independent of the music volume/enable, with
+    // a healthy makeup so foley + combat read CLEARLY over the groove. A modest reverb send adds room.
+    this.sfxMaster = this.ctx.createGain(); this.sfxMaster.gain.value = 1.35 * this._sfxVolume;
+    this.sfxMaster.connect(this.ctx.destination);
+    this.sfxBus = this.ctx.createGain(); this.sfxBus.gain.value = 1.0;
+    const fWet = this.ctx.createGain(); fWet.gain.value = 0.16;
+    this.sfxBus.connect(this.sfxMaster);
     this.sfxBus.connect(fWet).connect(this.reverb);
+    // ambience/creature-cue sub-bus — a makeup so the atmospheric one-shots (which use gentle peaks)
+    // sit audibly in the mix without having to re-scale every cue's literal level.
+    this.ambBus = this.ctx.createGain(); this.ambBus.gain.value = 2.0;
+    this.ambBus.connect(this.sfxBus);
     // a low rumble (filtered noise) that swells when a boss looms
     this.noiseBuf = this.makeNoise(2);
     const rumble = this.ctx.createBufferSource(); rumble.buffer = this.noiseBuf; rumble.loop = true;
@@ -857,10 +892,10 @@ export class MusicEngine {
     const f = 900 + Math.random() * 700;
     osc.frequency.setValueAtTime(f, when); osc.frequency.exponentialRampToValueAtTime(f * 0.45, when + 0.12);
     const g = ctx.createGain(); g.gain.setValueAtTime(0, when);
-    g.gain.linearRampToValueAtTime(0.05, when + 0.005);
+    g.gain.linearRampToValueAtTime(0.085, when + 0.005);
     g.gain.exponentialRampToValueAtTime(0.0006, when + 0.18);
     g.gain.linearRampToValueAtTime(0, when + 0.21);
-    osc.connect(g).connect(this.active.bus);
+    osc.connect(g).connect(this.ambBus);
     osc.start(when); osc.stop(when + 0.22);
   }
 
@@ -885,7 +920,7 @@ export class MusicEngine {
       src.connect(b).connect(merge);
     }
     const g = ctx.createGain(); g.gain.setValueAtTime(0, when);
-    g.gain.linearRampToValueAtTime(deep ? 0.06 : 0.045, when + dur * 0.45); // a slow swell in
+    g.gain.linearRampToValueAtTime(deep ? 0.11 : 0.085, when + dur * 0.45); // a slow swell in
     g.gain.linearRampToValueAtTime(0.0001, when + dur);                     // and fade to nothing
     merge.connect(g).connect(bus);
     src.start(when); src.stop(when + dur + 0.1); lfo.start(when); lfo.stop(when + dur + 0.1);
@@ -906,60 +941,66 @@ export class MusicEngine {
     o.connect(f).connect(g).connect(bus); o.start(when); o.stop(when + dur + 0.05);
   }
 
-  /** Trigger a foley one-shot for a game action/feature (routed dry through the SFX bus). */
+  /** Trigger a foley one-shot for a game action/feature. Its OWN channel (sfxMaster), so it plays even
+   *  with the music off; levels are set to sit CLEARLY over the groove. Repeated cues jitter their pitch
+   *  (and some pick among timbre variants) so the same action never sounds twice-identical. */
   sfx(kind: Sfx): void {
-    if (!this._enabled || !this.ctx) return;
+    this.ensureContext();
+    if (!this._sfxEnabled || !this.ctx) return;
+    if (this.ctx.state === "suspended") void this.ctx.resume();
     const now = this.ctx.currentTime, bus = this.sfxBus, r = this.active?.def.root ?? 110;
+    const jit = 0.9 + Math.random() * 0.2;                     // ±10% pitch jitter for variation
+    const pick = <T,>(...a: T[]): T => a[Math.floor(Math.random() * a.length)]; // random variant
     switch (kind) {
-      case "step":        this.noiseHit(now, 0.03, bus, 0.018, "lowpass", 360, 1); break;                                   // a soft low tick
-      case "step-water":  this.noiseHit(now, 0.14, bus, 0.06, "bandpass", 900, 0.6); this.noiseHit(now + 0.03, 0.1, bus, 0.035, "highpass", 3200, 0.5); break; // splash
-      case "step-bridge": this.note(150, now, 0.12, bus, "triangle", 0.05, 700); break;                                     // hollow wooden clonk
-      case "door":        this.tone(200, 130, 0.4, "sawtooth", 0.03, now, bus, 600); this.noiseHit(now + 0.34, 0.05, bus, 0.05, "lowpass", 300, 1); break; // creak + knock
-      case "kick":        this.kick(now, bus, 0.4, true); break;
-      case "boulder":     this.noiseHit(now, 0.55, bus, 0.13, "lowpass", 240, 1); break;                                    // low grinding sweep
-      case "sink":        for (let i = 0; i < 4; i++) this.note(200 + Math.random() * 140, now + i * 0.06, 0.09, bus, "sine", 0.03, 700); break; // gurgle
-      case "throne":      this.tone(r * 0.5, r * 0.5, 0.8, "sine", 0.12, now, bus, 400); break;                             // low hum swell
-      case "stairs-down": this.tone(semi(r, 12), semi(r, 0), 0.4, "triangle", 0.05, now, bus, 2600); break;                 // a falling tone
-      case "stairs-up":   this.tone(semi(r, 0), semi(r, 12), 0.4, "triangle", 0.05, now, bus, 2600); break;                 // a rising tone
-      case "pickup":      this.note(semi(r, 12) * 2, now, 0.08, bus, "square", 0.05, 4200); this.note(semi(r, 19) * 2, now + 0.05, 0.08, bus, "square", 0.05, 4200); break; // bright clink
-      case "coin":        for (let i = 0; i < 3; i++) this.note(semi(r, [12, 16, 19][i]) * 2, now + i * 0.05, 0.13, bus, "triangle", 0.045, 5200); break; // jingle
-      case "drop":        this.noiseHit(now, 0.08, bus, 0.06, "lowpass", 480, 1); break;                                    // soft thud
-      case "quaff":       this.tone(620, 190, 0.28, "sine", 0.06, now, bus, 1400); break;                                   // a glug
-      case "read":        this.noiseHit(now, 0.2, bus, 0.05, "highpass", 4200, 0.4); break;                                 // paper crinkle
-      case "zap":         this.tone(300, 2600, 0.26, "sawtooth", 0.05, now, bus, 5000); break;                              // a whoosh
-      case "eat":         for (let i = 0; i < 3; i++) this.noiseHit(now + i * 0.11, 0.06, bus, 0.05, "bandpass", 800 + Math.random() * 400, 3); break; // crunch
-      case "equip":       this.noiseHit(now, 0.08, bus, 0.06, "highpass", 5200, 0.5); this.note(semi(r, 7) * 2, now, 0.16, bus, "triangle", 0.04, 3000); break; // metallic shing
-      case "forge":       this.noiseHit(now, 0.05, bus, 0.13, "bandpass", 1400, 4); this.noiseHit(now + 0.14, 0.05, bus, 0.1, "bandpass", 1900, 4); this.note(semi(r, 19) * 2, now + 0.14, 0.55, bus, "triangle", 0.05, 4200); break; // anvil clang + ring
-      // ── combat foley (uhitm/mhitu) — subtle, sits under the tension layer ──
-      case "hit":         this.noiseHit(now, 0.07, bus, 0.1, "lowpass", 440, 1); this.note(120, now, 0.06, bus, "triangle", 0.05, 500); break; // a fleshy thud
-      case "miss":        this.noiseHit(now, 0.13, bus, 0.045, "bandpass", 1700, 0.5); this.noiseHit(now + 0.04, 0.09, bus, 0.03, "highpass", 3400, 0.5); break; // a whiff of air
-      case "hurt":        this.kick(now, bus, 0.24); this.tone(180, 120, 0.18, "sawtooth", 0.045, now, bus, 500); break; // a heavy graceless jolt + grunt
-      case "death":       this.tone(semi(r, 0), semi(r, -12), 0.4, "sawtooth", 0.05, now, bus, 800); this.noiseHit(now, 0.3, bus, 0.06, "lowpass", 480, 0.7); break; // a downward crumble
-      case "fx-poison":   for (let i = 0; i < 4; i++) this.note(160 + Math.random() * 90, now + i * 0.05, 0.13, bus, "sine", 0.03, 600); this.noiseHit(now, 0.3, bus, 0.03, "bandpass", 900, 1); break; // a toxic bubbling sizzle
-      case "fx-fire":     this.tone(360, 1700, 0.32, "sawtooth", 0.045, now, bus, 4000); this.noiseHit(now, 0.36, bus, 0.07, "highpass", 2400, 0.4); break; // a roaring whoosh
-      case "fx-cold":     for (const s of [12, 16, 19]) this.note(semi(r, s) * 4, now + (s % 3) * 0.02, 0.5, bus, "triangle", 0.028, 6500); this.noiseHit(now, 0.05, bus, 0.05, "highpass", 8000, 0.6); break; // a brittle crystalline shatter
-      case "fx-shock":    for (let i = 0; i < 6; i++) this.noiseHit(now + i * 0.018, 0.02, bus, 0.05, "highpass", 6800 + Math.random() * 1500, 1); this.note(semi(r, 24) * 2, now, 0.12, bus, "square", 0.03, 6000); break; // a crackling arc
-      case "fx-drain":    this.tone(semi(r, 7) * 2, semi(r, -3), 0.75, "sine", 0.05, now, bus, 1400); this.ghostVoice(now, false); break; // a wail of leaving vitality
-      case "fx-petrify":  this.noiseHit(now, 0.05, bus, 0.11, "bandpass", 900, 3); this.noiseHit(now + 0.06, 0.28, bus, 0.08, "lowpass", 200, 0.8); this.note(90, now + 0.06, 0.3, bus, "triangle", 0.04, 300); break; // a stony crack, then a dull setting
-      case "fx-acid":     this.noiseHit(now, 0.42, bus, 0.05, "highpass", 3600, 0.5); this.noiseHit(now, 0.28, bus, 0.04, "bandpass", 1400, 1.2); break; // a corrosive hiss
+      case "step":        this.noiseHit(now, 0.035, bus, 0.05 * jit, "lowpass", 320 + Math.random() * 120, 1); break;      // a soft varied footfall
+      case "step-water":  this.noiseHit(now, 0.14, bus, 0.14, "bandpass", 800 + Math.random() * 300, 0.6); this.noiseHit(now + 0.03, 0.1, bus, 0.08, "highpass", 3200, 0.5); break; // splash
+      case "step-bridge": this.note(150 * jit, now, 0.12, bus, "triangle", 0.11, 700); break;                              // hollow wooden clonk
+      case "door":        this.tone(200 * jit, 130, 0.4, "sawtooth", 0.08, now, bus, 600); this.noiseHit(now + 0.34, 0.05, bus, 0.12, "lowpass", 300, 1); break; // creak + knock
+      case "kick":        this.kick(now, bus, 0.6, true); break;
+      case "boulder":     this.noiseHit(now, 0.55, bus, 0.3, "lowpass", 220 + Math.random() * 60, 1); break;               // low grinding sweep
+      case "sink":        for (let i = 0; i < 4; i++) this.note(200 + Math.random() * 140, now + i * 0.06, 0.09, bus, "sine", 0.08, 700); break; // gurgle
+      case "throne":      this.tone(r * 0.5, r * 0.5, 0.8, "sine", 0.24, now, bus, 400); break;                            // low hum swell
+      case "stairs-down": this.tone(semi(r, 12), semi(r, 0), 0.4, "triangle", 0.13, now, bus, 2600); break;                // a falling tone
+      case "stairs-up":   this.tone(semi(r, 0), semi(r, 12), 0.4, "triangle", 0.13, now, bus, 2600); break;                // a rising tone
+      case "pickup":      { const o = pick(0, 2, -2); this.note(semi(r, 12 + o) * 2, now, 0.08, bus, "square", 0.13, 4200); this.note(semi(r, 19 + o) * 2, now + 0.05, 0.08, bus, "square", 0.12, 4200); break; } // bright clink (varied)
+      case "coin":        for (let i = 0; i < 3; i++) this.note(semi(r, [12, 16, 19][i] + pick(0, 5, 7)) * 2, now + i * 0.05, 0.13, bus, "triangle", 0.12, 5200); break; // jingle (varied key)
+      case "drop":        this.noiseHit(now, 0.09, bus, 0.16, "lowpass", 420 + Math.random() * 120, 1); break;             // soft thud
+      case "quaff":       this.tone(620 * jit, 190, 0.28, "sine", 0.15, now, bus, 1400); break;                            // a glug
+      case "read":        this.noiseHit(now, 0.22, bus, 0.13, "highpass", 3800 + Math.random() * 800, 0.4); break;         // paper crinkle
+      case "zap":         this.tone(300 * jit, 2600, 0.26, "sawtooth", 0.13, now, bus, 5000); break;                       // a whoosh
+      case "eat":         for (let i = 0; i < 3; i++) this.noiseHit(now + i * 0.11, 0.06, bus, 0.13, "bandpass", 700 + Math.random() * 600, 3); break; // crunch (varied)
+      case "equip":       this.noiseHit(now, 0.08, bus, 0.14, "highpass", 5200, 0.5); this.note(semi(r, 7) * 2 * jit, now, 0.16, bus, "triangle", 0.1, 3000); break; // metallic shing
+      case "forge":       this.noiseHit(now, 0.05, bus, 0.3, "bandpass", 1400, 4); this.noiseHit(now + 0.14, 0.05, bus, 0.24, "bandpass", 1900, 4); this.note(semi(r, 19) * 2, now + 0.14, 0.55, bus, "triangle", 0.12, 4200); break; // anvil clang + ring
+      // ── combat foley (uhitm/mhitu) — up front and varied so every blow reads ──
+      case "hit":         { const f = pick(380, 440, 500); this.noiseHit(now, 0.07, bus, 0.24, "lowpass", f, 1); this.note(110 * jit, now, 0.06, bus, "triangle", 0.14, 500); if (Math.random() < 0.4) this.noiseHit(now + 0.02, 0.04, bus, 0.1, "bandpass", 1400, 2); break; } // a fleshy thud (+ occasional smack)
+      case "miss":        this.tone(1100 * jit, 500, 0.13, "sawtooth", 0.06, now, bus, 3200); this.noiseHit(now, 0.12, bus, 0.1, "highpass", 3200 + Math.random() * 900, 0.5); break; // a whiff of air
+      case "hurt":        this.kick(now, bus, 0.5); this.tone(180 * jit, 110, 0.2, "sawtooth", 0.13, now, bus, 500); break; // a heavy jolt + grunt
+      case "death":       { const drop = pick(-12, -10, -14); this.tone(semi(r, 0), semi(r, drop), 0.42, "sawtooth", 0.14, now, bus, 800); this.noiseHit(now, 0.32, bus, 0.16, "lowpass", 460, 0.7); break; } // a downward crumble (varied)
+      case "fx-poison":   for (let i = 0; i < 4; i++) this.note(160 + Math.random() * 120, now + i * 0.05, 0.13, bus, "sine", 0.1, 600); this.noiseHit(now, 0.3, bus, 0.09, "bandpass", 900, 1); break; // a toxic bubbling sizzle
+      case "fx-fire":     this.tone(360, 1700, 0.32, "sawtooth", 0.14, now, bus, 4000); this.noiseHit(now, 0.36, bus, 0.2, "highpass", 2400, 0.4); break; // a roaring whoosh
+      case "fx-cold":     for (const s of [12, 16, 19]) this.note(semi(r, s) * 4, now + (s % 3) * 0.02, 0.5, bus, "triangle", 0.09, 6500); this.noiseHit(now, 0.05, bus, 0.14, "highpass", 8000, 0.6); break; // a brittle crystalline shatter
+      case "fx-shock":    for (let i = 0; i < 6; i++) this.noiseHit(now + i * 0.018, 0.02, bus, 0.14, "highpass", 6800 + Math.random() * 1500, 1); this.note(semi(r, 24) * 2, now, 0.12, bus, "square", 0.1, 6000); break; // a crackling arc
+      case "fx-drain":    this.tone(semi(r, 7) * 2, semi(r, -3), 0.75, "sine", 0.14, now, bus, 1400); this.ghostVoice(now, false); break; // a wail of leaving vitality
+      case "fx-petrify":  this.noiseHit(now, 0.05, bus, 0.26, "bandpass", 900, 3); this.noiseHit(now + 0.06, 0.28, bus, 0.2, "lowpass", 200, 0.8); this.note(90, now + 0.06, 0.3, bus, "triangle", 0.11, 300); break; // a stony crack, then a dull setting
+      case "fx-acid":     this.noiseHit(now, 0.42, bus, 0.14, "highpass", 3600, 0.5); this.noiseHit(now, 0.28, bus, 0.11, "bandpass", 1400, 1.2); break; // a corrosive hiss
       // ── objects, tools & rituals ──
-      case "spell":       for (let i = 0; i < 4; i++) this.note(semi(r, i * 4) * 2, now + i * 0.04, 0.3, bus, "triangle", 0.035, 3600); break; // a rising arcane shimmer
-      case "pray":        for (const c of [0, 7, 16]) this.note(semi(r, c) * 2, now, 1.5, bus, "sine", 0.028, 2400); break; // a soft divine chord
-      case "heal":        for (let i = 0; i < 3; i++) this.note(semi(r, [0, 4, 7][i]) * 2, now + i * 0.06, 0.42, bus, "sine", 0.04, 2600); break; // a warm restorative rise
-      case "levelup":     [0, 4, 7, 12].forEach((s, i) => this.note(semi(r, s) * 2, now + i * 0.07, 0.26, bus, "square", 0.04, 4200)); break; // a bright ascending arpeggio
-      case "curse":       [0, -1, -5].forEach((s, i) => this.note(semi(r, s), now + i * 0.08, 0.5, bus, "sawtooth", 0.04, 700)); break; // a dark descending knell
-      case "teleport":    this.tone(300, 2400, 0.12, "sine", 0.05, now, bus, 5000); this.tone(2400, 500, 0.12, "sine", 0.04, now + 0.12, bus, 4000); break; // a warp up-then-down
-      case "gem":         [19, 24].forEach((s, i) => this.note(semi(r, s) * 4, now + i * 0.05, 0.42, bus, "triangle", 0.04, 6500)); break; // a crystalline chime
-      case "dig":         for (let i = 0; i < 3; i++) this.noiseHit(now + i * 0.09, 0.07, bus, 0.07, "bandpass", 480 + i * 120, 2); break; // a grinding scrape + crumble
-      case "horn":        this.note(semi(r, 19) * 2, now, 0.9, bus, "sine", 0.05, 4200); this.note(semi(r, 26) * 2, now + 0.03, 0.7, bus, "sine", 0.028, 5200); break; // a pure clarion chime
-      case "camera":      this.noiseHit(now, 0.04, bus, 0.1, "highpass", 8500, 0.4); this.note(semi(r, 24) * 2, now, 0.1, bus, "triangle", 0.045, 7000); break; // a bright flash-pop
-      case "mirror":      this.note(semi(r, 12) * 2, now, 0.5, bus, "triangle", 0.03, 5000, 14); this.note(semi(r, 12) * 2, now + 0.02, 0.5, bus, "triangle", 0.028, 5000, -14); break; // a detuned shimmer
-      case "whistle":     this.tone(1600, 2300, 0.3, "sine", 0.05, now, bus, 5200); break; // a shrill recall note
-      case "drum":        for (let i = 0; i < 4; i++) this.kick(now + i * 0.08, bus, 0.18, true); break; // a martial roll
-      case "bell":        this.note(semi(r, 0), now, 2.4, bus, "sine", 0.06, 2200); this.note(semi(r, 7), now + 0.02, 1.8, bus, "sine", 0.03, 2600); break; // a deep resonant toll (Bell of Opening)
-      case "wear-magic":  this.note(semi(r, 7) * 2, now, 0.42, bus, "sine", 0.033, 3000); this.note(semi(r, 14) * 2, now + 0.05, 0.42, bus, "triangle", 0.028, 3600); break; // a soft magical don
-      case "explode":     this.kick(now, bus, 0.4, true); this.noiseHit(now, 0.42, bus, 0.14, "lowpass", 600, 0.6); this.noiseHit(now, 0.2, bus, 0.08, "highpass", 3000, 0.4); break; // a detonation
-      case "web":         this.note(140, now, 0.1, bus, "triangle", 0.05, 500); this.noiseHit(now + 0.02, 0.08, bus, 0.04, "bandpass", 2200, 2); break; // a sticky snare snap
+      case "spell":       for (let i = 0; i < 4; i++) this.note(semi(r, i * 4 + pick(0, 2)) * 2, now + i * 0.04, 0.3, bus, "triangle", 0.1, 3600); break; // a rising arcane shimmer (varied)
+      case "pray":        for (const c of [0, 7, 16]) this.note(semi(r, c) * 2, now, 1.5, bus, "sine", 0.08, 2400); break; // a soft divine chord
+      case "heal":        for (let i = 0; i < 3; i++) this.note(semi(r, [0, 4, 7][i]) * 2, now + i * 0.06, 0.42, bus, "sine", 0.11, 2600); break; // a warm restorative rise
+      case "levelup":     [0, 4, 7, 12].forEach((s, i) => this.note(semi(r, s) * 2, now + i * 0.07, 0.26, bus, "square", 0.12, 4200)); break; // a bright ascending arpeggio
+      case "curse":       [0, -1, -5].forEach((s, i) => this.note(semi(r, s), now + i * 0.08, 0.5, bus, "sawtooth", 0.12, 700)); break; // a dark descending knell
+      case "teleport":    this.tone(300, 2400, 0.12, "sine", 0.13, now, bus, 5000); this.tone(2400, 500, 0.12, "sine", 0.11, now + 0.12, bus, 4000); break; // a warp up-then-down
+      case "gem":         [19, 24].forEach((s, i) => this.note(semi(r, s) * 4, now + i * 0.05, 0.42, bus, "triangle", 0.12, 6500)); break; // a crystalline chime
+      case "dig":         for (let i = 0; i < 3; i++) this.noiseHit(now + i * 0.09, 0.07, bus, 0.17, "bandpass", 460 + i * 120 + Math.random() * 80, 2); break; // a grinding scrape + crumble
+      case "horn":        this.note(semi(r, 19) * 2, now, 0.9, bus, "sine", 0.13, 4200); this.note(semi(r, 26) * 2, now + 0.03, 0.7, bus, "sine", 0.08, 5200); break; // a pure clarion chime
+      case "camera":      this.noiseHit(now, 0.04, bus, 0.24, "highpass", 8500, 0.4); this.note(semi(r, 24) * 2, now, 0.1, bus, "triangle", 0.12, 7000); break; // a bright flash-pop
+      case "mirror":      this.note(semi(r, 12) * 2, now, 0.5, bus, "triangle", 0.09, 5000, 14); this.note(semi(r, 12) * 2, now + 0.02, 0.5, bus, "triangle", 0.08, 5000, -14); break; // a detuned shimmer
+      case "whistle":     this.tone(1600 * jit, 2300, 0.3, "sine", 0.13, now, bus, 5200); break; // a shrill recall note
+      case "drum":        for (let i = 0; i < 4; i++) this.kick(now + i * 0.08, bus, 0.3, true); break; // a martial roll
+      case "bell":        this.note(semi(r, 0), now, 2.4, bus, "sine", 0.16, 2200); this.note(semi(r, 7), now + 0.02, 1.8, bus, "sine", 0.09, 2600); break; // a deep resonant toll (Bell of Opening)
+      case "wear-magic":  this.note(semi(r, 7) * 2 * jit, now, 0.42, bus, "sine", 0.1, 3000); this.note(semi(r, 14) * 2, now + 0.05, 0.42, bus, "triangle", 0.08, 3600); break; // a soft magical don
+      case "explode":     this.kick(now, bus, 0.6, true); this.noiseHit(now, 0.42, bus, 0.32, "lowpass", 600, 0.6); this.noiseHit(now, 0.2, bus, 0.2, "highpass", 3000, 0.4); break; // a detonation
+      case "web":         this.note(140 * jit, now, 0.1, bus, "triangle", 0.13, 500); this.noiseHit(now + 0.02, 0.08, bus, 0.1, "bandpass", 2200, 2); break; // a sticky snare snap
     }
   }
 
@@ -972,7 +1013,7 @@ export class MusicEngine {
     }
   }
   private ambientOne(): void {
-    const now = this.ctx!.currentTime, bus = this.sfxBus, r = this.active?.def.root ?? 110;
+    const now = this.ctx!.currentTime, bus = this.ambBus, r = this.active?.def.root ?? 110;
     // A special room the adventurer stands in colours the bed over the base area ambience.
     if (this.c.room && this.roomAmbient(now, this.c.room)) return;
     switch (this.area) {
@@ -990,7 +1031,7 @@ export class MusicEngine {
 
   /** Per-special-room ambience (mkroom.c flavour) — a subtle bed over the area's own. Returns true if it handled the tick. */
   private roomAmbient(now: number, room: string): boolean {
-    const bus = this.sfxBus, r = this.active?.def.root ?? 110;
+    const bus = this.ambBus, r = this.active?.def.root ?? 110;
     switch (room) {
       case "temple": for (const c of [0, 7, 12]) this.note(semi(r, c) * 2, now, 2.2, bus, "sine", 0.022, 2200); return true; // a soft choral hush
       case "morgue": this.ghostVoice(now, Math.random() < 0.5); return true;                                        // the restless dead — disembodied voices
@@ -1015,7 +1056,7 @@ export class MusicEngine {
     }
   }
   private beastOne(cat: string): void {
-    const now = this.ctx!.currentTime, bus = this.sfxBus, r = this.active?.def.root ?? 110;
+    const now = this.ctx!.currentTime, bus = this.ambBus, r = this.active?.def.root ?? 110;
     switch (cat) {
       case "ghost":  this.ghostVoice(now, false); break;                                                                    // a disembodied voice drifts by
       case "undead": if (Math.random() < 0.5) this.ghostVoice(now, false); else this.tone(semi(r, 1), semi(r, 0), 1.2, "sine", 0.045, now, bus, 700); break; // a moan, or a whispered voice

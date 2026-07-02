@@ -188,6 +188,8 @@ if (screen && logEl) {
 
     const vol = document.getElementById("opt-volume") as HTMLInputElement | null;
     if (vol) { vol.value = String(Math.round(game.music.volume * 100)); vol.addEventListener("input", () => game.music.setVolume(parseInt(vol.value, 10) / 100)); }
+    const svol = document.getElementById("opt-sfxvolume") as HTMLInputElement | null;
+    if (svol) { svol.value = String(Math.round(game.music.sfxVolume * 100)); svol.addEventListener("input", () => { game.music.unlock(); game.music.setSfxVolume(parseInt(svol.value, 10) / 100); }); }
 
     const fontSeg = document.getElementById("opt-font");
     const syncFont = (px: number) => fontSeg?.querySelectorAll<HTMLButtonElement>("button").forEach((b) => b.classList.toggle("on", b.dataset.px === String(px)));
@@ -230,9 +232,15 @@ if (screen && logEl) {
     musicBtn.onclick = () => { game.music.toggle(); sync(); };
     sync();
   }
+  const sfxBtn = document.getElementById("sfx-toggle") as HTMLButtonElement | null;
+  if (sfxBtn) {
+    const syncS = () => { sfxBtn.textContent = `🔊 SFX: ${game.music.sfxEnabled ? "on" : "off"}`; sfxBtn.classList.toggle("on", game.music.sfxEnabled); };
+    sfxBtn.onclick = () => { game.music.toggleSfx(); game.music.sfx("pickup"); syncS(); }; // a click cue confirms it's audible
+    syncS();
+  }
   // The Web Audio context needs a user gesture; resume (and honour a saved "on") on first interaction.
   const kick = () => {
-    game.music.resume();
+    game.music.unlock(); // create + resume the context so SFX plays even if the music stays off
     if (game.music.enabled) game.music.setEnabled(true);
     window.removeEventListener("pointerdown", kick);
     window.removeEventListener("keydown", kick);

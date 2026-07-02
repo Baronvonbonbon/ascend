@@ -939,7 +939,7 @@ export class Player extends Entity {
         if (t.id === "hodlstone" && item.buc === "cursed") { item.bucKnown = true; this.game.log.add(`The ${t.name} won't leave your pack — a cursed loadstone!`, "bad"); return this.endTurn(); }
         if (this.isWelded(item)) { item.bucKnown = true; this.game.log.add(`You can't let go of ${ident.name(t)} — it's cursed!`, "bad"); return this.endTurn(); }
         this.inventory.remove(item); this.unequip(item);
-        this.game.dropItem(item); this.game.log.add(`You drop ${ident.name(t)}.`); return this.endTurn();
+        this.game.dropItem(item); this.game.music.sfx("drop"); this.game.log.add(`You drop ${ident.name(t)}.`); return this.endTurn();
       case "takeoff":
         if (!this.wornArmor.includes(item) && item !== this.ring && item !== this.amulet) { this.game.log.add("You aren't wearing that.", "dim"); return false; }
         if (item.buc === "cursed") { item.bucKnown = true; this.game.log.add(`Your ${ident.name(t)} is welded on — it's cursed. Uncurse it first.`, "bad"); return this.endTurn(); }
@@ -1006,7 +1006,7 @@ export class Player extends Entity {
     }
     if (tile === "doorLocked") return this.game.kickDoor(this, nx, ny) ? this.endTurn() : false;
     if (tile === "water") {
-      if (this.amulet?.type.id === "amulet_breathe") { this.x = nx; this.y = ny; this.game.recomputeFOV(); this.game.log.add("You wade through the deep water, breathing easy.", "dim"); this.game.draw(); return this.endTurn(); }
+      if (this.amulet?.type.id === "amulet_breathe") { this.x = nx; this.y = ny; if (this === this.game.localPlayer) this.game.music.sfx("step-water"); this.game.recomputeFOV(); this.game.log.add("You wade through the deep water, breathing easy.", "dim"); this.game.draw(); return this.endTurn(); }
       this.game.log.add("Deep water — too deep to wade. Find a causeway, or jump it (the planar gate).", "dim"); return false;
     }
     if (!this.game.level.isPassable(nx, ny)) return false; // bumping a wall costs no turn
