@@ -358,7 +358,7 @@ export class Game {
     const at = (i: unknown) => (i === null || i === undefined ? null : p.inventory.items[i as number] ?? null);
     p.weapon = at(d.weapon); p.sheathed = at(d.sheathed); p.ring = at(d.ring); p.amulet = at(d.amulet); p.offhand = at(d.offhand); p.quiver = at(d.quiver);
     p.wornArmor = (d.wornArmor as unknown[]).map(at).filter((x): x is Item => !!x);
-    p.ident = new Idents(this.appearances); p.ident.restore(d.ident as string[]);
+    p.ident = new Idents(this.appearances); p.ident.restore(d.ident as string[] | { known: string[]; labels: [string, string][] });
     return p;
   }
   private serMonster(m: Monster): Record<string, unknown> {

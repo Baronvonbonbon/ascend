@@ -253,6 +253,7 @@ export class Appearances {
  *  Appearances are shared (the world looks the same); knowledge is per-character. */
 export class Idents {
   private known = new Set<string>();
+  private typeLabels = new Map<string, string>(); // player "calls" for unidentified types (#name a type)
   constructor(private appearances: Appearances) {}
 
   private look(t: ItemType): string { return this.appearances.look(t); }
@@ -260,11 +261,19 @@ export class Idents {
   isKnown(t: ItemType): boolean {
     return (t.kind !== "potion" && t.kind !== "scroll" && t.kind !== "gem") || this.known.has(t.id);
   }
-  learn(t: ItemType): void { this.known.add(t.id); }
-  snapshot(): string[] { return [...this.known]; }
-  restore(ids: string[]): void { this.known = new Set(ids); }
+  learn(t: ItemType): void { this.known.add(t.id); this.typeLabels.delete(t.id); } // a confirmed ID retires the guess
+  /** #name a whole type — "call" an unidentified appearance (e.g. tag every swirly potion "speed?"). */
+  nameType(t: ItemType, label: string): void { if (label) this.typeLabels.set(t.id, label); else this.typeLabels.delete(t.id); }
+  typeLabel(t: ItemType): string | undefined { return this.typeLabels.get(t.id); }
+  snapshot(): { known: string[]; labels: [string, string][] } { return { known: [...this.known], labels: [...this.typeLabels] }; }
+  restore(d: string[] | { known: string[]; labels: [string, string][] }): void {
+    if (Array.isArray(d)) { this.known = new Set(d); this.typeLabels = new Map(); } // legacy save (bare id list)
+    else { this.known = new Set(d.known); this.typeLabels = new Map(d.labels); }
+  }
   name(t: ItemType): string {
-    return this.isKnown(t) ? t.name : this.look(t);
+    if (this.isKnown(t)) return t.name;
+    const call = this.typeLabels.get(t.id);
+    return call ? `${this.look(t)} (called ${call})` : this.look(t);
   }
 
   /** The discoveries screen (`\`): per-class lists of identified potion/scroll types. */

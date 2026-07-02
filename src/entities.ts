@@ -551,8 +551,10 @@ export class Player extends Entity {
     }
     if (verb === "name") {
       this.pendingName = item;
-      this.nameBuf = item.label ?? "";
-      this.game.log.add(`Call ${this.game.ident.name(item.type)}: ${this.nameBuf}_  (type a name, Enter to set, Esc to cancel)`, "sys");
+      // an unidentified potion/scroll/gem names its whole TYPE (a "call"); anything else names the one item
+      const byType = !this.game.ident.isKnown(item.type);
+      this.nameBuf = byType ? (this.game.ident.typeLabel(item.type) ?? "") : (item.label ?? "");
+      this.game.log.add(`${byType ? "Call all" : "Name"} ${this.game.ident.name(item.type)}: ${this.nameBuf}_  (type a name, Enter to set, Esc to cancel)`, "sys");
       return false;
     }
     if (verb === "dip") return this.game.dipInWater(this, item) ? this.endTurn() : false;
@@ -796,17 +798,23 @@ export class Player extends Entity {
   private resolveName(e: KeyboardEvent): boolean {
     const item = this.pendingName!;
     if (e.key === "Escape") { this.pendingName = null; this.game.log.add("Never mind.", "dim"); return false; }
+    const byType = !this.game.ident.isKnown(item.type);
     if (e.key === "Enter") {
       this.pendingName = null;
       const name = this.nameBuf.trim();
-      item.label = name || undefined;
-      this.game.log.add(name ? `You name it "${name}".` : "You clear its name.", "dim");
+      if (byType) {
+        this.game.ident.nameType(item.type, name);
+        this.game.log.add(name ? `You call all ${this.game.ident.name(item.type).replace(/ \(called .*\)$/, "")} "${name}".` : "You clear the call.", "dim");
+      } else {
+        item.label = name || undefined;
+        this.game.log.add(name ? `You name it "${name}".` : "You clear its name.", "dim");
+      }
       return false;
     }
     if (e.key === "Backspace") this.nameBuf = this.nameBuf.slice(0, -1);
     else if (e.key.length === 1 && this.nameBuf.length < 24) this.nameBuf += e.key;
     else return false;
-    this.game.log.add(`Call ${this.game.ident.name(item.type)}: ${this.nameBuf}_`, "sys");
+    this.game.log.add(`${byType ? "Call all" : "Name"} ${this.game.ident.name(item.type)}: ${this.nameBuf}_`, "sys");
     return false;
   }
 
