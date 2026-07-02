@@ -92,7 +92,7 @@ export class Player extends Entity {
   webbed = 0;          // turns caught in a honeypot web — struggle (STR) to tear free before you can move
   silenced = 0;        // turns of magical silence — can't cast extrinsics; in co-op, can't be heard (no chat)
   statDrain: Record<string, number> = {}; // attribute points drained by a mind flayer — restored by prayer
-  intrinsics = new Set<string>(); // poisonResist, petrifyResist, drainResist, fireResist, coldResist, shockResist, fast, telepathy (from eating corpses)
+  intrinsics = new Set<string>(); // poisonResist, petrifyResist, drainResist, fireResist, coldResist, shockResist, fast, telepathy, seeInvis (from eating corpses)
   skillXp: Record<string, number> = {};   // landed hits per weapon-skill class (#enhance)
   skillRank: Record<string, number> = {};  // 0 Unskilled · 1 Basic · 2 Skilled · 3 Expert
   offhand: Item | null = null;             // a second weapon for #twoweapon (X)
@@ -1110,6 +1110,7 @@ export class Monster extends Entity {
     if (def.keeper || def.priest || def.seer) this.peaceful = true; // a keeper minds its stall, a priest its altar, the Oracle its springs — until provoked
     if (def.splits) this.splitsLeft = 2; // a fresh phantom can replicate at most twice
     if (def.muse) this.museLeft = 2;     // it carries a couple of healing draughts
+    if (def.startsInvisible) this.invisible = true; // a phase stalker — unseen without ESP/warning/see-invisible
   }
 
   getSpeed(): number {

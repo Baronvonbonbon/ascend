@@ -116,6 +116,7 @@ export const ITEMS: ItemType[] = [
   { id: "amulet_esp",     kind: "amulet", name: "an amulet of ESP",         ch: "\"", fg: "#c0a0e0", weight: 1, minDepth: 4 }, // telepathy while worn — sense every mind on the floor
   { id: "amulet_breathe", kind: "amulet", name: "an amulet of magical breathing", ch: "\"", fg: "#80c0e0", weight: 1, minDepth: 4 }, // wade through deep water unharmed
   { id: "amulet_unchanging", kind: "amulet", name: "an amulet of unchanging",  ch: "\"", fg: "#d0d0a0", weight: 1, minDepth: 5 }, // no polymorph/were-shift takes hold while worn
+  { id: "amulet_seeinvis", kind: "amulet", name: "an amulet of see invisible", ch: "\"", fg: "#e0e0f0", weight: 1, minDepth: 4 }, // reveals cloaked monsters within sight
   // ── rings ── = (passive while worn; put on with W)
   { id: "ring_res",   kind: "ring", name: "a ring of protection",   ch: "=", fg: "#c0a0e0", weight: 2 },
   { id: "ring_regen", kind: "ring", name: "a ring of regeneration", ch: "=", fg: "#a0e0a0", weight: 2 },

@@ -518,7 +518,7 @@ export class Game {
     this.log.add(`— ${p.name === "you" ? "You" : p.name}, ${p.title ? p.title + " " : ""}${raceName(raceById(p.race))} ${archetypeName(archetypeById(p.archetype))} · ${ethosName(p.ethos)} · level ${p.level} —`, "sys");
     this.log.add(`  ${ATTRS.map((a) => `${ATTR_LABEL[a]} ${p[a]}`).join("  ")}`, "dim");
     this.log.add(`  HP ${p.hp}/${p.maxHp}  AC ${p.ac}  Fortune ${this.luckOf(p) >= 0 ? "+" : ""}${this.luckOf(p)}  XP ${p.xp}/${this.xpForLevel(p.level + 1)}`, "dim");
-    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", drainResist: "drain resist", fireResist: "fire resist", coldResist: "cold resist", shockResist: "shock resist", fast: "fast", telepathy: "telepathy" } as Record<string, string>)[i] ?? i);
+    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", drainResist: "drain resist", fireResist: "fire resist", coldResist: "cold resist", shockResist: "shock resist", fast: "fast", telepathy: "telepathy", seeInvis: "see invisible" } as Record<string, string>)[i] ?? i);
     if (intr.length) this.log.add(`  Intrinsics: ${intr.join(", ")}.`, "good");
     if (p.spells.size) this.log.add(`  Energy ${p.energy}/${p.maxEnergy}. ${"Spells"}: ${[...p.spells].map((id) => { const s = spellById(id); return s ? spellName(s) : id; }).join(", ")}. (Z to cast)`, "sys");
     this.log.add(`  ${"Alignment"}: ${ethosName(p.ethos)}, favor ${p.favor}${p.crowned ? ` — ${"Knighted"} ${p.title}` : ""}.`, "dim");
@@ -539,7 +539,7 @@ export class Game {
     const skills = Object.keys(p.skillXp);
     if (skills.length) this.log.add(`  Skills: ${skills.map((c) => `${SKILL_LABEL[c] ?? c} ${SKILL_RANKS[p.skillRank[c] ?? 0]}`).join(", ")}.`, "dim");
     // intrinsics + spells
-    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", drainResist: "drain resist", fireResist: "fire resist", coldResist: "cold resist", shockResist: "shock resist", fast: "fast", telepathy: "telepathy" } as Record<string, string>)[i] ?? i);
+    const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", drainResist: "drain resist", fireResist: "fire resist", coldResist: "cold resist", shockResist: "shock resist", fast: "fast", telepathy: "telepathy", seeInvis: "see invisible" } as Record<string, string>)[i] ?? i);
     if (intr.length) this.log.add(`  Intrinsics: ${intr.join(", ")}.`, "good");
     if (p.spells.size) this.log.add(`  Extrinsics: ${[...p.spells].map((id) => spellById(id)?.name ?? id).join(", ")}.`, "dim");
     // active afflictions / timeouts
@@ -4312,6 +4312,8 @@ export class Game {
       if (!p.intrinsics.has("coldResist") && ROT.RNG.getUniform() < 0.5) { p.intrinsics.add("coldResist"); this.log.add("A deep chill you no longer feel — cold resistance!", "good"); }
     } else if (def.corpseEffect === "shock") {
       if (!p.intrinsics.has("shockResist") && ROT.RNG.getUniform() < 0.5) { p.intrinsics.add("shockResist"); this.log.add("Static crackles off you harmlessly — shock resistance!", "good"); }
+    } else if (def.corpseEffect === "seeInvis") {
+      if (!p.intrinsics.has("seeInvis")) { p.intrinsics.add("seeInvis"); this.log.add("The unseen swims into focus — you can see invisible things now.", "good"); }
     } else if (rotten && !(p.intrinsics.has("poisonResist") || p.ringPoisonRes) && ROT.RNG.getUniform() < 0.5) {
       p.illness = 8;
       this.log.add("That was rotten — a bad block churns in you. (cure it before it's fatal)", "bad");
@@ -5283,11 +5285,12 @@ export class Game {
     for (const b of lvl.boulders) if (vis(b.x, b.y)) cells.push([b.x, b.y, "0", "#9a8a6a"]);
     // Sense minds: only THIS viewer's blindness-telepathy or sense-minds spell reveals out-of-sight foes.
     const sensed = !!me && ((me.blind > 0 && me.intrinsics.has("telepathy")) || me.senseTurns > 0 || me.amulet?.type.id === "amulet_esp");
+    const seeInvis = !!me && (me.intrinsics.has("seeInvis") || me.amulet?.type.id === "amulet_seeinvis"); // reveals cloaked foes within normal sight
     const warn = !!me && me.warning; // a ring of warning shows nearby foes through walls
     for (const m of mons) {
       const near = warn && Math.max(Math.abs(m.x - me!.x), Math.abs(m.y - me!.y)) <= 5;
       if (!m.alive || !(vis(m.x, m.y) || sensed || near)) continue;
-      if (m.invisible && !sensed && !near) continue; // cloaked — only ESP (sense minds / telepathy) or warning reveals it
+      if (m.invisible && !sensed && !near && !(seeInvis && vis(m.x, m.y))) continue; // cloaked — only ESP/warning, or see-invisible within sight, reveals it
       const dormant = m.def.mimic && !m.revealed && !near; // warning reveals a mimic for what it is
       cells.push([m.x, m.y, dormant ? m.disguiseCh : m.ch, dormant ? m.disguiseFg : m.fg]);
     }

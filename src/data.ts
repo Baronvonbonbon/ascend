@@ -268,7 +268,7 @@ export interface MonsterDef {
   cowardly?: boolean;    // flees once badly hurt
   heals?: boolean;       // a medic — mends wounded allies instead of fighting
   breeds?: boolean;      // multiplies when a pair of its kind is adjacent
-  corpseEffect?: "poisonous" | "petrify" | "speed" | "telepathy" | "levelup" | "fire" | "cold" | "shock"; // what eating its corpse does
+  corpseEffect?: "poisonous" | "petrify" | "speed" | "telepathy" | "levelup" | "fire" | "cold" | "shock" | "seeInvis"; // what eating its corpse does
   corrodes?: boolean | number; // its touch may rust/corrode a worn armor piece — true = default chance (0.35), or a per-hit probability 0..1
   drains?: boolean;      // a barrow-wight (wraith) — its touch saps an level (XP level); eat its corpse to regain one
   steals?: boolean;      // a thief — snatches a pack item and flees (the the theft)
@@ -290,6 +290,7 @@ export interface MonsterDef {
   blinds?: boolean;      // a flare drone — a hit may burst in a blinding flash (FOV to your fingertips for a few turns)
   seduces?: boolean;     // a succubus — adjacent, it charms you (a lost turn) and lifts an item, then blinks
   mimic?: boolean;       // a honeypot — sits disguised as loot, strikes when touched
+  startsInvisible?: boolean; // a phase stalker — inherently unseen (only ESP/warning/see-invisible reveals it); its corpse grants see-invisible
   fearless?: boolean;    // ignores warding engravings (bosses fear no Gray Paper)
   keeper?: boolean;      // a shopkeeper — peaceful until you shoplift, then merciless
   priest?: boolean;      // a temple priest — peaceful guardian of an altar; turns lethal if struck
@@ -342,6 +343,7 @@ export const MONSTERS: MonsterDef[] = [
   { name: "a flare drone",   ch: "y", fg: "#f0f0c0", hp: 9,  dmg: [2, 4], ai: "chase",  minDepth: 5, weight: 2, speed: 115, blinds: true },   // bursts in a blinding flash on a hit
   { name: "a FUD imp",       ch: "i", fg: "#a070c0", hp: 10, dmg: [2, 4], ai: "chase",  minDepth: 7, weight: 2, speed: 110, curses: true },   // its touch curdles a carried item to cursed — silently
   { name: "a mummy",         ch: "M", fg: "#c0b080", hp: 20, dmg: [3, 7], ai: "chase",  minDepth: 8, weight: 2 },
+  { name: "a phase stalker", ch: "E", fg: "#d0d0e8", hp: 18, dmg: [3, 6], ai: "chase",  minDepth: 8, weight: 2, speed: 115, startsInvisible: true, corpseEffect: "seeInvis" }, // inherently unseen; eat its corpse for see-invisible
   // ── Gehennom demons (Phase 12c) — the Dark Forest's servants of tyranny ──
   { name: "a dungeon fiend",  ch: "&", fg: "#c04040", hp: 22, dmg: [4, 8], ai: "chase", minDepth: 9,  weight: 2, steals: true, speed: 110 },
   { name: "a hexing wraith", ch: "W", fg: "#a060a0", hp: 18, dmg: [3, 6], ai: "chase", minDepth: 9,  weight: 2, inflict: "confuse", ranged: true },
