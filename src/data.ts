@@ -378,6 +378,11 @@ export const ORACLE: MonsterDef = {
   name: "the Oracle", ch: "@", fg: "#c060e0", hp: 32, dmg: [4, 8], ai: "chase", minDepth: 1, weight: 0, fearless: true, seer: true,
 };
 
+/** A Marduk acolyte — a divine servant sent to fight at your side (a minion gifted at the altar). */
+export const ACOLYTE: MonsterDef = {
+  name: "a Marduk acolyte", ch: "@", fg: "#f0e0a0", hp: 24, dmg: [4, 8], ai: "chase", minDepth: 1, weight: 0, fearless: true,
+};
+
 /** Major consultations — genuinely useful guidance (skin() reflavors the proper nouns). */
 export const ORACLE_HINTS = [
   "The foot of the dungeon hides a vibrating square — bring the Bell, the Candelabrum, and the Gray Paper, and #invoke there.",

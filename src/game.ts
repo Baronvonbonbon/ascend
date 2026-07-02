@@ -7,7 +7,7 @@ import { Log } from "./log";
 import type { LogWho } from "./log";
 import {
   COLORS, TILE_GLYPH, TileType, MONSTERS, MonsterDef, deaths, greetings,
-  MAX_DEPTH, WARDEN, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, PRIEST, COUNCIL_GUARD, HIGH_PRIEST, ORACLE, ORACLE_HINTS, ORACLE_RUMORS, realmName, grayPaper, ChainDef, CHAINS, BranchDef, BRANCHES, branchById, questFor,
+  MAX_DEPTH, WARDEN, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, PRIEST, COUNCIL_GUARD, HIGH_PRIEST, ORACLE, ACOLYTE, ORACLE_HINTS, ORACLE_RUMORS, realmName, grayPaper, ChainDef, CHAINS, BranchDef, BRANCHES, branchById, questFor,
   abilityMod, archetypeById, raceById, raceName, ATTRS, ATTR_LABEL, attrFlavor, spellById, Ethos,
   monName, questHomeland, archetypeName, ethosName, spellName, chainName, branchEnd, branchEntryFlavor,
 } from "./data";
@@ -2634,7 +2634,9 @@ export class Game {
     this.log.add(`You burn the ${name} on the altar as an offering. Marduk's favor warms you. (Fortune rises)`, "good");
     this.maybeCrown(p);
     const r = ROT.RNG.getUniform();
-    if (r < 0.06 && !this.level.itemAt(p.x, p.y)) {
+    if (p.favor >= 8 && r < 0.10 && this.livingPets().length < Game.PET_CAP && this.summonAcolyte(p)) {
+      // a well-pleased Marduk sends a minion to fight for you (handled in summonAcolyte)
+    } else if (r < 0.06 && !this.level.itemAt(p.x, p.y)) {
       const prize = ROT.RNG.getItem(this.gearPool(this.acting.depth))!;
       this.level.items.push({ x: p.x, y: p.y, type: prize, enchant: ROT.RNG.getUniformInt(1, 2), buc: "blessed", bucKnown: true });
       this.log.add(`✦ Marduk bestows a gift upon the altar — a blessed ${prize.name}!`, "sys");
@@ -3992,6 +3994,24 @@ export class Game {
     this.scheduler.add(pet, true);
     m.hp = 0; this.monsters = this.monsters.filter((z) => z !== m); this.scheduler.remove(m);
     this.log.add(`${cap(monName(m.def))} delegates to you — it pads to your side as your hound.`, "good", this.player);
+  }
+
+  /** Marduk sends an acolyte to fight at your side — a divine minion (a rare, high-favor altar gift).
+   *  It joins the retinue as a loyal, hardy ally if there's room and a free tile beside you. */
+  summonAcolyte(p: Player): boolean {
+    if (this.livingPets().length >= Game.PET_CAP) return false; // your retinue is already full
+    const spot = this.adjacentFree(p.x, p.y);
+    if (!spot) return false;
+    const pet = new Pet(this, spot.x, spot.y);
+    pet.adopt(ACOLYTE);
+    pet.hp = pet.maxHp = ACOLYTE.hp; pet.attackDmg = [...ACOLYTE.dmg];
+    pet.floorKey = p.floorKey;
+    pet.loyalty = 18; pet.bond = 40; // a devout servant, bonded from the first
+    pet.profile = { aggression: 0.85, fetch: 0.2, appetite: 0.2, wander: 0.2 }; // bold and steadfast — a fighter
+    this.pets.push(pet);
+    this.scheduler.add(pet, true);
+    this.log.add("✦ A shaft of light — a Marduk acolyte descends to fight at your side!", "sys", p);
+    return true;
   }
 
   /** A loose, mundane trinket the pet may fetch — never shop wares, gold, corpses, relics, or the amulet. */
