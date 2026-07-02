@@ -403,6 +403,23 @@ export const PET_BEHAVIORS: Behavior<Pet>[] = [
     },
     act: (g, s, c) => { const foe = petQuarry(g, s, 3)!; fleeStep(g, s, foe.x, foe.y); if (cheb(s.x, s.y, c.p.x, c.p.y) > 1) stepToward(g, s, c.p.x, c.p.y); } },
 
+  // NEW — trait interaction (gluttony vs valor): a bold AND greedy hound will ABANDON a fight to
+  // wolf down nearby food, where a timid or indifferent one keeps its teeth in the foe. It fires only
+  // when there's actually a fight to abandon and food within reach, gated by appetite × boldness.
+  { name: "gorge",
+    score: (g, s, c) => {
+      const greed = s.profile.appetite, bold = s.profile.aggression;
+      if (greed < 0.4) return 0;                                              // only genuinely food-driven dogs
+      if (s.nutrition >= 120 + greed * 380) return 0;                         // …and only when hungry
+      if (!(g.adjacentEnemy(s.x, s.y) || petQuarry(g, s, 3))) return 0;       // only if there IS a fight to leave
+      const food = g.petEdibleAt(s.x, s.y) ? { x: s.x, y: s.y } : g.petNearestEdible(s.x, s.y, 2 + Math.round(greed * 2));
+      if (!food) return 0;
+      if (ROT.RNG.getUniform() > greed * (0.3 + bold * 0.7)) return 0;        // bold+greedy breaks off; timid clings on
+      c.forage = food;
+      return 1;
+    },
+    act: (g, s, c) => { if (g.petEdibleAt(s.x, s.y)) g.petEat(s); else { const f = c.forage as { x: number; y: number }; stepToward(g, s, f.x, f.y); } } },
+
   // Savage whatever is already in reach.
   { name: "maul",
     score: (g, s) => (g.adjacentEnemy(s.x, s.y) ? 1 : 0),
