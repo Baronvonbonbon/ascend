@@ -3172,7 +3172,8 @@ export class Game {
     const dx = Math.sign(p.x - m.x), dy = Math.sign(p.y - m.y);
     if (dx === 0 && dy === 0) return;
     const element = m.def.breathElement ?? "fire";
-    this.log.add(element === "disint" ? `${cap(m.name)} breathes a beam of unmaking!` : `${cap(m.name)} breathes a searing gout of restoration!`, "bad", p);
+    const gout = element === "disint" ? "a beam of unmaking" : element === "cold" ? "a gout of killing frost" : element === "shock" ? "a forking arc of lightning" : "a searing gout of flame";
+    this.log.add(`${cap(m.name)} breathes ${gout}!`, "bad", p);
     const max = m.def.breath ?? 10;
     this.castRay(m.x, m.y, dx, dy, 6, (e) => {
       if (e === m) return;

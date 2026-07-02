@@ -359,6 +359,8 @@ export const MONSTERS: MonsterDef[] = [
   // ── deep Gehennom (Phase 18) — the back half of the descent gets fresh terrors, not just scaled-up shallows ──
   { name: "an iron enforcer",   ch: "B", fg: "#d06030", hp: 34, dmg: [6, 10], ai: "chase", minDepth: 13, weight: 2, corrodes: 0.3, speed: 85, muse: true }, // hits hard already; corrosion is a side threat
   { name: "a deepwater horror", ch: "Y", fg: "#5060c0", hp: 30, dmg: [5, 9],  ai: "chase", minDepth: 15, weight: 2, ranged: true, inflict: "confuse", corpseEffect: "cold" },
+  { name: "a frost dragon",     ch: "D", fg: "#80d0f0", hp: 40, dmg: [6, 10], ai: "chase", minDepth: 16, weight: 1, breath: 16, breathElement: "cold",  fearless: true, corpseEffect: "cold" },  // a bounding cold breath; eat it for cold resistance
+  { name: "a storm dragon",     ch: "D", fg: "#f0e060", hp: 44, dmg: [6, 11], ai: "chase", minDepth: 22, weight: 1, breath: 18, breathElement: "shock", fearless: true, corpseEffect: "shock" }, // a forking shock breath; eat it for shock resistance
   { name: "an arch-lich",       ch: "Z", fg: "#e02020", hp: 42, dmg: [6, 11], ai: "chase", minDepth: 17, weight: 1, summons: true, fearless: true, muse: true, zaps: "blind" },
   // ── rival adventurers (mplayer.c) — other ascendants who came for the Amulet of Yendor and never left; deep only ──
   { name: "a rogue",            ch: "@", fg: "#c0b070", hp: 40, dmg: [6, 11], ai: "chase", minDepth: 20, weight: 1, steals: true, muse: true, speed: 110 },
