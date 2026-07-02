@@ -412,7 +412,10 @@ export const PET_BEHAVIORS: Behavior<Pet>[] = [
       if (greed < 0.4) return 0;                                              // only genuinely food-driven dogs
       if (s.nutrition >= 120 + greed * 380) return 0;                         // …and only when hungry
       if (!(g.adjacentEnemy(s.x, s.y) || petQuarry(g, s, 3))) return 0;       // only if there IS a fight to leave
-      const food = g.petEdibleAt(s.x, s.y) ? { x: s.x, y: s.y } : g.petNearestEdible(s.x, s.y, 2 + Math.round(greed * 2));
+      // how far it'll VENTURE for food mid-fight scales with boldness — a timid dog only grabs what's
+      // right at its nose, a bold one crosses the fray for it (so timidity still tempers the greed).
+      const reach = 1 + Math.round(bold * 3);
+      const food = g.petEdibleAt(s.x, s.y) ? { x: s.x, y: s.y } : g.petNearestEdible(s.x, s.y, reach);
       if (!food) return 0;
       if (ROT.RNG.getUniform() > greed * (0.3 + bold * 0.7)) return 0;        // bold+greedy breaks off; timid clings on
       c.forage = food;
@@ -431,7 +434,10 @@ export const PET_BEHAVIORS: Behavior<Pet>[] = [
     score: (g, s, c) => {
       const hungryAt = 150 + s.profile.appetite * 260; // greedy pets forage sooner (up to ~410), light eaters wait
       if (s.nutrition >= hungryAt) return 0;
-      if (g.petEdibleAt(s.x, s.y)) return 1;
+      if (g.petEdibleAt(s.x, s.y)) return 1;             // food underfoot is always safe to gulp
+      // trait interaction (timidity × hunger): a timid dog won't VENTURE toward food while a foe is
+      // about — it refuses to forage into danger, however hungry, and holds near you instead.
+      if (s.profile.aggression < 0.4 && petQuarry(g, s, 4)) return 0;
       const near = g.petNearestEdible(s.x, s.y, 3 + Math.round(s.profile.appetite * 3)); // greedy → roams farther for food
       if (!near) return 0;
       c.forage = near;
@@ -444,6 +450,23 @@ export const PET_BEHAVIORS: Behavior<Pet>[] = [
 
   // NEW — hunt: the drive it never had. Lunge at a foe it can see, as long as the
   // chase won't drag it dangerously far from you.
+  // NEW — trait interaction (valor × acquisitiveness): a BOLD, KEEN fetcher will snatch loose loot
+  // even with a foe about (never one already at its throat), where a cautious or aloof dog leaves it
+  // and squares up. Preempts the hunt, so a brazen fetcher grabs the prize mid-skirmish.
+  { name: "brazen-fetch",
+    score: (g, s, c) => {
+      if (s.carrying) return 0;                                        // already carrying — apport delivers it
+      const daring = s.profile.aggression * s.profile.fetch;
+      if (daring < 0.45) return 0;                                     // needs BOTH bold and keen
+      if (g.adjacentEnemy(s.x, s.y)) return 0;                         // never with teeth already at its throat
+      if (cheb(s.x, s.y, c.p.x, c.p.y) > 4) return 0;                  // stay near you
+      const it = g.petFetchableNear(s.x, s.y, 2);
+      if (!it || ROT.RNG.getUniform() > daring) return 0;
+      c.fetch = it;
+      return 1;
+    },
+    act: (g, s, c) => { const it = c.fetch as { x: number; y: number }; if (s.x === it.x && s.y === it.y) g.petPickup(s); else stepToward(g, s, it.x, it.y); } },
+
   { name: "hunt",
     score: (g, s, c) => {
       const range = 2 + Math.round(s.profile.aggression * (PET_HUNT_RANGE - 1)); // bold → ranges far (up to 6); timid → only pounces on the near (2)
@@ -511,6 +534,10 @@ export const PET_BEHAVIORS: Behavior<Pet>[] = [
     act: (g, s, c) => petFollowStep(g, s, c.p.x, c.p.y) },
 
   // At your heel with all quiet — mill in place now and then so it reads as alive.
+  // Restless pets mill more; a restless AND disloyal (low-loyalty) dog strays farther from your heel.
   { name: "idle", score: () => 1,
-    act: (g, s, c) => { if (ROT.RNG.getUniform() < 0.1 + s.profile.wander * 0.5) { const bx = s.x, by = s.y; wanderStep(g, s); if (cheb(s.x, s.y, c.p.x, c.p.y) > 2) { s.x = bx; s.y = by; } } } }, // restless pets mill more
+    act: (g, s, c) => {
+      const roam = 2 + Math.round(s.profile.wander * 2) + (s.loyalty < 8 ? 1 : 0); // 2 (settled) … up to 5 (restless & disloyal)
+      if (ROT.RNG.getUniform() < 0.1 + s.profile.wander * 0.5) { const bx = s.x, by = s.y; wanderStep(g, s); if (cheb(s.x, s.y, c.p.x, c.p.y) > roam) { s.x = bx; s.y = by; } }
+    } },
 ];

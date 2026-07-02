@@ -1187,7 +1187,10 @@ export class Pet extends Entity {
       this.nutrition = 0;
       if (!this.starveWarned) { this.game.log.add(`${this.name[0].toUpperCase() + this.name.slice(1)} whines with hunger.`, "bad", p); this.starveWarned = true; }
       if (ROT.RNG.getUniform() < 0.5) this.hp = Math.max(1, this.hp - 1);
-      if (ROT.RNG.getUniform() < 0.35 && --this.loyalty <= 0) { this.game.petGoesFeral(this); return; }
+      // A restless dog's devotion frays faster when starving — so a restless, already-disloyal hound
+      // turns feral soonest (trait interaction: wander × low loyalty).
+      const fray = 0.3 + this.profile.wander * 0.35; // 0.3 (steady) … 0.65 (restless)
+      if (ROT.RNG.getUniform() < fray && --this.loyalty <= 0) { this.game.petGoesFeral(this); return; }
     } else {
       if (this.nutrition > PET_HUNGRY) this.starveWarned = false;
       if (this.nutrition > 400 && this.hp < this.maxHp && this.game.turn % 12 === 0) this.hp++; // well-fed mend
