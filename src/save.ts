@@ -12,7 +12,33 @@ import { Item } from "./inventory";
 import { MONSTERS, MonsterDef, CHAINS, BRANCHES } from "./data";
 import type { Level } from "./level";
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
+
+// v3 id renames (crypto → fantasy). Applied to old saves so a run in progress survives the reskin.
+const ID_V3: Record<string, string> = {
+  validator: "knight", nominator: "cleric", cypherpunk: "rogue", builder: "wizard",
+  maximalist: "barbarian", watcher: "ranger", solostaker: "monk", auditor: "archeologist",
+  substrate: "human", evm: "elf", bitcoiner: "dwarf", kusaman: "orc", botnet: "gnome",
+};
+const CHAIN_V3: Record<string, string> = {
+  kusama: "wildlands", moonbeam: "moonkeep", astar: "starvault", phala: "shroudedvale",
+  interlay: "coinbridge", bifrost: "bifrostspire", hydration: "drownedmarsh", acala: "haven",
+};
+/** Remap a floor key like "kusama:5" → "wildlands:5" (the chain prefix only). */
+function remapFloorKey(k: string): string {
+  const i = k.indexOf(":");
+  if (i < 0) return k;
+  const pre = k.slice(0, i);
+  return (CHAIN_V3[pre] ?? pre) + k.slice(i);
+}
+/** Recursively rewrite any serialized chain reference ({$chain: "kusama"}) to its new id. */
+function deepRemapChain(v: unknown): void {
+  if (!v || typeof v !== "object") return;
+  if (Array.isArray(v)) { v.forEach(deepRemapChain); return; }
+  const o = v as Record<string, unknown>;
+  if (typeof o.$chain === "string" && CHAIN_V3[o.$chain]) o.$chain = CHAIN_V3[o.$chain];
+  for (const k of Object.keys(o)) deepRemapChain(o[k]);
+}
 
 // ── version migrations ───────────────────────────────────────────────────────
 // Each entry upgrades a save FROM version N to N+1; they run in sequence so a save from any past
@@ -25,6 +51,22 @@ const MIGRATIONS: Record<number, (d: Record<string, Json>) => void> = {
   // Level.fromSnapshot reconstructs the sources from the lit room centers, so there's nothing to
   // rewrite at the top level — advancing the version is enough.
   1: (_d) => { /* self-healed in Level.fromSnapshot */ },
+  // v2 → v3: crypto ids reskinned to fantasy (archetype/race/chain). Remap them so an in-progress run
+  // keeps its class, race, and its place in the branched dungeon after the rename.
+  2: (d) => {
+    const meta = d.meta as Record<string, Json> | undefined;
+    if (meta) {
+      if (typeof meta.archetypeId === "string") meta.archetypeId = ID_V3[meta.archetypeId] ?? meta.archetypeId;
+      if (typeof meta.raceId === "string") meta.raceId = ID_V3[meta.raceId] ?? meta.raceId;
+      if (typeof meta.currentChain === "string") meta.currentChain = CHAIN_V3[meta.currentChain] ?? meta.currentChain;
+      if (typeof meta.activeKey === "string") meta.activeKey = remapFloorKey(meta.activeKey);
+    }
+    const floors = d.floors as Record<string, Json> | undefined;
+    if (floors && typeof floors === "object") {
+      for (const k of Object.keys(floors)) { const nk = remapFloorKey(k); if (nk !== k) { floors[nk] = floors[k]; delete floors[k]; } }
+    }
+    deepRemapChain(d); // rewrite any {$chain:"kusama"} portal/branch reference nested in the floors
+  },
 };
 
 /** Bring a parsed save up to the current SAVE_VERSION in place. Returns false only when the save is

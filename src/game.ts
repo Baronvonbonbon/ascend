@@ -140,8 +140,8 @@ export class Game {
   private lastRemoteChat = 0; // chat throttle — no banner spam
   private peer: Peer | null = null;
   private downed = new Set<Player>(); // players who have fallen this run
-  archetypeId = "validator";   // the local player's chosen archetype (applied on newGame)
-  raceId = "substrate";        // the local player's chosen ecosystem/race (stat tweak + intrinsic)
+  archetypeId = "knight";   // the local player's chosen archetype (applied on newGame)
+  raceId = "human";        // the local player's chosen ecosystem/race (stat tweak + intrinsic)
   turn = 0;                    // global turn clock (drives corpse rot)
 
   private screen!: HTMLElement;                 // the map's container — overlays (chat banner, queue badge) attach here
@@ -394,8 +394,8 @@ export class Game {
       this.coPlayer.name = "Guest";
       this.coPlayer.ident = new Idents(this.appearances); // shared world looks, separate knowledge
       this.giveStartingKit(this.coPlayer);
-      this.applyArchetype(this.coPlayer, "nominator"); // the partner runs as a Nominator in co-op v1
-      this.applyRace(this.coPlayer, "substrate");
+      this.applyArchetype(this.coPlayer, "cleric"); // the partner runs as a Nominator in co-op v1
+      this.applyRace(this.coPlayer, "human");
       this.pet = null; // no nominators in co-op v1
     } else {
       this.coPlayer = null;
@@ -1504,7 +1504,7 @@ export class Game {
     if (d >= GEHENNOM_BOTTOM) return "sanctum";
     if (d > MAX_DEPTH) return "gehennom";
     if (d === MAX_DEPTH) return "relay";
-    if (d >= 9) return "kusama";
+    if (d >= 9) return "wildlands";
     if (d >= 5) return "parachain";
     return "legacy";
   }

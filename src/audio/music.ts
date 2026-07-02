@@ -63,7 +63,7 @@ const BASES: Base[] = [
     groove: 0.38, bpm: 80,  bass: [[0,4],[7,4],[3,4],[5,4]] },
   { id: "parachain", name: "The Dungeon Reaches",  root: A * 1.5,  chord: [0, 7, 14, 16],    pad: "triangle", drone: "sine",     cutoff: 1100, reverb: 0.45, pulseBpm: 0,  detune: 6,  level: 0.5,
     groove: 0.5,  bpm: 116, bass: [[0,2],[7,2],[4,2],[7,2],[9,2],[7,2],[5,2],[0,2]] },
-  { id: "kusama",    name: "The Deep Caverns",     root: A * 0.75, chord: [0, 6, 13],        pad: "sawtooth", drone: "sine",     cutoff: 600,  reverb: 0.5,  pulseBpm: 0,  detune: 14, level: 0.45,
+  { id: "wildlands",    name: "The Deep Caverns",     root: A * 0.75, chord: [0, 6, 13],        pad: "sawtooth", drone: "sine",     cutoff: 600,  reverb: 0.5,  pulseBpm: 0,  detune: 14, level: 0.45,
     groove: 0.5,  bpm: 124, bass: [[0,2],[0,2],[6,2],[0,2],[3,2],[6,2],[0,4]] },
   { id: "mempool",   name: "The Great Hall",       root: A,        chord: [0, 5, 10],        pad: "sawtooth", drone: "triangle", cutoff: 800,  reverb: 0.35, pulseBpm: 96, detune: 9,  level: 0.45,
     groove: 0.62, bpm: 132, bass: [[0,2],[0,2],[7,2],[0,2],[0,2],[10,2],[7,2],[5,2]] },
@@ -897,7 +897,7 @@ export class MusicEngine {
   private ambientOne(): void {
     const now = this.ctx!.currentTime, bus = this.sfxBus, r = this.active?.def.root ?? 110;
     switch (this.area) {
-      case "kusama": case "relay": this.drip(now); break;                                                       // cavern drips
+      case "wildlands": case "relay": this.drip(now); break;                                                       // cavern drips
       case "mempool": case "legacy": this.noiseHit(now, 0.4, bus, 0.028, "bandpass", 220, 2); break;            // low machinery hum
       case "gehennom": case "sanctum": this.noiseHit(now, 0.9, bus, 0.05, "lowpass", 150, 1); if (Math.random() < 0.3) this.tone(semi(r, 1), semi(r, 1) * 0.98, 1.4, "sawtooth", 0.03, now, bus, 500); break; // hell rumble + distant groan
       case "planes": case "genesis": this.tone(semi(r, 19) * 2, semi(r, 24) * 2, 1.8, "sine", 0.022, now, bus, 5000); break; // ethereal wind

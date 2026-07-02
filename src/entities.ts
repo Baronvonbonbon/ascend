@@ -106,8 +106,8 @@ export class Player extends Entity {
   // Phase 6 — character sheet
   str = 12; dex = 12; con = 12; int = 12; wis = 12; cha = 12;
   level = 1; xp = 0;
-  archetype = "validator";
-  race = "substrate";
+  archetype = "knight";
+  race = "human";
   luck = 0; // Fortune (−13..+13) from altar offerings — sways every roll
   ethos = "Balance"; // Order / Balance / Chaos
   favor = 0; crowned = false; title = ""; // standing with your Architect; crowning

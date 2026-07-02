@@ -68,32 +68,32 @@ export interface Archetype {
   ethos: Ethos;
 }
 export const ARCHETYPES: Archetype[] = [
-  { id: "validator", name: "Knight", blurb: "Sworn to the blade — strong and tough.",
+  { id: "knight", name: "Knight", blurb: "Sworn to the blade — strong and tough.",
     stats: { str: 16, dex: 11, con: 16, int: 9, wis: 11, cha: 10 }, hp: 26, start: ["mace", "vest"], ethos: "Order" },
-  { id: "nominator", name: "Cleric", blurb: "Keeper of the faith — balanced and well-liked.",
+  { id: "cleric", name: "Cleric", blurb: "Keeper of the faith — balanced and well-liked.",
     stats: { str: 12, dex: 13, con: 13, int: 11, wis: 12, cha: 15 }, hp: 22, start: ["heal"], ethos: "Balance" },
-  { id: "cypherpunk", name: "Rogue", blurb: "Shadow and speed — quick, clever, unseen.",
+  { id: "rogue", name: "Rogue", blurb: "Shadow and speed — quick, clever, unseen.",
     stats: { str: 10, dex: 16, con: 11, int: 15, wis: 12, cha: 8 }, hp: 18, start: ["ring_priv", "tele"], spell: "tele", ethos: "Chaos" },
-  { id: "builder", name: "Wizard", blurb: "Weaver of spells — versatile and bright.",
+  { id: "wizard", name: "Wizard", blurb: "Weaver of spells — versatile and bright.",
     stats: { str: 11, dex: 12, con: 12, int: 16, wis: 13, cha: 11 }, hp: 20, start: ["book_map"], spell: "bolt", ethos: "Balance" },
-  { id: "maximalist", name: "Barbarian", blurb: "A wild brute — raw might and fury.",
+  { id: "barbarian", name: "Barbarian", blurb: "A wild brute — raw might and fury.",
     stats: { str: 17, dex: 12, con: 16, int: 8, wis: 10, cha: 8 }, hp: 28, start: ["mace"], ethos: "Chaos" },
-  { id: "watcher", name: "Ranger", blurb: "A keen-eyed hunter — strikes from range.",
+  { id: "ranger", name: "Ranger", blurb: "A keen-eyed hunter — strikes from range.",
     stats: { str: 12, dex: 16, con: 12, int: 11, wis: 13, cha: 9 }, hp: 20, start: ["dagger", "dagger"], ethos: "Balance" },
-  { id: "solostaker", name: "Monk", blurb: "A disciplined ascetic — fights bare-handed, swift and serene.",
+  { id: "monk", name: "Monk", blurb: "A disciplined ascetic — fights bare-handed, swift and serene.",
     stats: { str: 13, dex: 15, con: 13, int: 11, wis: 16, cha: 10 }, hp: 22, start: [], ethos: "Order" },
-  { id: "auditor", name: "Archeologist", blurb: "A meticulous delver — armed with tools and insight.",
+  { id: "archeologist", name: "Archeologist", blurb: "A meticulous delver — armed with tools and insight.",
     stats: { str: 11, dex: 13, con: 12, int: 15, wis: 14, cha: 10 }, hp: 20, start: ["scope", "lamp", "pickaxe"], ethos: "Order" },
 ];
 
 /** Ecosystem (NetHack race): a stat tweak + a starting intrinsic, on top of the chosen archetype. */
 export interface Race { id: string; name: string; blurb: string; statMod: Partial<Record<Attr, number>>; intrinsics: string[]; }
 export const RACES: Race[] = [
-  { id: "substrate", name: "Human", blurb: "Balanced and adaptable — no innate gifts, no flaws.", statMod: {}, intrinsics: [] },
-  { id: "evm",       name: "Elf",   blurb: "Quick and clever, a touch frail.", statMod: { dex: 2, int: 1, con: -1 }, intrinsics: [] },
-  { id: "bitcoiner", name: "Dwarf", blurb: "A tough delver — unshakeable, can't be drained.", statMod: { con: 2, str: 1, dex: -1 }, intrinsics: ["drainResist"] },
-  { id: "kusaman",   name: "Orc",   blurb: "War-forged — strong and poison-proof, but abrasive.", statMod: { str: 1, con: 1, cha: -2, int: -1 }, intrinsics: ["poisonResist"] },
-  { id: "botnet",    name: "Gnome", blurb: "A clever little folk — sharp-witted and far-sensing, but slight.", statMod: { dex: 1, int: 1, str: -1, con: -1 }, intrinsics: ["telepathy"] },
+  { id: "human", name: "Human", blurb: "Balanced and adaptable — no innate gifts, no flaws.", statMod: {}, intrinsics: [] },
+  { id: "elf",       name: "Elf",   blurb: "Quick and clever, a touch frail.", statMod: { dex: 2, int: 1, con: -1 }, intrinsics: [] },
+  { id: "dwarf", name: "Dwarf", blurb: "A tough delver — unshakeable, can't be drained.", statMod: { con: 2, str: 1, dex: -1 }, intrinsics: ["drainResist"] },
+  { id: "orc",   name: "Orc",   blurb: "War-forged — strong and poison-proof, but abrasive.", statMod: { str: 1, con: 1, cha: -2, int: -1 }, intrinsics: ["poisonResist"] },
+  { id: "gnome",    name: "Gnome", blurb: "A clever little folk — sharp-witted and far-sensing, but slight.", statMod: { dex: 1, int: 1, str: -1, con: -1 }, intrinsics: ["telepathy"] },
 ];
 export function raceById(id: string): Race { return RACES.find((r) => r.id === id) ?? RACES[0]; }
 export function raceName(r: Race): string { return r.name; }
@@ -162,14 +162,14 @@ export function spellName(s: Spell): string { return s.name; }
 // `layout` = the parachain's signature level generator, so each branch feels distinct.
 export interface ChainDef { id: string; name: string; difficulty: number; loot: number; color: string; layout?: string; }
 export const CHAINS: ChainDef[] = [
-  { id: "kusama",    name: "the Wildlands",     difficulty: 1.6, loot: 1.6, color: "#e060d0", layout: "maze" }, // chaos, high risk/reward
-  { id: "moonbeam",  name: "the Moonlit Keep",  difficulty: 1.3, loot: 1.4, color: "#53cbc9", layout: "grid" }, // an EVM contract-city
-  { id: "astar",     name: "the Star Vault",    difficulty: 1.2, loot: 1.3, color: "#1b6dff", layout: "grid" },
-  { id: "phala",     name: "the Shrouded Vale", difficulty: 1.1, loot: 1.2, color: "#cdfa50", layout: "maze" }, // privacy/compute — a dark labyrinth
-  { id: "interlay",  name: "the Coinbridge",    difficulty: 1.0, loot: 1.5, color: "#f7931a", layout: "cave" }, // treasure caverns (BTC bridge)
-  { id: "bifrost",   name: "Bifrost",          difficulty: 0.9, loot: 1.0, color: "#5a25f0", layout: "labyrinth" },
-  { id: "hydration", name: "the Drowned Marsh", difficulty: 0.8, loot: 1.1, color: "#f6297c", layout: "swamp" }, // the Liquidity Pools — open water + islands
-  { id: "acala",     name: "the Haven",         difficulty: 0.6, loot: 0.8, color: "#e40c5b", layout: "normal" }, // safe DeFi haven
+  { id: "wildlands",    name: "the Wildlands",     difficulty: 1.6, loot: 1.6, color: "#e060d0", layout: "maze" }, // chaos, high risk/reward
+  { id: "moonkeep",  name: "the Moonlit Keep",  difficulty: 1.3, loot: 1.4, color: "#53cbc9", layout: "grid" }, // an EVM contract-city
+  { id: "starvault",     name: "the Star Vault",    difficulty: 1.2, loot: 1.3, color: "#1b6dff", layout: "grid" },
+  { id: "shroudedvale",     name: "the Shrouded Vale", difficulty: 1.1, loot: 1.2, color: "#cdfa50", layout: "maze" }, // privacy/compute — a dark labyrinth
+  { id: "coinbridge",  name: "the Coinbridge",    difficulty: 1.0, loot: 1.5, color: "#f7931a", layout: "cave" }, // treasure caverns (BTC bridge)
+  { id: "bifrostspire",   name: "Bifrost",          difficulty: 0.9, loot: 1.0, color: "#5a25f0", layout: "labyrinth" },
+  { id: "drownedmarsh", name: "the Drowned Marsh", difficulty: 0.8, loot: 1.1, color: "#f6297c", layout: "swamp" }, // the Liquidity Pools — open water + islands
+  { id: "haven",     name: "the Haven",         difficulty: 0.6, loot: 0.8, color: "#e40c5b", layout: "normal" }, // safe DeFi haven
 ];
 /** A parachain/realm's display name, flavored. */
 export function chainName(c: ChainDef): string { return c.name; }
