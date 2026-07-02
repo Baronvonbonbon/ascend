@@ -2918,6 +2918,27 @@ export class Game {
     this.log.add(p.luck === 0 ? "Your Fortune settles back to even." : "Your Fortune drifts toward the mean.", "dim", p);
   }
 
+  /** A worn ring of aggravate monster keeps the floor roused and homing on you; a ring of teleportation
+   *  blinks you at random now and then (teleportitis). Both bite whether the ring is cursed or not. */
+  tickRingBanes(p: Player): void {
+    if (!p.alive) return;
+    if (p.aggravate) {
+      for (const m of this.monsters) {
+        if (!m.alive || m.peaceful) continue;
+        if (m.sleepTurns > 0) m.sleepTurns = 0; // the din rouses it
+        if (m.frightened > 0) m.frightened = 0; // and steels it to home in
+      }
+    }
+    if (p.teleportitis && p.polyForm === null && ROT.RNG.getUniform() < 0.012) {
+      let pos = this.level.randomFloor(), t = 0;
+      while (t < 40 && (this.monsterAt(pos.x, pos.y) || this.playerAt(pos.x, pos.y) || this.level.tileAt(pos.x, pos.y) === "stairsDown")) { pos = this.level.randomFloor(); t++; }
+      p.x = pos.x; p.y = pos.y; this.recomputeFOV();
+      if (p === this.localPlayer) this.music.sfx("teleport");
+      this.log.add(`${this.sub(p)} ${this.verbS(p, "blink")} away without warning — teleportitis!`, "sys", p);
+      this.draw();
+    }
+  }
+
   // ── #enhance: weapon skills ──
   private weaponSkillClass(p: Player): string { return p.weapon?.type.skill ?? "martial"; }
   /** To-hit bonus from your trained rank with the wielded weapon's class. */
@@ -5346,7 +5367,7 @@ export class Game {
     for (const b of lvl.boulders) if (vis(b.x, b.y)) cells.push([b.x, b.y, "0", "#9a8a6a"]);
     // Sense minds: only THIS viewer's blindness-telepathy or sense-minds spell reveals out-of-sight foes.
     const sensed = !!me && ((me.blind > 0 && me.intrinsics.has("telepathy")) || me.senseTurns > 0 || me.amulet?.type.id === "amulet_esp");
-    const seeInvis = !!me && (me.intrinsics.has("seeInvis") || me.amulet?.type.id === "amulet_seeinvis"); // reveals cloaked foes within normal sight
+    const seeInvis = !!me && (me.intrinsics.has("seeInvis") || me.amulet?.type.id === "amulet_seeinvis" || me.ring?.type.id === "ring_seeinv"); // reveals cloaked foes within normal sight
     const warn = !!me && me.warning; // a ring of warning shows nearby foes through walls
     for (const m of mons) {
       const near = warn && Math.max(Math.abs(m.x - me!.x), Math.abs(m.y - me!.y)) <= 5;

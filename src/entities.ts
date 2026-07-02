@@ -83,6 +83,9 @@ export class Player extends Entity {
   ringFireRes = false; ringColdRes = false; ringShockRes = false; // elemental-resistance rings (while worn)
   warning = false;     // ring of warning — sense nearby foes through walls
   autoSearch = false;  // ring of searching — passively reveals adjacent hidden traps & doors
+  fastDigest = false;  // ring of hunger — nutrition burns twice as fast
+  aggravate = false;   // ring of aggravate monster — wakes & draws the whole floor each turn
+  teleportitis = false; // ring of teleportation — a small chance each turn to blink at random
   poison = 0;          // turns of damage-over-time remaining
   confused = 0;        // turns of staggering movement remaining
   stoning = 0;         // turns until you freeze solid (petrification) — cure fast
@@ -195,6 +198,11 @@ export class Player extends Entity {
       case "ring_shockred": this.ringShockRes = on && !cursed; break;
       case "ring_warn": this.warning = on && !cursed; break;
       case "ring_search": this.autoSearch = on && !cursed; break;
+      case "ring_stealth": this.stealth = on && !cursed; break;   // cursed: no stealth
+      case "ring_hunger": this.fastDigest = on; break;            // a hungry ring bites even blessed
+      case "ring_aggravate": this.aggravate = on; break;          // a bane whether or not it's cursed
+      case "ring_teleport": this.teleportitis = on; break;        // random blinks, cursed or not
+      // ring_seeinv is read directly off the worn ring in the renderer — no flag to sync
     }
   }
   private pending: Verb | null = null;
@@ -351,6 +359,7 @@ export class Player extends Entity {
     if (this.polyForm && --this.polyTurns <= 0) this.game.revertPoly(this);
     this.game.tickLycanthropy(this); // infected? a chance to involuntarily shift into the were-beast
     this.game.tickLuck(this);        // Fortune drifts toward the mean unless a luckstone anchors it
+    this.game.tickRingBanes(this);   // a worn ring of aggravate monster / teleportation makes its presence felt
     this.game.checkVault();          // teleported into the Treasury? summon the Council Guard escort
     this.game.checkShopBill(this);   // left the shop carrying unpaid wares? settle the bill (or be named a thief)
     if (this.autoSearch) this.game.autoSearchAround(this); // ring of searching — reveal adjacent hidden things
@@ -386,8 +395,9 @@ export class Player extends Entity {
   }
 
   private tickHunger(): void {
-    if (this.slowDigest) { this.digestPhase ^= 1; if (this.digestPhase) return; } // cold storage: skip every other tick
-    this.nutrition -= 1;
+    if (this.slowDigest && !this.fastDigest) { this.digestPhase ^= 1; if (this.digestPhase) return; } // cold storage: skip every other tick
+    this.nutrition -= this.fastDigest ? 2 : 1; // a ring of hunger doubles the burn
+    if (this.fastDigest && this.nutrition === 148) this.game.log.add("You feel a gnawing, unnatural hunger.", "bad");
     if (this.nutrition === 150) this.game.log.add("You are getting hungry.", "bad");
     else if (this.nutrition === 50) this.game.log.add("You are weak with hunger.", "bad");
     else if (this.nutrition <= 0) {

@@ -132,6 +132,11 @@ export const ITEMS: ItemType[] = [
   { id: "ring_firered",  kind: "ring", name: "a ring of fire resistance",  ch: "=", fg: "#e08040", weight: 2 }, // fire resistance while worn
   { id: "ring_coldred",  kind: "ring", name: "a ring of cold resistance",  ch: "=", fg: "#80c0f0", weight: 2 }, // cold resistance while worn
   { id: "ring_shockred", kind: "ring", name: "a ring of shock resistance", ch: "=", fg: "#f0e070", weight: 2 }, // shock resistance while worn
+  { id: "ring_stealth", kind: "ring", name: "a ring of stealth",        ch: "=", fg: "#90a0a0", weight: 2 }, // foes can't track you (stealth)
+  { id: "ring_seeinv",  kind: "ring", name: "a ring of see invisible",  ch: "=", fg: "#e0e0f0", weight: 2 }, // reveals cloaked foes within sight
+  { id: "ring_hunger",  kind: "ring", name: "a ring of hunger",         ch: "=", fg: "#c07040", weight: 1 }, // burns nutrition twice as fast (usually a bane)
+  { id: "ring_aggravate", kind: "ring", name: "a ring of aggravate monster", ch: "=", fg: "#e05040", weight: 1 }, // wakes & draws the whole floor (usually a bane)
+  { id: "ring_teleport", kind: "ring", name: "a ring of teleportation",  ch: "=", fg: "#c060e0", weight: 1 }, // random teleports (teleportitis; usually a bane)
   // ── wands ── / (directional, charged; zap with z)
   { id: "wand_bolt",   kind: "wand", name: "a wand of striking",      ch: "/", fg: "#90d0e0", weight: 2 },
   { id: "wand_banish", kind: "wand", name: "a wand of banishment",    ch: "/", fg: "#d090d0", weight: 2 },
