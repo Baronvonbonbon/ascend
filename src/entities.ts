@@ -70,7 +70,7 @@ export class Player extends Entity {
   ring: Item | null = null;
   amulet: Item | null = null; // worn around the neck (life-saving / reflection)
   engulfedBy: Monster | null = null; // swallowed by a trapper — must struggle/cut free before moving
-  stealth = false;     // ring of privacy — monsters can't track you
+  stealth = false;     // ring of stealth — monsters can't track you
   regenFast = false;   // ring of regeneration
   freeAction = false;  // ring of free action — immune to paralysis
   sustainAbility = false; // ring of sustain ability — attributes can't be drained
@@ -98,7 +98,7 @@ export class Player extends Entity {
   offhand: Item | null = null;             // a second weapon for #twoweapon (X)
   riding = false;                          // mounted on the steed (#ride / M)
   private regenTimer = 0;
-  hasJam = false;
+  hasAmulet = false;
   gold = 0;            // coin — buys wares at the bazaar
   maxDepthReached = 1;
   weaponBonus = 0; // from scrolls of enchantment
@@ -112,7 +112,7 @@ export class Player extends Entity {
   ethos = "Balance"; // Order / Balance / Chaos
   favor = 0; crowned = false; title = ""; // standing with your Architect; crowning
   conducts = new Set<string>(["pacifist", "illiterate", "atheist", "vegetarian", "bankless"]); // vows kept until broken (Phase 13a)
-  // Phase 8 — polymorph self ("fork")
+  // Phase 8 — polymorph self
   polyForm: MonsterDef | null = null;
   polyTurns = 0; savedHp = 0; savedMaxHp = 0;
   lycanthrope: MonsterDef | null = null; // infected — involuntarily transforms into this were-beast until cured
@@ -120,7 +120,7 @@ export class Player extends Entity {
   energy = 5; maxEnergy = 5;
   spells = new Set<string>(); // known spell ids
   senseTurns = 0;             // sense minds — monsters revealed
-  hasteTurns = 0;             // overclock — temporary speed
+  hasteTurns = 0;             // quicken — temporary speed
   slowTurns = 0;              // congestion — a clogged stride; drags your speed while it lasts
   private energyTimer = 0;
 
@@ -132,7 +132,7 @@ export class Player extends Entity {
     } else this.attackDmg = [1, 3];
   }
 
-  /** Bare-handed and free — no weapon or off-hand in your grip (and not a handless fork). Gates the
+  /** Bare-handed and free — no weapon or off-hand in your grip (and not a handless form). Gates the
    *  unhanded benefits: martial arts, free-hands utility, an open-handed pause in foes, and a lighter step. */
   unhanded(): boolean { return this.weapon === null && this.offhand === null && !this.polyForm; }
 
@@ -182,7 +182,7 @@ export class Player extends Entity {
       }
       case "ring_regen": this.regenFast = on && !cursed; break; // cursed: no regen
       case "ring_priv": this.stealth = on && !cursed; break;    // cursed: cloak fails
-      case "art_cipher": this.stealth = on && !cursed; break;   // the Null Cipher — perfect privacy
+      case "art_cipher": this.stealth = on && !cursed; break;   // the Null Cipher — perfect stealth
       case "ring_free": this.freeAction = on && !cursed; break;
       case "ring_sustain": this.sustainAbility = on && !cursed; break;
       case "ring_digest": this.slowDigest = on && !cursed; break;
@@ -200,7 +200,7 @@ export class Player extends Entity {
   private pendingDir: Item | null = null; // a wand awaiting a zap direction
   private pendingThrow: Item | null = null; // an item awaiting a throw direction
   quiver: Item | null = null;               // readied missile for the `f`ire command
-  private pendingApply: Item | null = null; // a tool awaiting a direction (excavator / state reader)
+  private pendingApply: Item | null = null; // a tool awaiting a direction (excavator / stethoscope)
   private pendingWrite: Item | null = null; // a rune-scribe's kit awaiting a scroll choice
   private pendingWish: Item | null = null;  // a wand of wishing awaiting a wish choice
   private pendingLoot: { vault: Item; mode: "menu" | "in" | "out" } | null = null; // a bag of holding being looted
@@ -239,11 +239,11 @@ export class Player extends Entity {
   }
 
   getSpeed(): number {
-    const haste = this.hasteTurns > 0 ? 50 : 0; // overclock spell
+    const haste = this.hasteTurns > 0 ? 50 : 0; // quicken spell
     if (this.riding && !(this.game.pet?.alive)) this.riding = false; // steed lost — you're afoot again
     const ride = this.riding ? 30 : 0;           // a hound steed quickens your stride
-    if (this.polyForm) return Math.max(20, this.polyForm.speed ?? 100) + haste + ride; // move as your fork
-    const base = this.intrinsics.has("fast") ? 130 : 100; // intrinsic speed from a fork-daemon corpse
+    if (this.polyForm) return Math.max(20, this.polyForm.speed ?? 100) + haste + ride; // move as your form
+    const base = this.intrinsics.has("fast") ? 130 : 100; // intrinsic speed from a swift monster's corpse
     const light = this.unhanded() ? 15 : 0; // empty-handed and unburdened by steel — a quicker step (sheathe and run)
     const slow = this.slowTurns > 0 ? 40 : 0; // congestion clogs your stride
     return Math.max(20, base + haste + ride + light - slow - this.encumbrance().speed); // a heavy pack drags your stride
@@ -430,7 +430,7 @@ export class Player extends Entity {
       case "W": return this.startSelect("wear");
       case "q": {
         const here = this.game.level.tileAt(this.x, this.y);
-        if (here === "faucet") return this.game.quaffFaucet(this) ? this.endTurn() : false;
+        if (here === "fountain") return this.game.quaffFountain(this) ? this.endTurn() : false;
         if (here === "sink") return this.game.quaffSink(this) ? this.endTurn() : false;
         return this.startSelect("quaff");
       }
@@ -441,10 +441,10 @@ export class Player extends Entity {
       case "C": this.pendingClose = true; this.game.log.add("Close a door in which direction? (a move key, Esc to cancel)", "sys"); return false;
       case "K": this.pendingKick = true; this.game.log.add("Kick in which direction? (a move key, Esc to cancel)", "sys"); return false;
       case "D":
-        // On a faucet, dip your weapon (the lawful relic awaits). Otherwise, dip an item into held water.
-        if (this.game.level.tileAt(this.x, this.y) === "faucet") return this.game.dipWeapon(this) ? this.endTurn() : false;
+        // On a fountain, dip your weapon (the lawful relic awaits). Otherwise, dip an item into held water.
+        if (this.game.level.tileAt(this.x, this.y) === "fountain") return this.game.dipWeapon(this) ? this.endTurn() : false;
         if (this.inventory.items.some((it) => it.type.id === "water")) return this.startSelect("dip");
-        this.game.log.add("You've no faucet here and no water to dip into.", "dim"); return false;
+        this.game.log.add("You've no fountain here and no water to dip into.", "dim"); return false;
       case "N": return this.startSelect("name");
       case "^": this.game.identifyTrap(this); return false;
       case "X": // toggle two-weapon: off → choose an off-hand; on → sheathe it
@@ -573,7 +573,7 @@ export class Player extends Entity {
       }
       if (id === "lamp") {
         item.lit = !item.lit;
-        this.game.log.add(item.lit ? "You light the block explorer — its glow pushes back the dark." : "You douse the block explorer.", item.lit ? "good" : "dim");
+        this.game.log.add(item.lit ? "You light the lamp — its glow pushes back the dark." : "You douse the lamp.", item.lit ? "good" : "dim");
         this.game.recomputeFOV(); this.game.draw();
         return this.endTurn();
       }
@@ -857,7 +857,7 @@ export class Player extends Entity {
           if (item.buc === "cursed") { item.bucKnown = true; this.game.log.add(`The ${t.name} tightens around your finger. It's cursed!`, "bad"); }
           return this.endTurn();
         }
-        if (t.kind === "amulet" && t.id !== "jam") {
+        if (t.kind === "amulet" && t.id !== "amulet_yendor") {
           if (item === this.amulet) { this.game.log.add("That amulet is already around your neck.", "dim"); return false; }
           if (this.amulet && this.amulet.buc === "cursed") {
             this.amulet.bucKnown = true;
@@ -1052,7 +1052,7 @@ export class Player extends Entity {
       this.game.log.add("You can only pray at an altar (_).", "dim");
       return false;
     }
-    this.game.breakConduct(this, "atheist"); // praying ends Self-custodian
+    this.game.breakConduct(this, "atheist"); // praying ends Self-jailer
     this.game.pray();
     return this.endTurn();
   }
@@ -1071,7 +1071,7 @@ export class Monster extends Entity {
   museEscaped = false; // has used its one teleport draught to flee (muse.c)
   worn = 0;       // evasion gained from armor it has donned off the floor (muse.c — wear)
   splitsLeft = 0; // a phantom's remaining replications — bounds the swarm (children inherit one fewer)
-  stolen: Item | null = null; // a thief (rug puller) carries what it snatched; drops it on death
+  stolen: Item | null = null; // a thief (cutpurse) carries what it snatched; drops it on death
   stoleGold = 0;              // an coin-hoarder's snatched gold — disgorged when it's slain
   heardSound: { x: number; y: number; ttl: number } | null = null; // a partner's call it's investigating
   // A shopkeeper stands peaceful until you steal; then it hunts you down.

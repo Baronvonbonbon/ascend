@@ -1,9 +1,8 @@
 # Ascend — Design Document
 
-> An authentic ASCII roguelike that pays homage to Yendor, the Wilds, the 
-> Foundation, Amulet, Marduk Wood, and the ethos of **privacy, independence,
-> and resiliency** — where provisions are bought with **gold** and your deeds are
-> recorded in a local Hall of the Fallen.
+> An authentic ASCII fantasy roguelike in the tradition of NetHack — descend the
+> Dungeon of Doom, recover the **Amulet of Yendor**, and *ascend*. Provisions are
+> bought with **gold**; the fallen leave **bones** in a local Hall of the Fallen.
 
 **North star:** NetHack-grade depth and completeness. **Path:** incremental —
 each phase is playable and on-theme; "parity" is the long-tail content grind
@@ -13,10 +12,9 @@ after the engine, economy, and mythology are solid.
 
 ## 1. The pitch
 
-You are a **Seeker** descending the Dungeon of Doom — a corrupted, centralised
-legacy stack. At its bottom lies the **Amulet** (this world's Amulet of Yendor): the
-artifact that lets a chain *ascend* into a trustless, resilient dungeon. Recover it
-and climb back to the surface to **Ascend**.
+You are a **Seeker** descending the **Dungeon of Doom**. At its bottom, in the grip
+of Moloch, lies the **Amulet of Yendor**. Recover it and climb back to the surface
+to **Ascend** — offer it on your aligned altar beyond the world and win.
 
 Permadeath. Procedural dungeons. Hunger, identification, emergent item play. And
 a living economy: **gold** buys provisions at shrines/shops, your earnings can fund
@@ -26,28 +24,28 @@ your next run, and your fallen heroes leave **bones** for later runs to find.
 
 ## 2. Mythology bible (theming)
 
-The homage runs from cosmetic names down into mechanics. philosophy becomes
-gameplay, not just flavour.
+The flavor runs from names down into mechanics — theme becomes gameplay, not just
+decoration.
 
 | World concept | Roguelike role |
 |---|---|
-| **The Amulet of Yendor** | The Amulet of Yendor — endgame artifact at the dungeon's bottom. |
-| **Marduk Wood, the Architect** | A deity/wizard; the patron of the Ascend. Prayer/altar analogue. |
-| ** Foundation** | A patron order that grants boons; quest-givers. |
-| **Yendor dungeon chain** | The surface / the goal of ascension. |
-| **Parachains** | Branching dungeon arms (side-levels), each with a flavour. |
-| **the Wilds** | A chaos realm — high-risk, high-reward, faster, deadlier. "Expect chaos." |
-| **Validators** | Stalwart guardian constructs (golems). |
-| **hound** | Allied NPCs / pets that back you. |
-| **The Warden** | A boss demon embodying centralised control/censorship. |
-| **Phantom** | Swarm monsters that multiply (Phantom attack). |
-| **The Gray Paper** | The in-game guidebook/spellbook lore (Marduk's Amulet spec). |
+| **The Amulet of Yendor** | The endgame artifact, at the dungeon's bottom. |
+| **Marduk, the Architect** | A deity/wizard; the patron of the Ascend. Prayer/altar. |
+| **The Fellowship** | A patron order that grants boons; quest-givers. |
+| **The surface** | The goal of ascension — climb back out with the Amulet. |
+| **Dungeon branches** | Side-arms off the main descent, each with its own flavor. |
+| **The Wildlands** | A chaos realm — high-risk, high-reward, faster, deadlier. |
+| **Golems** | Stalwart guardian constructs. |
+| **Hounds** | Allied pets that fight at your side. |
+| **The Warden** | A boss demon of control and shackle, hunting the Amulet. |
+| **Phantoms** | Swarm monsters that multiply. |
+| **The Gray Paper** | The in-game guidebook / lore. |
 
-**Philosophy → mechanics:**
-- **Privacy** → a **ZK Cloak** / stealth: become unseen, slip past guardians.
-- **Resiliency** → **revival / checkpointing**: finality as a save anchor; bones.
-- **Independence** → **no central authority**: no single safe hub; artifact gear you carry through the run.
-- **Light-client / smolness** → a "Light Lantern" that reveals truth cheaply.
+**Theme → mechanics:**
+- **Stealth** → a **cloak of invisibility**: become unseen, slip past guardians.
+- **Survival** → **revival & anchors**: the amulet of life saving; bones of the fallen.
+- **Self-reliance** → **no safe hub**: the gear you carry is the gear you keep.
+- **Light** → a **lantern** that reveals the dark cheaply.
 
 Tone: reverent but playful. Death messages, shop banter, and altar prayers carry
 the lore. Nothing breaks the ASCII purity.
@@ -89,7 +87,7 @@ a Knight golem, a Bug); melee; HP; permadeath; one descending dungeon.
 
 **Growing toward parity:** weapons/armor/food/potions/scrolls/wands/rings/spells;
 identification; hunger; traps; pets/hound; altars + prayer (Marduk); shops;
-special levels (the Wilds branch, the W3F vault, the Warden's lair); the Amulet of Yendor + the
+special levels (the Wildlands branch, a treasure vault, the Warden's lair); the Amulet of Yendor + the
 ascension run. The deep interaction web is the Phase 5 long tail.
 
 ---

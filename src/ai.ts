@@ -223,10 +223,10 @@ export const MONSTER_BEHAVIORS: Behavior<Monster>[] = [
 
   // The resurrected Warden lunges for the Amulet of Yendor itself — a snatch-and-blink.
   { name: "warden-steal",
-    score: (_g, s, c) => (s.isHunter && !s.cancelled && c.dist === 1 && c.p.hasJam && ROT.RNG.getUniform() < 0.18 ? 1 : 0),
+    score: (_g, s, c) => (s.isHunter && !s.cancelled && c.dist === 1 && c.p.hasAmulet && ROT.RNG.getUniform() < 0.18 ? 1 : 0),
     act: (g, s, c) => g.censorSteal(s, c.p) },
 
-  // The rug pull: a thief adjacent to you snatches a pack item and blinks away.
+  // The the theft: a thief adjacent to you snatches a pack item and blinks away.
   { name: "thief-steal",
     score: (g, s, c) => {
       if (s.cancelled || !s.def.steals || c.dist !== 1) return 0;

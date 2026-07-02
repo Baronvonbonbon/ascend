@@ -1,10 +1,10 @@
 // A perpetual, global tally of runs begun and adventurers fallen across ALL players —
 // surfaced on the site. Backed by a free, tokenless hosted counter (abacus), called
 // fire-and-forget: every request is wrapped so the game never blocks or breaks if the
-// service is slow, down, or blocked by a privacy extension — the display just shows "—".
+// service is slow, down, or blocked by a stealth extension — the display just shows "—".
 
 const BASE = "https://abacus.jasoncameron.dev";
-const NS = "ascend-jam-dungeon"; // our namespace on the shared counter service
+const NS = "ascend-yendor-dungeon"; // our namespace on the shared counter service
 const KEY_GAMES = "games";
 const KEY_DEATHS = "deaths";
 

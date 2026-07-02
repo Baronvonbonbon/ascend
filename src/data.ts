@@ -16,7 +16,7 @@ export const COLORS = {
   dim:       "#6c6a60",
 };
 
-export type TileType = "wall" | "floor" | "door" | "doorClosed" | "doorLocked" | "doorHidden" | "stairsDown" | "stairsUp" | "altar" | "portal" | "faucet" | "throne" | "sink" | "vibrating" | "water" | "branchDown" | "pit" | "drawbridge" | "drawbridgeUp" | "lever";
+export type TileType = "wall" | "floor" | "door" | "doorClosed" | "doorLocked" | "doorHidden" | "stairsDown" | "stairsUp" | "altar" | "portal" | "fountain" | "throne" | "sink" | "vibrating" | "water" | "branchDown" | "pit" | "drawbridge" | "drawbridgeUp" | "lever";
 
 export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: string }> = {
   wall:       { ch: "#", fg: COLORS.wall,   fgDim: COLORS.wallDim },
@@ -29,7 +29,7 @@ export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: strin
   stairsUp:   { ch: "<", fg: COLORS.stairs, fgDim: "#6a5a28" },
   altar:      { ch: "_", fg: "#c0d0e0",     fgDim: "#4a5560" },
   portal:     { ch: "Ω", fg: "#e060d0",     fgDim: "#6a3060" },
-  faucet:     { ch: "{", fg: "#4fb0e0",     fgDim: "#2a5570" }, // a fountain — quaff (q)
+  fountain:     { ch: "{", fg: "#4fb0e0",     fgDim: "#2a5570" }, // a fountain — quaff (q)
   throne:     { ch: "\\", fg: "#e0c040",    fgDim: "#6a5a20" }, // the throne — sit (s)
   sink:       { ch: "=", fg: "#7fa0b0",     fgDim: "#3a4a55" }, // a burn sink — quaff (q) for chaos, kick (K) for a ring
   vibrating:  { ch: "≈", fg: "#ff60ff",     fgDim: "#7a307a" }, // the vibrating square — invoke (I) the ritual here
@@ -165,7 +165,7 @@ export const CHAINS: ChainDef[] = [
   { id: "wildlands",    name: "the Wildlands",     difficulty: 1.6, loot: 1.6, color: "#e060d0", layout: "maze" }, // chaos, high risk/reward
   { id: "moonkeep",  name: "the Moonlit Keep",  difficulty: 1.3, loot: 1.4, color: "#53cbc9", layout: "grid" }, // an EVM rune-city
   { id: "starvault",     name: "the Star Vault",    difficulty: 1.2, loot: 1.3, color: "#1b6dff", layout: "grid" },
-  { id: "shroudedvale",     name: "the Shrouded Vale", difficulty: 1.1, loot: 1.2, color: "#cdfa50", layout: "maze" }, // privacy/compute — a dark labyrinth
+  { id: "shroudedvale",     name: "the Shrouded Vale", difficulty: 1.1, loot: 1.2, color: "#cdfa50", layout: "maze" }, // stealth/compute — a dark labyrinth
   { id: "coinbridge",  name: "the Coinbridge",    difficulty: 1.0, loot: 1.5, color: "#f7931a", layout: "cave" }, // treasure caverns (BTC bridge)
   { id: "bifrostspire",   name: "Bifrost",          difficulty: 0.9, loot: 1.0, color: "#5a25f0", layout: "labyrinth" },
   { id: "drownedmarsh", name: "the Drowned Marsh", difficulty: 0.8, loot: 1.1, color: "#f6297c", layout: "swamp" }, // the the Sunken Pools — open water + islands
@@ -271,7 +271,7 @@ export interface MonsterDef {
   corpseEffect?: "poisonous" | "petrify" | "speed" | "telepathy" | "levelup" | "fire" | "cold" | "shock"; // what eating its corpse does
   corrodes?: boolean | number; // its touch may rust/corrode a worn armor piece — true = default chance (0.35), or a per-hit probability 0..1
   drains?: boolean;      // a barrow-wight (wraith) — its touch saps an level (XP level); eat its corpse to regain one
-  steals?: boolean;      // a thief — snatches a pack item and flees (the rug pull)
+  steals?: boolean;      // a thief — snatches a pack item and flees (the the theft)
   stealsGold?: boolean;  // an coin-hoarder (leprechaun) — snatches gold and blinks away
   stealsLuck?: boolean;  // a doubt gremlin — leeches your Fortune (Luck) on a hit
   paralyzes?: boolean;   // a watcher eye (floating eye) — passive, but melee it and its gaze freezes you
@@ -298,7 +298,7 @@ export interface MonsterDef {
   boss?: boolean;        // a unique mini-boss — drops a guaranteed prize on death
 }
 
-// Themed bestiary — the centralised legacy stack fights back.
+// Themed bestiary — the tyrannical old depths fights back.
 export const MONSTERS: MonsterDef[] = [
   { name: "a doppelganger",  ch: "s", fg: "#9a9a9a", hp: 3,  dmg: [1, 2], ai: "chase",  minDepth: 1, weight: 4, splits: true, speed: 105, pack: [2, 4] },
   { name: "a rust monster",  ch: "x", fg: "#7ac06a", hp: 2,  dmg: [1, 1], ai: "wander", minDepth: 1, weight: 5, speed: 90, corrodes: 0.5 }, // corrosion is its whole threat — the likeliest to rust
@@ -342,9 +342,9 @@ export const MONSTERS: MonsterDef[] = [
   { name: "a flare drone",   ch: "y", fg: "#f0f0c0", hp: 9,  dmg: [2, 4], ai: "chase",  minDepth: 5, weight: 2, speed: 115, blinds: true },   // bursts in a blinding flash on a hit
   { name: "a FUD imp",       ch: "i", fg: "#a070c0", hp: 10, dmg: [2, 4], ai: "chase",  minDepth: 7, weight: 2, speed: 110, curses: true },   // its touch curdles a carried item to cursed — silently
   { name: "a mummy",         ch: "M", fg: "#c0b080", hp: 20, dmg: [3, 7], ai: "chase",  minDepth: 8, weight: 2 },
-  // ── Gehennom demons (Phase 12c) — the Dark Forest's servants of centralization ──
+  // ── Gehennom demons (Phase 12c) — the Dark Forest's servants of tyranny ──
   { name: "a dungeon fiend",  ch: "&", fg: "#c04040", hp: 22, dmg: [4, 8], ai: "chase", minDepth: 9,  weight: 2, steals: true, speed: 110 },
-  { name: "a watcher wraith", ch: "W", fg: "#a060a0", hp: 18, dmg: [3, 6], ai: "chase", minDepth: 9,  weight: 2, inflict: "confuse", ranged: true },
+  { name: "a hexing wraith", ch: "W", fg: "#a060a0", hp: 18, dmg: [3, 6], ai: "chase", minDepth: 9,  weight: 2, inflict: "confuse", ranged: true },
   { name: "a warden demon",   ch: "P", fg: "#d05050", hp: 24, dmg: [4, 7], ai: "chase", minDepth: 9,  weight: 2, summons: true },
   { name: "a snatch imp",     ch: "j", fg: "#d0a040", hp: 12, dmg: [3, 5], ai: "chase", minDepth: 9,  weight: 3, steals: true, speed: 120 },
   { name: "a hellfire demon", ch: "X", fg: "#e03030", hp: 30, dmg: [5, 9], ai: "chase", minDepth: 10, weight: 2, breath: 14, fearless: true },
@@ -379,7 +379,7 @@ export const ORACLE: MonsterDef = {
 /** Major consultations — genuinely useful guidance (skin() reflavors the proper nouns). */
 export const ORACLE_HINTS = [
   "The foot of the dungeon hides a vibrating square — bring the Bell, the Candelabrum, and the Gray Paper, and #invoke there.",
-  "A blessed scroll of formal verification audits your gear — proofed, it will never rust.",
+  "A blessed scroll of remove curse audits your gear — proofed, it will never rust.",
   "Slay the barrow-wight, then eat its corpse: the level it drained returns to you.",
   "Dip a worthy blade in a fountain and you may draw the lawful relic.",
   "Cursed gear welds fast to the flesh — a remove-curse alone will free it.",
@@ -421,7 +421,7 @@ export const WARDEN: MonsterDef = {
   name: "THE WARDEN", ch: "C", fg: "#ff3b3b", hp: 48, dmg: [6, 11], ai: "chase", minDepth: 99, weight: 0, fearless: true,
 };
 
-/** MOLOCH, the Central Planner — the final tyrant who hoards the Amulet of Yendor at the bottom of Gehennom. */
+/** MOLOCH, the Tyrant — the final tyrant who hoards the Amulet of Yendor at the bottom of Gehennom. */
 export const MOLOCH: MonsterDef = {
   name: "MOLOCH, the Dark Lord", ch: "&", fg: "#ff2020", hp: 80, dmg: [8, 14], ai: "chase", minDepth: 99, weight: 0, fearless: true, boss: true, summons: true, breath: 20,
 };

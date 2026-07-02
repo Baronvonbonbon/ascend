@@ -257,8 +257,8 @@ export interface MusicContext {
   danger: number;     // 0..1 — drives the tension layer (trills / fast beats / bass)
   bossNear: boolean;  // a boss / dragon / Warden in view → a menace rumble
   crowd: number;      // 0..1 — how thronged the area is
-  jamNear: boolean;   // the Amulet is on the level / held → a deep ominous pulse
-  faucet: boolean;    // standing by a faucet → drips (foley)
+  amuletNear: boolean;   // the Amulet is on the level / held → a deep ominous pulse
+  fountain: boolean;    // standing by a fountain → drips (foley)
   altar: boolean;     // standing by an altar → a soft chime (foley)
   beast?: string;     // category of the nearest hostile in view → an occasional creature cue (foley)
 }
@@ -326,7 +326,7 @@ export class MusicEngine {
   private dangerTheme: DangerTheme | null = null;
   private lastIntro = 0; // ctx time of the last danger swell-intro (debounces flicker near the threshold)
   private danger = 0;          // 0..1, the tension layer's target
-  private c: MusicContext = { threat: 0, danger: 0, bossNear: false, crowd: 0, jamNear: false, faucet: false, altar: false };
+  private c: MusicContext = { threat: 0, danger: 0, bossNear: false, crowd: 0, amuletNear: false, fountain: false, altar: false };
   private _enabled = false;
   private _mode: string;       // "auto" | "shuffle" | a track id
   private area = "legacy";
@@ -636,9 +636,9 @@ export class MusicEngine {
     if (t && this.active) {
       for (const v of this.active.voices) v.osc.detune.setTargetAtTime(t.detune + warp * 30, now, 1.2); // beating sours the bed near foes
 
-      // On the Planes you always carry the Amulet, so jamNear must not block the ethereal idle there.
+      // On the Planes you always carry the Amulet, so amuletNear must not block the ethereal idle there.
       const planesArea = t.area === "planes" || t.area === "genesis";
-      const jamBlocks = c.jamNear && !planesArea;
+      const jamBlocks = c.amuletNear && !planesArea;
 
       // ── the bed breathes: in calm the whole bed (drone + pad swells) drops to a low level, then fully
       //    out for ~30s on a slow ~80s cycle, swelling back — opening space for the chill groove + chimes. ──
@@ -656,7 +656,7 @@ export class MusicEngine {
       const baseG = t.groove ?? 0;
       let intensity = 0;
       if (baseG > 0 && !settled) {
-        const situ = Math.max(this.danger, c.crowd * 0.7) + (c.jamNear ? 0.15 : 0) + (c.bossNear ? 0.2 : 0);
+        const situ = Math.max(this.danger, c.crowd * 0.7) + (c.amuletNear ? 0.15 : 0) + (c.bossNear ? 0.2 : 0);
         intensity = Math.min(1, baseG * (0.55 + 0.45 * this.ebb(now)) + 0.45 * situ);
       }
       const grooveOn = intensity > 0.12;
@@ -679,9 +679,9 @@ export class MusicEngine {
       } else this.nextPulse = now;
 
       // ── context reactions ──
-      if (c.jamNear && !planesArea) { while (this.nextJam < horizon) { this.pulse(t.root * 0.5, this.nextJam, this.active.bus, 0.16); this.nextJam += 2.4; } } else this.nextJam = now; // no ominous Amulet pulse in the weightless Planes
+      if (c.amuletNear && !planesArea) { while (this.nextJam < horizon) { this.pulse(t.root * 0.5, this.nextJam, this.active.bus, 0.16); this.nextJam += 2.4; } } else this.nextJam = now; // no ominous Amulet pulse in the weightless Planes
       if (c.altar) { while (this.nextChime < horizon) { this.note(semi(t.root, 12) * 4, this.nextChime, 2.6, this.active.bus, "sine", 0.05, 4000); this.nextChime += 3.5 + Math.random() * 2.5; } } else this.nextChime = now;
-      if (c.faucet) { while (this.nextDrip < horizon) { this.drip(this.nextDrip); this.nextDrip += 0.7 + Math.random() * 1.8; } } else this.nextDrip = now;
+      if (c.fountain) { while (this.nextDrip < horizon) { this.drip(this.nextDrip); this.nextDrip += 0.7 + Math.random() * 1.8; } } else this.nextDrip = now;
       // foley: per-zone environment ambience + an occasional nearby-creature cue
       if (!stinging) { this.ambientTick(now, horizon); this.beastCue(now, horizon); }
     }

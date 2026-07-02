@@ -12,7 +12,27 @@ import { Item } from "./inventory";
 import { MONSTERS, MonsterDef, CHAINS, BRANCHES } from "./data";
 import type { Level } from "./level";
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
+
+// v4 renames: the last crypto-flavored ids reskinned to NetHack-canonical fantasy.
+const ITEM_V4: Record<string, string> = { jam: "amulet_yendor", fork: "scroll_poly" };
+const TRAP_V4: Record<string, string> = { reorg: "teleport", fork: "polymorph" };
+/** Rewrite serialized item refs ({$item:"jam"}) and trap kinds ({x,y,kind:"reorg"}) anywhere in the tree. */
+function deepRemapV4(v: unknown): void {
+  if (!v || typeof v !== "object") return;
+  if (Array.isArray(v)) { v.forEach(deepRemapV4); return; }
+  const o = v as Record<string, unknown>;
+  if (typeof o.$item === "string" && ITEM_V4[o.$item]) o.$item = ITEM_V4[o.$item];      // generic ItemType ref
+  if (typeof o.type === "string" && ITEM_V4[o.type]) o.type = ITEM_V4[o.type];           // floor item / inventory item id
+  if (typeof o.kind === "string" && typeof o.x === "number" && typeof o.y === "number" && TRAP_V4[o.kind]) o.kind = TRAP_V4[o.kind];
+  for (const k of Object.keys(o)) deepRemapV4(o[k]);
+}
+function renameField(fields: unknown, from: string, to: string): void {
+  if (fields && typeof fields === "object" && !Array.isArray(fields)) {
+    const f = fields as Record<string, unknown>;
+    if (from in f) { f[to] = f[from]; delete f[from]; }
+  }
+}
 
 // v3 id renames (crypto → fantasy). Applied to old saves so a run in progress survives the reskin.
 const ID_V3: Record<string, string> = {
@@ -66,6 +86,20 @@ const MIGRATIONS: Record<number, (d: Record<string, Json>) => void> = {
       for (const k of Object.keys(floors)) { const nk = remapFloorKey(k); if (nk !== k) { floors[nk] = floors[k]; delete floors[k]; } }
     }
     deepRemapChain(d); // rewrite any {$chain:"kusama"} portal/branch reference nested in the floors
+  },
+  // v3 → v4: last crypto ids → NetHack fantasy — the Amulet item id (jam), the polymorph scroll (fork),
+  // the teleport/polymorph traps (reorg/fork), the fountain tile (faucet), and the has-Amulet fields.
+  3: (d) => {
+    const meta = d.meta as Record<string, Json> | undefined;
+    if (meta && "jamStolen" in meta) { meta.amuletStolen = meta.jamStolen; delete meta.jamStolen; }
+    renameField((d.player as Record<string, Json> | undefined)?.fields, "hasJam", "hasAmulet");
+    renameField((d.coPlayer as Record<string, Json> | undefined)?.fields, "hasJam", "hasAmulet");
+    const floors = d.floors as Record<string, { level?: { tiles?: unknown } }> | undefined;
+    if (floors) for (const k of Object.keys(floors)) {
+      const tiles = floors[k]?.level?.tiles;
+      if (Array.isArray(tiles)) for (const row of tiles) if (Array.isArray(row)) for (let i = 0; i < row.length; i++) if (row[i] === "faucet") row[i] = "fountain";
+    }
+    deepRemapV4(d); // $item ("jam"/"fork") + trap kinds ("reorg"/"fork") wherever they nest
   },
 };
 

@@ -6,27 +6,27 @@ surface to *ascend*. Provisions are bought with **gold**, and the fallen leave
 **bones** that surface in later runs.
 
 > **Status: Phase 3 — mythology & a winnable endgame.** Everything from Phases 1–2
-> **plus a goal**: descend through realms (the Legacy Stack → the Dungeon Reaches →
+> **plus a goal**: descend through realms (the old depths → the Dungeon Reaches →
 > the the Deep Caverns) toward **the Amulet of Yendor** (this world's Amulet of Yendor), then climb
 > back to the surface (`<`) to **ASCEND** and win. Plus **Marduk's altars**
 > (`P` to pray → be made whole), the **Gray Paper** intro, and a theming pass.
 >
 > **The Invocation (Phase 12a).** The road to the Amulet of Yendor is now gated by a ritual.
-> Three relics await on the descent — the **Bell of Finality** (d5), the **Genesis
+> Three relics await on the descent — the **Bell of Opening** (d5), the **Genesis
 > Candelabrum** (d6), and the **Gray Paper** (d7). At **depth 8**, the Foot of the
 > Dungeon, the stairs give way to the **vibrating square** (`≈`) under **THE WARDEN's**
 > guard. Stand on it with all three relics and **`I` invoke**: the square shatters
 > and **Gehennom, the Dark Forest** (d9–11) opens below. At the bottom — **Moloch's
-> Sanctum** (d12) — the Amulet of Yendor rests in the grip of **MOLOCH, the Central Planner**.
+> Sanctum** (d12) — the Amulet of Yendor rests in the grip of **MOLOCH, the Tyrant**.
 >
 > **The Planes (Phase 12b).** Taking the Amulet of Yendor no longer wins by itself. Climb back
 > to the surface and a stair opens *beyond the world*: the **Plane of Accord**,
-> the **Plane of Finality**, the **Plane of Light Clients** — each a guardian
+> the **Plane of Fire**, the **Plane of Light Clients** — each a guardian
 > gauntlet — and at last **the Genesis Plane**, which bears **three altars, one per
 > ethos**. Step onto one to sense its alignment; **`O` offer the Amulet of Yendor** on the altar
 > matching **your** ethos to **truly ASCEND** and win (the wrong altar blasts you and
-> spits out a demon). Gehennom and the Planes crawl with **demons of centralization**
-> — custodian fiends, KYC wraiths, permission daemons, censorship demons.
+> spits out a demon). Gehennom and the Planes crawl with **demons of tyranny**
+> — jailer fiends, prying wraiths, permission daemons, shackle demons.
 >
 > **The Warden's hunt (Phase 12d).** The instant you take the Amulet of Yendor, **THE WARDEN
 > resurrects** and won't stop — every ~45–75 turns (and on every new level) it
@@ -40,14 +40,14 @@ surface to *ascend*. Provisions are bought with **gold**, and the fallen leave
 >
 > **Conducts (Phase 13a).** Five self-imposed vows track themselves from turn one —
 > **Pacifist** (never kill by your own hand), **Illiterate** (read/engrave nothing),
-> **Self-custodian** (pray/sit/sacrifice never), **Vegetarian** (eat no corpse), and
+> **Self-jailer** (pray/sit/sacrifice never), **Vegetarian** (eat no corpse), and
 > **Bankless** (buy/forge nothing). The character sheet (`@`) shows which you still
 > hold; the death/ascension screen reports every vow kept. A challenge layer for the bold.
 >
 > **Your Quest (Phase 13c).** On **depth 4** a **homeland portal** (`Ω`) keyed to your
 > archetype opens — enter it (`>`) to face your **nemesis** guarding your signature
 > **artifact**: the Knight's **Block Sceptre**, the hound's **Bonded Aegis**, the
-> Cypherpunk's **Null Cipher** (perfect privacy), or the Builder's **Genesis Compiler**
+> Cypherpunk's **Null Cipher** (perfect stealth), or the Builder's **Staff of Creation**
 > (a wand of raw genesis). Claim it to fulfil the Quest; flee home anytime with `<`.
 > **Persistence & social.** When a run ends (death or ASCENSION) it's recorded to a
 > local **Hall of the Fallen** (`H` to view), and fallen heroes leave **bones**
@@ -57,12 +57,12 @@ surface to *ascend*. Provisions are bought with **gold**, and the fallen leave
 > reorg), a bigger bestiary including self-replicating **phantom** and the deadlier
 > **the Deep Caverns** swarm, **scrolls of enchantment**, a **speed system** (fast/slow
 > monsters act more/less often), natural **HP regeneration**, and **rings** —
-> resilience (+max HP), regeneration, and privacy (a ZK cloak: monsters can't track you),
-> and charged **wands** (`z` to zap in a direction — a bolt of finality, banishment,
+> resilience (+max HP), regeneration, and stealth (a cloak of invisibility: monsters can't track you),
+> and charged **wands** (`z` to zap in a direction — a bolt of restoration, banishment,
 > **slowness**, or **digging** to tunnel through walls), plus a **scroll of cleansing** (cure status).
 > **Status effects** add bite: gas wraiths **poison** (damage over time), warden imps and
-> 51% attackers **confuse** (you stagger), and **oracles** (`o`) **zap you from afar**
-> with line-of-sight — cured by prayer or a healing potion. **Rug pullers** (`r`) live up
+> marauder **confuse** (you stagger), and **oracles** (`o`) **zap you from afar**
+> with line-of-sight — cured by prayer or a healing potion. **cutpurse** (`r`) live up
 > to the name: get adjacent and one will **snatch an item from your pack and bolt** — chase
 > it down and kill it to reclaim your loot, or it escapes and you're rugged. Not all loot
 > is loot: **honeypots** (`m`) are **mimics** that sit disguised as an item — a sword, a
@@ -85,7 +85,7 @@ surface to *ascend*. Provisions are bought with **gold**, and the fallen leave
 > strike it) and it turns lethal and hunts you down. It fears no Gray-Paper ward. Kill it and the
 > stall is yours — but it hits like a boss.
 
-> **Realm mini-bosses** guard the run: **the Forkmaster** (depth 3) and **the Sudo Key**
+> **Realm mini-bosses** guard the run: **the Shapeshifter** (depth 3) and **the the Master Key**
 > (depth 6) each drop a guaranteed prize when slain, before **THE WARDEN** and the Amulet of Yendor at depth 8.
 
 > **Sanctity (BUC):** every item is secretly **blessed**, **uncursed**, or **cursed**. Blessed
@@ -94,7 +94,7 @@ surface to *ascend*. Provisions are bought with **gold**, and the fallen leave
 > and a cursed scroll of enchantment *corrodes* your blade. You don't know an item's sanctity
 > until you learn it: set it on **Marduk's altar** (`_`) to read the glow, **identify** it, or just
 > risk equipping it. To break a curse, **pray** at an altar (`P`) or read a **scroll of formal
-> verification** (audit) — relics and shop wares come pre-audited.
+> verification** (audit) — relics and shop wares come pre-blessed.
 
 **Co-op (P2P, experimental):** a serverless **WebRTC** lobby links two players directly
 browser-to-browser (paste an offer code, get an answer code back — no matchmaking server).
@@ -132,30 +132,30 @@ you **ill** (`Ill`). Race the clock: **pray** or read a **scroll of cleansing** 
 boots, shield — wear one of each (`W`) and remove a chosen piece with `T`. **AC is evasion** now (more
 armor = harder to hit, not less damage taken). Watch out for **rust bugs** (`x`): their touch **corrodes**
 a worn piece (rusty → badly corroded), dropping its AC — **pray** to repair it, or read a blessed **scroll
-of formal verification** to repair *and* rust-proof ("audit") your gear.
+of remove curse** to repair *and* rust-proof ("audit") your gear.
 
-**Wands & the ray engine (Phase 7d):** beyond finality/banish/slow/dig, find a **wand of immolation**
+**Wands & the ray engine (Phase 7d):** beyond restoration/banish/slow/dig, find a **wand of immolation**
 (a **fire ray** that bounces off walls and burns everything in line — including *you* if it caroms back),
 **stasis** (sleep a foe), **forking** (polymorph a monster into a random other one), **nullification**
 (strip a foe's special powers), and **state-read** (probe a monster's HP + traits). Zap with `z`.
 
 **Tools (Phase 7c):** **apply** (`a`) a **tool** (`(`) — an **excavator** (reusable pick-axe; dig walls
-in a direction), an **auditor's horn** (cure poison / confusion / **stoning** / **illness** + a small
+in a direction), an **unicorn horn** (cure poison / confusion / **stoning** / **illness** + a small
 mend — your lifeline against eating the wrong corpse), a **rune-scribe's kit** (write a chosen scroll,
-spending its gas), or a **state reader** (probe an adjacent foe's HP + traits). A **bag of holding**
+spending its gas), or a **stethoscope** (probe an adjacent foe's HP + traits). A **bag of holding**
 (Phase 11d — a bag of holding) opens a **loot** menu on apply: stash items **in** (`i`) or pull them
 **out** (`o`), holding up to 12 *beyond* your 20-slot pack — set it down and the stash spills out intact.
 
 **Blindness & telepathy (Phase 7e):** a **potion of obfuscation** blinds you — your sight shrinks to
 arm's reach (`Blind`) and you swing less accurately; **throw** it to blind a monster so it can't find
 you. Eat a **warden imp** corpse for **telepathy**, which lets you *sense every monster's mind while
-blind*. Cure blindness with prayer, the **auditor's horn**, a scroll of cleansing, or just wait it out.
+blind*. Cure blindness with prayer, the **unicorn horn**, a scroll of cleansing, or just wait it out.
 
 **Spellcasting (Phase 8a):** you have **energy** (Pw, from INT + level — it regenerates). Find a
 **tome** (spellbook `+`) and **read** (`r`) it to *study* the spell (INT-gated — retry if it eludes
-you), then **cast** (`Z`) it for energy: **finality bolt** (a directional blast), **self-mend** (heal),
-**light client** (map the level), **sense minds** (reveal monsters), **the planar gate jump** (teleport), or
-**overclock** (haste). Builders and Cypherpunks start knowing one; higher **Throughput** (INT) means
+you), then **cast** (`Z`) it for energy: **force bolt** (a directional blast), **self-mend** (heal),
+**a scrying** (map the level), **sense minds** (reveal monsters), **the planar gate jump** (teleport), or
+**quicken** (haste). Builders and Cypherpunks start knowing one; higher **Throughput** (INT) means
 fewer fizzles.
 
 **Faith & Fortune (Phase 8c):** you have a **Fortune** stat (Luck, −13..+13) that sways every to-hit
@@ -201,8 +201,8 @@ the space beyond is clear). They block you, bolts, *and* monsters, so you can pu
 **wall off pursuers**; a **wand of immolation** (fire ray) shatters a stuck one. (They only spawn in open
 rooms, so they can never seal your only path — the groundwork for a future Sokoban puzzle.)
 
-**Deeper foes (Phase 10a):** the bestiary grows — a **finality dragon** (`D`) **breathes a ray** that
-bounces down a line and sears everything it touches, a **sudo conjurer** (`&`) **summons** reinforcements,
+**Deeper foes (Phase 10a):** the bestiary grows — a **restoration dragon** (`D`) **breathes a ray** that
+bounces down a line and sears everything it touches, an **arch-conjurer** (`&`) **summons** reinforcements,
 a fast **storm sprite** (`b`) blurs in, and a ** daemon** (`S`) hits like a truck. Their AI deepens too:
 a **panic seller** (`p`) **flees** once you've hurt it, and a **dungeon medic** (`h`) **heals its wounded
 allies** instead of fighting — so take the medic out first. And **dust gremlins** (`g`) **breed** — let a
@@ -213,7 +213,7 @@ wear `W` · take off `T` · quaff `q` · read/study `r` · eat `e` · drop `d` �
 throw `t` · quiver `Q` · fire `f` · chat `c` · look `;` · what-is `/` · enhance skills `x` · discoveries `\` · open/force `o` · close `C` · kick `K` · dip `D` · name `N` · trap-ID `^` · two-weapon `X` · ride `M` · invoke `I` · audit `A` · apply tool `a` · engrave `E` · pray `P` · offer `O` · descend `>` · ascend/up `<` · wait `.` · restart `R`.
 
 **Audio:** a **♪ Music** toggle and a **soundtrack picker** sit in the header. The music is
-**fully procedural** (Web Audio — no asset files): ten area themes (Legacy Stack → dungeon
+**fully procedural** (Web Audio — no asset files): ten area themes (old depths → dungeon
 Reaches → the Deep Caverns → the Great Hall → the Foot of the Dungeon → Gehennom → Moloch's Sanctum →
 the Planes → the Genesis Plane → Elsewhere), **each with five textural variants that share one
 signature melody** (a per-area leitmotif), picked at random when you enter the area — so the place

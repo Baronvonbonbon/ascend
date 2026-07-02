@@ -8,7 +8,7 @@ export type LevelKind = "normal" | "bigroom" | "maze" | "cave" | "labyrinth" | "
 export interface Portal { x: number; y: number; chain: ChainDef; quest?: boolean; }
 
 export interface FloorItem { x: number; y: number; type: ItemType; price?: number; coins?: number; enchant?: number; relic?: boolean; buc?: import("./items").Buc; bucKnown?: boolean; corpse?: { def: import("./data").MonsterDef; born: number }; chest?: { locked: boolean }; detected?: boolean; } // price = shop ware (gold); coins = a gold pile; relic/enchant = an artifact; buc = sanctity; corpse = edible remains; chest = container; detected = sensed by treasure detection (renders out of FOV)
-export type TrapKind = "gas" | "reorg" | "slash" | "fork" | "trapdoor" | "web" | "dart" | "antimagic" | "statue" | "fire" | "rust" | "bear" | "landmine" | "rockfall" | "magic" | "squeak" | "spikepit" | "boulder" | "leveltp";
+export type TrapKind = "gas" | "teleport" | "slash" | "polymorph" | "trapdoor" | "web" | "dart" | "antimagic" | "statue" | "fire" | "rust" | "bear" | "landmine" | "rockfall" | "magic" | "squeak" | "spikepit" | "boulder" | "leveltp";
 export interface Trap { x: number; y: number; kind: TrapKind; revealed: boolean; detected?: boolean; } // detected = sensed by trap detection (renders out of FOV)
 /** A sigil scratched in the dust (the Gray Paper) that wards monsters from the tile; it scuffs away. */
 export interface Engraving { x: number; y: number; life: number; permanent?: boolean; } // permanent = etched into stone (a wielded blade), never scuffs
@@ -382,7 +382,7 @@ export class Level {
   private lightPasses(x: number, y: number): boolean {
     const t = this.tiles[y]?.[x];
     // sight crosses open water (you see the far shore) but you cannot walk into it
-    return t === "floor" || t === "door" || t === "stairsDown" || t === "stairsUp" || t === "altar" || t === "portal" || t === "faucet" || t === "throne" || t === "sink" || t === "vibrating" || t === "water" || t === "branchDown" || t === "pit" || t === "drawbridge" || t === "lever";
+    return t === "floor" || t === "door" || t === "stairsDown" || t === "stairsUp" || t === "altar" || t === "portal" || t === "fountain" || t === "throne" || t === "sink" || t === "vibrating" || t === "water" || t === "branchDown" || t === "pit" || t === "drawbridge" || t === "lever";
   }
 
   isPassable(x: number, y: number): boolean {

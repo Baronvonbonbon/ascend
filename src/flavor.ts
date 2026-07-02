@@ -12,8 +12,8 @@ export function skin(s: string): string {
 }
 
 // Compound / possessive / capitalized forms MUST precede the generic single-word subs below them.
-// Nothing here targets a code identifier: item id "jam", trap "reorg", wand/trap "fork", and tile
-// "faucet" are lowercase and untouched — only the display term "a testnet faucet" is remapped.
+// The source is fully fantasy (including former code ids — the Amulet item, the polymorph scroll, the
+// teleport/polymorph traps, the fountain tile), so at runtime this is a near no-op safety net.
 const LEXICON: [RegExp, string][] = [
   // ── unique proper nouns ──
   [/\bthe JAM\b/g, "the Amulet of Yendor"], [/\bThe JAM\b/g, "The Amulet of Yendor"], [/\bJAM\b/g, "Amulet"],

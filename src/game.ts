@@ -56,7 +56,7 @@ const PLANE_KINDS: LevelKind[] = ["bigroom", "cave", "labyrinth", "concentric"];
 const CONDUCTS: { id: string; label: string; note: string }[] = [
   { id: "pacifist",   label: "Pacifist",       note: "shed no blood by your own hand" },
   { id: "illiterate", label: "Illiterate",     note: "read no scroll, studied no tome, engraved no word" },
-  { id: "atheist",    label: "Self-custodian", note: "knelt to no altar, sat no throne, made no offering" },
+  { id: "atheist",    label: "Self-jailer", note: "knelt to no altar, sat no throne, made no offering" },
   { id: "vegetarian", label: "Vegetarian",     note: "ate no corpse" },
   { id: "bankless",   label: "Bankless",       note: "bought nothing, forged nothing — touched no market" },
 ];
@@ -114,7 +114,7 @@ export class Game {
   private plane = 0;                              // 0 = the dungeon; 1..PLANES.length = the ascent above the surface
   private genesisAltars: { x: number; y: number; ethos: Ethos }[] = []; // the three Astral altars — only your aligned one ascends
   private altarEthos = new Map<string, Ethos>(); // per-dungeon-altar alignment (lazily assigned), keyed by floor+coords — for conversion
-  private jamStolen = false;                     // THE WARDEN has snatched the Amulet of Yendor — slay the hunter to reclaim it
+  private amuletStolen = false;                     // THE WARDEN has snatched the Amulet of Yendor — slay the hunter to reclaim it
   private vaultGuard: Monster | null = null;     // the Council Guard, while it tends the Treasury vault escort
   private censorTimer = 0;                        // turns until the next resurrection rises
   private inQuest = false;                        // currently in your archetype's Quest homeland
@@ -137,7 +137,7 @@ export class Game {
   // ── inbound flood guard (defense-in-depth vs a malicious/broken peer) ──
   private netTokens = 300;    // token bucket: refills ~150/s, burst 300 — far above any legit play, so it
   private netRefill = 0;      //   only trips on a genuine flood (an already-broken session; a drop can't make it worse)
-  private lastRemoteChat = 0; // chat throttle — no banner spam
+  private lastRemoteChat = 0; // chat slow — no banner spam
   private peer: Peer | null = null;
   private downed = new Set<Player>(); // players who have fallen this run
   archetypeId = "knight";   // the local player's chosen archetype (applied on newGame)
@@ -217,7 +217,7 @@ export class Game {
       meta: {
         netRole: this.netRole, coopMode: this.coopMode, coop: this.coop, activeKey: this.activeKey,
         turn: this.turn, plane: this.plane, currentChain: this.currentChain?.id ?? null, branchFloor: this.branchFloor,
-        gehennomOpen: this.gehennomOpen, jamStolen: this.jamStolen, censorTimer: this.censorTimer,
+        gehennomOpen: this.gehennomOpen, amuletStolen: this.amuletStolen, censorTimer: this.censorTimer,
         inQuest: this.inQuest, questDone: this.questDone, nextFloorShared: this.nextFloorShared,
         archetypeId: this.archetypeId, raceId: this.raceId,
         defeatedBosses: [...this.defeatedBosses],
@@ -246,7 +246,7 @@ export class Game {
       this.coopMode = meta.coopMode as CoopMode;
       this.archetypeId = meta.archetypeId as string; this.raceId = meta.raceId as string;
       this.turn = meta.turn as number; this.plane = meta.plane as number; this.branchFloor = meta.branchFloor as number;
-      this.gehennomOpen = meta.gehennomOpen as boolean; this.jamStolen = meta.jamStolen as boolean;
+      this.gehennomOpen = meta.gehennomOpen as boolean; this.amuletStolen = meta.amuletStolen as boolean;
       this.censorTimer = meta.censorTimer as number; this.inQuest = meta.inQuest as boolean; this.questDone = meta.questDone as boolean;
       this.nextFloorShared = meta.nextFloorShared as boolean;
       this.currentChain = meta.currentChain ? ([...CHAINS, ...BRANCHES].find((c) => c.id === meta.currentChain) ?? null) : null;
@@ -282,7 +282,7 @@ export class Game {
       const dn = meta.downed as [boolean, boolean];
       if (dn?.[0]) this.downed.add(this.player);
       if (this.coPlayer && dn?.[1]) this.downed.add(this.coPlayer);
-      this.over = false; this.jamStolen = meta.jamStolen as boolean;
+      this.over = false; this.amuletStolen = meta.amuletStolen as boolean;
       this.rebuildSchedule();
       this.recomputeFOV();
       this.draw();
@@ -367,7 +367,7 @@ export class Game {
     this.defeatedBosses.clear();
     this.gehennomOpen = false;
     this.plane = 0;
-    this.jamStolen = false;
+    this.amuletStolen = false;
     this.censorTimer = 0;
     this.inQuest = false;
     this.questDone = false;
@@ -408,7 +408,7 @@ export class Game {
     for (const line of grayPaper()) this.log.add(line, "dim", "both");
     if (this.coop) this.log.add("Co-op — Host and Guest share this dungeon. Slip past each other; Kick (K) to fight; mind your line of fire. Find the Amulet of Yendor together.", "sys", "both");
     else this.log.add("Your hound (d) pads at your heels — it backs you, and bites for you.", "dim");
-    this.log.add(`Keys: move · , pick up · o open chest · @ sheet · p buy · P pray · O offer · q faucet · s search/sit · z zap · Z cast · t throw · a apply · S sheathe · E engrave${this.coop ? ' · " chat (or the box below)' : ""} · < > stairs · i/w/W/q/r/e/d items.`, "dim", "both");
+    this.log.add(`Keys: move · , pick up · o open chest · @ sheet · p buy · P pray · O offer · q fountain · s search/sit · z zap · Z cast · t throw · a apply · S sheathe · E engrave${this.coop ? ' · " chat (or the box below)' : ""} · < > stairs · i/w/W/q/r/e/d items.`, "dim", "both");
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
@@ -555,11 +555,11 @@ export class Game {
     if (p.hasteTurns > 0) fx.push(`hasted ${p.hasteTurns}`);
     if (p.senseTurns > 0) fx.push(`mind-sense ${p.senseTurns}`);
     if (p.lycanthrope) fx.push(`lycanthropic — ${monName(p.lycanthrope).replace(/^an? /, "")} (pray to cure)`);
-    if (p.polyForm) fx.push(`forked → ${p.polyForm.name.replace(/^an? /, "")} ${p.polyTurns}`);
+    if (p.polyForm) fx.push(`shifted → ${p.polyForm.name.replace(/^an? /, "")} ${p.polyTurns}`);
     this.log.add(`  Status: ${fx.length ? fx.join(", ") : "clear"}.`, fx.some((s) => /STONING|ill|poison/.test(s)) ? "bad" : "dim");
     // progress + the endgame
     const relics = ["bell", "candelabrum", "graybook"].filter((id) => p.inventory.items.some((it) => it.type.id === id)).map((id) => itemById(id)!.name);
-    this.log.add(`  Depth ${p.depth} (deepest ${p.maxDepthReached})${this.gehennomOpen ? " · Gehennom open" : ""}${p.hasJam ? " · BEARS THE Amulet" : this.jamStolen ? " · Amulet stolen" : ""}.`, "dim");
+    this.log.add(`  Depth ${p.depth} (deepest ${p.maxDepthReached})${this.gehennomOpen ? " · Gehennom open" : ""}${p.hasAmulet ? " · BEARS THE Amulet" : this.amuletStolen ? " · Amulet stolen" : ""}.`, "dim");
     this.log.add(`  Invocation relics held: ${relics.length ? relics.join(", ") : "none"}.`, relics.length === 3 ? "good" : "dim");
     // conducts
     const kept = CONDUCTS.filter((c) => p.conducts.has(c.id));
@@ -573,21 +573,21 @@ export class Game {
     for (const [key, slot] of this.slots) if (key !== this.activeKey) entries.push({ key, level: slot.level });
     entries.sort((a, b) => this.overviewRank(a.key) - this.overviewRank(b.key));
     for (const { key, level } of entries) {
-      let altar = false, faucet = false, throne = false, sink = false, branch = false, vib = false;
+      let altar = false, fountain = false, throne = false, sink = false, branch = false, vib = false;
       for (let y = 0; y < level.height; y++) for (let x = 0; x < level.width; x++) {
         const t = level.tiles[y][x];
-        if (t === "altar") altar = true; else if (t === "faucet") faucet = true; else if (t === "throne") throne = true;
+        if (t === "altar") altar = true; else if (t === "fountain") fountain = true; else if (t === "throne") throne = true;
         else if (t === "sink") sink = true; else if (t === "branchDown") branch = true; else if (t === "vibrating") vib = true;
       }
       const tags: string[] = [];
       if (level.shop) tags.push("a shop");
       if (altar) tags.push("an altar");
       if (throne) tags.push("a throne");
-      if (faucet) tags.push("a faucet");
+      if (fountain) tags.push("a fountain");
       if (sink) tags.push("a sink");
       if (branch) tags.push("a branch stair");
       if (vib) tags.push("the vibrating square");
-      if (level.items.some((i) => i.type.id === "jam")) tags.push("the Amulet of Yendor");
+      if (level.items.some((i) => i.type.id === "amulet_yendor")) tags.push("the Amulet of Yendor");
       if (level.graves.length) tags.push(`${level.graves.length} grave${level.graves.length > 1 ? "s" : ""}`);
       const here = key === this.activeKey;
       this.log.add(`  ${this.overviewLabel(key)}${tags.length ? `: ${tags.join(", ")}` : ""}${here ? "  ← you are here" : ""}`, here ? "good" : "dim");
@@ -735,7 +735,7 @@ export class Game {
       if (cozy) {
         this.spawnShop();
         this.placeAltar();
-        this.placeFeature("faucet", 0.3);
+        this.placeFeature("fountain", 0.3);
         this.placeFeature("throne", 0.16);
         this.placeFeature("sink", 0.18);
         this.placeChest(0.35);
@@ -1040,12 +1040,12 @@ export class Game {
     const lp = this.localPlayer;
     if (!this.darkHinted && lp.alive && lp.blind === 0 && !this.hasLight(lp) && lp.floorKey === this.activeKey && this.level.lit[lp.y]?.[lp.x] === false) {
       this.darkHinted = true;
-      this.log.add("It's pitch dark — you can see only what's right beside you. A lit block explorer (an oil lamp; apply it) would light the way.", "sys", lp);
+      this.log.add("It's pitch dark — you can see only what's right beside you. A lit lamp (an oil lamp; apply it) would light the way.", "sys", lp);
     }
   }
   private darkHinted = false;
 
-  /** A carried, lit light source (a block explorer / the Genesis Candelabrum) gives full sight in the dark. */
+  /** A carried, lit light source (a lamp / the Candelabrum of Invocation) gives full sight in the dark. */
   hasLight(p: Player): boolean {
     return p.inventory.items.some((it) => (it.type.id === "lamp" || it.type.id === "candelabrum") && it.lit === true);
   }
@@ -1074,8 +1074,8 @@ export class Game {
     if (me.depth >= 18 && me.depth < MAX_DEPTH) this.log.add("Chaos thickens. Expect the Wilds.", "bad");
     if (me.depth === MAX_DEPTH && !this.gehennomOpen) this.log.add("The foot of the dungeon. The vibrating square (≈) hums — perform the Invocation (I) with all three relics.", "bad");
     else if (me.depth === MAX_DEPTH) this.log.add("The foot of the dungeon — the gate to the Dark Forest stands open below. (>)", "bad");
-    else if (me.depth > MAX_DEPTH && me.depth < GEHENNOM_BOTTOM) this.log.add("You sink into the Dark Forest — Gehennom. Censorship weeps from the walls.", "bad");
-    else if (me.depth >= GEHENNOM_BOTTOM) this.log.add("The bottom of all things. MOLOCH, the Central Planner, hoards the Amulet of Yendor here.", "bad");
+    else if (me.depth > MAX_DEPTH && me.depth < GEHENNOM_BOTTOM) this.log.add("You sink into the Dark Forest — Gehennom. shackle weeps from the walls.", "bad");
+    else if (me.depth >= GEHENNOM_BOTTOM) this.log.add("The bottom of all things. MOLOCH, the Tyrant, hoards the Amulet of Yendor here.", "bad");
     this.draw();
   }
 
@@ -1350,7 +1350,7 @@ export class Game {
     if (this.branch) { this.ascendBranch(); return; } // climb within / out of a sub-dungeon
     if (this.currentChain) { this.exitChain(); return; }
     if (this.plane > 0) { this.enterPlane(this.plane + 1); return; } // climb higher through the Planes
-    const holder = this.allPlayers().find((p) => p.hasJam);
+    const holder = this.allPlayers().find((p) => p.hasAmulet);
     const me = this.acting; // co-op: only the climbing adventurer moves
     const newDepth = me.depth - 1;
     if (newDepth < 1) {
@@ -1438,8 +1438,8 @@ export class Game {
   /** Once the Amulet of Yendor is taken, THE WARDEN keeps resurrecting to chase it. Called each player turn. */
   censorHuntTick(): void {
     if (this.over) return;
-    const holder = this.allPlayers().find((q) => q.alive && q.hasJam);
-    if (!holder && !this.jamStolen) return;
+    const holder = this.allPlayers().find((q) => q.alive && q.hasAmulet);
+    if (!holder && !this.amuletStolen) return;
     if (holder) this.setActive(holder.floorKey); // the hunt always rises on the Amulet of Yendor-bearer's floor
     if (this.monsters.some((m) => m.alive && m.isHunter)) return; // a hunter already stalks this level
     if (this.censorTimer > 0) { this.censorTimer--; return; }
@@ -1449,7 +1449,7 @@ export class Game {
 
   /** Raise a resurrected Warden a few tiles from a player. */
   private summonCensor(): void {
-    const target = this.livingPlayers().find((q) => q.hasJam) ?? this.livingPlayers()[0];
+    const target = this.livingPlayers().find((q) => q.hasAmulet) ?? this.livingPlayers()[0];
     if (!target) return;
     let spot: { x: number; y: number } | null = null;
     for (let i = 0; i < 60; i++) {
@@ -1469,8 +1469,8 @@ export class Game {
 
   /** The hunting Warden snatches the Amulet of Yendor and level-blinks away — reclaim it by slaying it. */
   censorSteal(warden: Monster, holder: Player): void {
-    holder.hasJam = false;
-    this.jamStolen = true;
+    holder.hasAmulet = false;
+    this.amuletStolen = true;
     this.log.add("THE WARDEN's hand closes on the Amulet of Yendor — it BLINKS away with your prize! Hunt it down.", "bad", "both");
     for (let i = 0; i < 60; i++) {
       const c = this.level.randomFloor();
@@ -1518,7 +1518,7 @@ export class Game {
       if (near(m)) danger = Math.max(danger, 0.55);
       if ((m.def.boss || m.isHunter || m.def === MOLOCH || m.def === WARDEN) && this.level.isVisible(m.x, m.y)) danger = Math.max(danger, 0.9);
     }
-    if (this.jamStolen) danger = Math.max(danger, 0.5);
+    if (this.amuletStolen) danger = Math.max(danger, 0.5);
     return danger;
   }
 
@@ -1533,7 +1533,7 @@ export class Game {
     if (p.hp < p.maxHp * 0.4) peril = Math.max(peril, 1 - p.hp / (p.maxHp * 0.4));
     if (p.stoning > 0 || p.illness > 0) peril = Math.max(peril, 0.7);
     if (p.poison > 0) peril = Math.max(peril, 0.4);
-    if (this.jamStolen || this.monsters.some((m) => m.alive && m.isHunter)) peril = Math.max(peril, 0.55);
+    if (this.amuletStolen || this.monsters.some((m) => m.alive && m.isHunter)) peril = Math.max(peril, 0.55);
     // threat: visible non-peaceful foes, scaled by how MANY and how CLOSE, peaking at bosses/swarms —
     // this is what now warps the sound (murk + detune), in place of depth.
     const here = this.playersHere();
@@ -1548,7 +1548,7 @@ export class Game {
     threat = Math.min(1, threat);
     const bossNear = this.monsters.some((m) => m.alive && isBoss(m) && vis(m));
     const crowd = Math.min(1, this.monsters.filter((m) => m.alive && !m.peaceful && vis(m)).length / 6);
-    const jamNear = this.allPlayers().some((q) => q.hasJam) || this.jamStolen || this.level.items.some((i) => i.type.id === "jam");
+    const amuletNear = this.allPlayers().some((q) => q.hasAmulet) || this.amuletStolen || this.level.items.some((i) => i.type.id === "amulet_yendor");
     const onFeat = (tile: string) => {
       for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]) if (this.level.tileAt(p.x + dx, p.y + dy) === tile) return true;
       return false;
@@ -1560,7 +1560,7 @@ export class Game {
       const d = Math.min(...here.map((q) => Math.max(Math.abs(m.x - q.x), Math.abs(m.y - q.y))));
       if (d < bd) { bd = d; beast = this.beastCategory(m); }
     }
-    return { threat, danger: Math.min(1, Math.max(this.dangerLevel(), peril)), bossNear, crowd, jamNear, faucet: onFeat("faucet"), altar: onFeat("altar"), beast };
+    return { threat, danger: Math.min(1, Math.max(this.dangerLevel(), peril)), bossNear, crowd, amuletNear, fountain: onFeat("fountain"), altar: onFeat("altar"), beast };
   }
 
   /** Coarse creature category for foley cues (undead moan, bot skitter, dragon growl, ooze squelch…). */
@@ -1639,8 +1639,8 @@ export class Game {
     if (missing.length) { this.log.add(`The square thrums, but the rite is incomplete. You still need: ${missing.join(", ")}.`, "bad"); return false; }
     this.gehennomOpen = true;
     this.level.tiles[p.y][p.x] = "stairsDown";
-    this.log.add("You ring the Bell of Finality — one note, and it never decays.", "sys");
-    this.log.add("You light the Genesis Candelabrum — seven flames of the first block flare.", "sys");
+    this.log.add("You ring the Bell of Opening — one note, and it never decays.", "sys");
+    this.log.add("You light the Candelabrum of Invocation — seven flames of the first block flare.", "sys");
     this.log.add("You read aloud from the Gray Paper. The grammar of accord unwrites itself.", "sys");
     this.log.add("✦ The vibrating square shatters into a stair spiralling down. GEHENNOM — the Dark Forest — is open. (> to descend)", "good");
     this.recomputeFOV(); this.draw();
@@ -1774,7 +1774,7 @@ export class Game {
     let springs = 0;
     for (const p of open) {
       if (p.x === center.x && p.y === center.y) continue;
-      if (springs < 3 && ROT.RNG.getUniform() < 0.35 && this.level.tileAt(p.x, p.y) === "floor" && !this.level.itemAt(p.x, p.y)) { this.level.tiles[p.y][p.x] = "faucet"; springs++; }
+      if (springs < 3 && ROT.RNG.getUniform() < 0.35 && this.level.tileAt(p.x, p.y) === "floor" && !this.level.itemAt(p.x, p.y)) { this.level.tiles[p.y][p.x] = "fountain"; springs++; }
     }
     this.log.add("A strange calm pools through the wall — the Oracle (@) sits among the springs. (c to consult; coin loosens prophecy)", "sys");
   }
@@ -1891,7 +1891,7 @@ export class Game {
       if (r < 0.55) { this.monsters.push(new Monster(this, this.pickMonster(this.player.depth), p.x, p.y)); beasts++; }
       else if (r < 0.8) this.level.items.push({ x: p.x, y: p.y, type: pickItemType(this.player.depth), buc: rollBuc() });
     }
-    if (beasts) this.log.add("A foul racket leaks through a doorway — a packed menagerie of the legacy stack, hoarding loot.", "bad");
+    if (beasts) this.log.add("A foul racket leaks through a doorway — a packed menagerie of the old depths, hoarding loot.", "bad");
   }
 
   /** A vault: a dense treasure room — the Treasury — with a locked chest at its heart. */
@@ -2004,24 +2004,24 @@ export class Game {
     this.log.add("You kick at the air.", "dim"); return false;
   }
 
-  /** `#dip` (D) — dip your wielded weapon into a faucet underfoot. The lawful relic awaits the worthy. */
+  /** `#dip` (D) — dip your wielded weapon into a fountain underfoot. The lawful relic awaits the worthy. */
   dipWeapon(p: Player): boolean {
-    if (this.level.tileAt(p.x, p.y) !== "faucet") { this.log.add("You see no faucet here to dip into.", "dim"); return false; }
+    if (this.level.tileAt(p.x, p.y) !== "fountain") { this.log.add("You see no fountain here to dip into.", "dim"); return false; }
     if (!p.weapon) { this.log.add("You have nothing wielded to dip.", "dim"); return false; }
     const w = p.weapon, name = this.ident.name(w.type), r = ROT.RNG.getUniform();
     const worthy = (this.luckOf(p) >= 3 || p.level >= 6) && w.buc !== "cursed";
     if (r < 0.10 && worthy && !w.relic) {
       w.relic = true; w.buc = "blessed"; w.bucKnown = true; w.enchant = Math.max(3, (w.enchant ?? 0) + 1);
       p.applyWeapon();
-      this.log.add(`✦ The faucet erupts in light — a lawful current floods your ${name}! It is now Excalibur, +${w.enchant} blessed.`, "good");
+      this.log.add(`✦ The fountain erupts in light — a lawful current floods your ${name}! It is now Excalibur, +${w.enchant} blessed.`, "good");
     } else if (r < 0.32) { w.buc = "blessed"; w.bucKnown = true; this.log.add(`A clear glow washes your ${name} — it feels blessed.`, "good"); }
     else if (r < 0.46) { w.erosion = w.proofed ? 0 : Math.min(3, (w.erosion ?? 0) + 1); this.log.add(`The water is corrosive — your ${name} ${w.proofed ? "shrugs it off" : "corrodes"}.`, w.proofed ? "dim" : "bad"); }
-    else if (r < 0.60) { const spot = this.adjacentFree(p.x, p.y); if (spot) { const m = new Monster(this, MONSTERS[0], spot.x, spot.y); this.monsters.push(m); this.scheduler.add(m, true); } this.log.add("A faucet bot sloshes out at the disturbance!", "bad"); }
+    else if (r < 0.60) { const spot = this.adjacentFree(p.x, p.y); if (spot) { const m = new Monster(this, MONSTERS[0], spot.x, spot.y); this.monsters.push(m); this.scheduler.add(m, true); } this.log.add("A fountain bot sloshes out at the disturbance!", "bad"); }
     else this.log.add(`You dip your ${name}. The water ripples. Nothing happens.`, "dim");
     return true;
   }
 
-  /** `#dip` (D) off a faucet — dip a chosen item into a held vial of water. Holy water (blessed)
+  /** `#dip` (D) off a fountain — dip a chosen item into a held vial of water. Holy water (blessed)
    *  blesses & uncurses it; unholy water (cursed) curses it; plain water just wets it. One vial spent. */
   dipInWater(p: Player, target: Item): boolean {
     // Pick a vial to dip into — prefer a known holy one, then a known unholy one, then any (not the target itself).
@@ -2111,7 +2111,7 @@ export class Game {
   }
 
   private trapName(k: TrapKind): string {
-    return ({ gas: "gas trap", slash: "slashing trap", reorg: "reorg trap", fork: "fork trap", trapdoor: "trapdoor",
+    return ({ gas: "gas trap", slash: "slashing trap", teleport: "teleport trap", polymorph: "polymorph trap", trapdoor: "trapdoor",
       web: "honeypot web", dart: "front-running dart trap", antimagic: "anti-magic field", statue: "statue trap",
       fire: "fire trap", rust: "rust trap", bear: "bear trap", landmine: "land mine", rockfall: "falling-rock trap", magic: "magic trap",
       squeak: "squeaky board", spikepit: "spiked pit", boulder: "rolling-boulder trap", leveltp: "level-teleport trap" } as Record<TrapKind, string>)[k];
@@ -2128,7 +2128,7 @@ export class Game {
   }
 
   /** Search the surrounding tiles: Insight (WIS) reveals hidden traps & doors; then carefully
-   *  disarm (DEX) any revealed trap beside you — your way past a path-blocking reorg trap. */
+   *  disarm (DEX) any revealed trap beside you — your way past a path-blocking teleport trap. */
   search(p: Player): boolean {
     const find = Math.max(0.25, Math.min(0.95, 0.5 + abilityMod(p.wis) * 0.06 + this.luckOf(p) * 0.02 + (p.unhanded() ? 0.12 : 0))); // both hands free to feel along the wall
     const disarm = Math.max(0.2, 0.4 + abilityMod(p.dex) * 0.07 + (p.unhanded() ? 0.12 : 0)); // bare hands work a trap free more surely
@@ -2242,7 +2242,7 @@ export class Game {
           ])!;
     } else if (d.boss) {
       line = ROT.RNG.getItem([
-        `${cap(m.name)} regards you coldly: \"You are an unconfirmed transaction. I am finality.\"`,
+        `${cap(m.name)} regards you coldly: \"You are an unconfirmed transaction. I am restoration.\"`,
         `${cap(m.name)} sneers: \"Turn back, sentinel. The Amulet of Yendor is not for the likes of you.\"`,
       ])!;
     } else if (d.priest) {
@@ -2361,7 +2361,7 @@ export class Game {
     const names: Partial<Record<TileType, string>> = {
       wall: "a wall", floor: "bare floor", door: "an open doorway", doorClosed: "a closed door",
       doorLocked: "a locked door", doorHidden: "a wall", stairsDown: "a staircase down",
-      stairsUp: "a staircase up", altar: "an altar", portal: "an the planar gate portal", faucet: "a faucet",
+      stairsUp: "a staircase up", altar: "an altar", portal: "an the planar gate portal", fountain: "a fountain",
       throne: "the throne", vibrating: "the vibrating square — invoke (I) the ritual here",
       water: "open water — too deep to wade; find a causeway or jump (the planar gate)",
       branchDown: "a branch-stair into the Gnomish Mines — > to descend",
@@ -2391,13 +2391,13 @@ export class Game {
   }
 
   /** Quaff from a fountain underfoot — a random boon or bane. */
-  quaffFaucet(p: Player): boolean {
+  quaffFountain(p: Player): boolean {
     const r = ROT.RNG.getUniform();
     if (r < 0.30) { const h = ROT.RNG.getUniformInt(4, 10); p.hp = Math.min(p.maxHp, p.hp + h); this.log.add(`Cool  water — refreshing. (+${h} HP)`, "good"); }
-    else if (r < 0.50) { const spot = this.adjacentFree(p.x, p.y); if (spot) { const m = new Monster(this, MONSTERS[0], spot.x, spot.y); this.monsters.push(m); this.scheduler.add(m, true); } this.log.add("A faucet bot sloshes out of the pipes!", "bad"); }
+    else if (r < 0.50) { const spot = this.adjacentFree(p.x, p.y); if (spot) { const m = new Monster(this, MONSTERS[0], spot.x, spot.y); this.monsters.push(m); this.scheduler.add(m, true); } this.log.add("A fountain bot sloshes out of the pipes!", "bad"); }
     else if (r < 0.65) { this.log.add("The water is tainted!", "bad"); this.applyStatus(p, "poison"); }
     else if (r < 0.80) { if (!this.level.itemAt(p.x, p.y)) { this.level.items.push({ x: p.x, y: p.y, type: itemById("hodlstone")!, buc: rollBuc() }); this.log.add("You fish a luckstone from the basin!", "good"); } else this.log.add("The water tastes of nothing.", "dim"); }
-    else if (r < 0.90) { this.level.tiles[p.y][p.x] = "floor"; this.log.add("The faucet sputters and runs dry.", "dim"); }
+    else if (r < 0.90) { this.level.tiles[p.y][p.x] = "floor"; this.log.add("The fountain sputters and runs dry.", "dim"); }
     else this.log.add("You sip. Nothing happens.", "dim");
     if (p.hp <= 0) this.killPlayer(p);
     return true;
@@ -2433,10 +2433,10 @@ export class Game {
   /** Sit the throne underfoot — raw privilege, for better or worse. */
   sitThrone(p: Player): boolean {
     this.music.sfx("throne");
-    this.breakConduct(p, "atheist"); // claiming a throne ends Self-custodian
+    this.breakConduct(p, "atheist"); // claiming a throne ends Self-jailer
     const r = ROT.RNG.getUniform();
     if (r < 0.25) { p.hp = p.maxHp; p.luck = Math.min(13, p.luck + 1); this.log.add(`${this.sub(p)} ${this.verbS(p, "sit")} the throne — power flows. (full HP, Fortune up)`, "good"); }
-    else if (r < 0.40) { const eq = [p.weapon, ...p.wornArmor, p.ring].filter((x): x is Item => !!x && x.buc !== "cursed"); if (eq.length) { const it = ROT.RNG.getItem(eq)!; it.buc = "cursed"; it.bucKnown = true; p.recomputeAC(); p.applyWeapon(); this.log.add(`A surge of raw sudo — your ${this.ident.name(it.type)} is cursed!`, "bad"); } else this.log.add("A jolt of sudo finds no purchase.", "dim"); }
+    else if (r < 0.40) { const eq = [p.weapon, ...p.wornArmor, p.ring].filter((x): x is Item => !!x && x.buc !== "cursed"); if (eq.length) { const it = ROT.RNG.getItem(eq)!; it.buc = "cursed"; it.bucKnown = true; p.recomputeAC(); p.applyWeapon(); this.log.add(`A surge of raw power — your ${this.ident.name(it.type)} is cursed!`, "bad"); } else this.log.add("A jolt of raw power finds no purchase.", "dim"); }
     else if (r < 0.55) { let pos = this.level.randomFloor(), t = 0; while (t < 40 && (this.monsterAt(pos.x, pos.y) || this.level.tileAt(pos.x, pos.y) === "stairsDown")) { pos = this.level.randomFloor(); t++; } p.x = pos.x; p.y = pos.y; this.recomputeFOV(); this.log.add("The throne flings you across the level!", "bad"); }
     else if (r < 0.70) { for (const it of p.inventory.items) this.ident.learn(it.type); this.log.add("Privileged insight — your pack is identified.", "sys"); }
     else if (r < 0.82) { this.gainXp(p, Math.max(10, this.xpForLevel(p.level + 1) - p.xp + 1), false); this.log.add("Authority flows into you — you feel experienced.", "good"); }
@@ -2534,7 +2534,7 @@ export class Game {
   offerCorpse(p: Player): boolean {
     if (this.level.tileAt(p.x, p.y) !== "altar") { this.log.add("You can only make an offering at a Marduk altar (_).", "dim"); return false; }
     // The Genesis Plane: offer the Amulet of Yendor on your aligned altar of pure intent — the true ascension.
-    if (this.plane === PLANES.length && p.hasJam) {
+    if (this.plane === PLANES.length && p.hasAmulet) {
       const altar = this.genesisAltars.find((g) => g.x === p.x && g.y === p.y);
       if (altar && altar.ethos === p.ethos) {
         this.log.add(`You lay the ${"Amulet"} upon the ${ethosName(altar.ethos)} altar of pure intent. It dissolves into first light.`, "good");
@@ -2559,7 +2559,7 @@ export class Game {
       }
     }
     if (!fi || !fi.corpse) { this.log.add("There's no corpse on or beside the altar to offer. (kill something near it)", "dim"); return false; }
-    this.breakConduct(p, "atheist"); // sacrificing at an altar ends Self-custodian
+    this.breakConduct(p, "atheist"); // sacrificing at an altar ends Self-jailer
     const rotten = this.turn - fi.corpse.born > 60;
     const name = monName(fi.corpse.def);
     this.level.items = this.level.items.filter((i) => i !== fi);
@@ -2595,7 +2595,7 @@ export class Game {
       this.log.add(`✦ Marduk bestows a gift upon the altar — a blessed ${prize.name}!`, "sys");
     } else if (r < 0.22) {
       p.hp = Math.min(p.maxHp, p.hp + ROT.RNG.getUniformInt(4, 10));
-      this.log.add("A wave of finality mends you.", "good");
+      this.log.add("A wave of restoration mends you.", "good");
     }
     return true;
   }
@@ -2817,7 +2817,7 @@ export class Game {
       if (!a.cancelled && a.def.drainsStat && d.hp > 0 && ROT.RNG.getUniform() < 0.4) this.drainStat(d, a.name);
       if (a.def.infects && d.hp > 0 && !d.lycanthrope && ROT.RNG.getUniform() < 0.25) {
         d.lycanthrope = a.def;
-        this.log.add(`${cap(a.name)}'s bite festers — you've been forked! A wildness takes root in you. (pray to cure)`, "bad", who);
+        this.log.add(`${cap(a.name)}'s bite festers — you've been infected! A wildness takes root in you. (pray to cure)`, "bad", who);
       }
       if (!a.cancelled && a.def.diseases && d.hp > 0 && d.illness === 0 && ROT.RNG.getUniform() < 0.3) {
         d.illness = ROT.RNG.getUniformInt(10, 16);
@@ -3078,7 +3078,7 @@ export class Game {
     const p = this.nearestPlayer(m.x, m.y);
     const dx = Math.sign(p.x - m.x), dy = Math.sign(p.y - m.y);
     if (dx === 0 && dy === 0) return;
-    this.log.add(`${cap(m.name)} breathes a searing gout of finality!`, "bad", p);
+    this.log.add(`${cap(m.name)} breathes a searing gout of restoration!`, "bad", p);
     const max = m.def.breath ?? 10;
     this.castRay(m.x, m.y, dx, dy, 6, (e) => {
       if (e === m) return;
@@ -3148,10 +3148,10 @@ export class Game {
   }
 
   killPlayer(p: Player = this.player): void {
-    // A fork collapsing isn't death — you snap back to your true (saved) HP and may survive.
+    // A polymorph collapsing isn't death — you snap back to your true (saved) HP and may survive.
     if (p.polyForm) {
       this.revertPoly(p);
-      this.log.add(`${this.sub(p)} ${this.verbS(p, "collapse")} out of the fork.`, "bad", p);
+      this.log.add(`${this.sub(p)} ${this.verbS(p, "collapse")} out of the form.`, "bad", p);
       if (p.hp > 0) return;
     }
     // An amulet of life saving spends itself to pull you back from a lethal blow (crumbles, even if cursed).
@@ -3262,10 +3262,10 @@ export class Game {
     const it = this.acting.inventory.add(type);
     if (type.kind === "wand") it.charges = type.id === "wand_wish" ? ROT.RNG.getUniformInt(1, 2) : ROT.RNG.getUniformInt(3, 6); // wishes are precious
     if (type.id === "marker") it.charges = ROT.RNG.getUniformInt(2, 4); // a rune-scribe's kit's gas
-    if (type.id === "trickbag") it.charges = ROT.RNG.getUniformInt(5, 12); // a faucet bag's stored monsters
+    if (type.id === "trickbag") it.charges = ROT.RNG.getUniformInt(5, 12); // a fountain bag's stored monsters
     if (type.id === "camera") it.charges = ROT.RNG.getUniformInt(3, 6); // a snapshot camera's film
     if (type.id === "grease") it.charges = ROT.RNG.getUniformInt(3, 6); // a can of lubricant's uses
-    if (type.id === "tinkit") it.charges = ROT.RNG.getUniformInt(3, 6); // a cold-storage kit's uses
+    if (type.id === "tinkit") it.charges = ROT.RNG.getUniformInt(3, 6); // a preserving kit's uses
     if (type.id === "oilcloak") it.proofed = true; // an oilskin cloak is inherently rust/acid-proof
     if (opts?.enchant) it.enchant = opts.enchant;
     if (opts?.relic) it.relic = true;
@@ -3297,12 +3297,12 @@ export class Game {
     }
 
     if (t.kind === "potion") {
-      // A potion shatters on impact. A reorg/harm draught is a grenade; finality wasted on a foe heals it.
+      // A potion shatters on impact. A rift/harm draught is a grenade; restoration wasted on a foe heals it.
       if (hit) {
         this.ident.learn(t);
         if (t.effect === "harm") {
           const d = ROT.RNG.getUniformInt(6, 12); hit.hp -= d;
-          this.log.add(`The ${t.name} bursts on ${hit.name} — a reorg tears it for ${d}.`, "good");
+          this.log.add(`The ${t.name} bursts on ${hit.name} — a rift tears it for ${d}.`, "good");
           if (hit.hp <= 0) { this.gainXp(this.acting, hit.maxHp); this.kill(hit); }
         } else if (t.effect === "heal") {
           hit.hp = Math.min(hit.maxHp, hit.hp + ROT.RNG.getUniformInt(8, 14));
@@ -3425,11 +3425,11 @@ export class Game {
       } else if (item.type.id === "wand_bolt" || item.type.id === "art_compiler") {
         const strong = item.type.id === "art_compiler";
         const d = strong ? ROT.RNG.getUniformInt(12, 20) : ROT.RNG.getUniformInt(8, 14); hit.hp -= d;
-        this.log.add(`${strong ? "The Genesis Compiler discharges raw genesis into" : "A bolt of finality strikes"} ${hit.name} for ${d}.`, "good");
+        this.log.add(`${strong ? "The Staff of Creation discharges raw genesis into" : "A bolt of restoration strikes"} ${hit.name} for ${d}.`, "good");
         if (hit.hp <= 0) { this.gainXp(this.acting, hit.maxHp); this.kill(hit); }
       } else if (item.type.id === "wand_death") {
-        if (hit.def.boss) { const d = ROT.RNG.getUniformInt(30, 50); hit.hp -= d; this.log.add(`A ray of pure finality tears into ${hit.name} for ${d} — it endures.`, "good"); }
-        else { this.log.add(`A ray of pure finality unwrites ${hit.name} — it is simply gone.`, "good"); hit.hp = 0; }
+        if (hit.def.boss) { const d = ROT.RNG.getUniformInt(30, 50); hit.hp -= d; this.log.add(`A ray of pure restoration tears into ${hit.name} for ${d} — it endures.`, "good"); }
+        else { this.log.add(`A ray of pure restoration unwrites ${hit.name} — it is simply gone.`, "good"); hit.hp = 0; }
         if (hit.hp <= 0) { this.gainXp(this.acting, hit.maxHp); this.kill(hit); }
       } else if (item.type.id === "wand_banish") {
         let pos = this.level.randomFloor(), t = 0;
@@ -3451,7 +3451,7 @@ export class Game {
         hit.hp = hit.maxHp = nd.hp; hit.attackDmg = nd.dmg;
         hit.splitsLeft = nd.splits ? 2 : 0; hit.cancelled = false; hit.sleepTurns = 0; hit.speedMod = 1;
         this.scheduler.remove(hit); this.scheduler.add(hit, true);
-        this.log.add(`${cap(old)} is forked into ${nd.name}!`, "sys");
+        this.log.add(`${cap(old)} twists into ${nd.name}!`, "sys");
       } else if (item.type.id === "wand_speed") {
         hit.speedMod = Math.max(hit.speedMod, 1.5);
         this.scheduler.remove(hit); this.scheduler.add(hit, true); // re-time at the faster speed
@@ -3565,15 +3565,15 @@ export class Game {
       case "bolt": {
         let x = p.x, y = p.y; let hit: Monster | undefined;
         for (let step = 0; step < 10; step++) { x += dx; y += dy; if (!this.level.isPassable(x, y) || this.level.boulderAt(x, y)) break; const m = this.monsterAt(x, y); if (m) { hit = m; break; } }
-        if (!hit) this.log.add("The finality bolt streaks into the dark.", "dim");
-        else { const d = ROT.RNG.getUniformInt(6, 12); hit.hp -= d; this.log.add(`Finality bolt strikes ${hit.name} for ${d}.`, "good"); if (hit.hp <= 0) { this.gainXp(p, hit.maxHp); this.kill(hit); } }
+        if (!hit) this.log.add("The force bolt streaks into the dark.", "dim");
+        else { const d = ROT.RNG.getUniformInt(6, 12); hit.hp -= d; this.log.add(`force bolt strikes ${hit.name} for ${d}.`, "good"); if (hit.hp <= 0) { this.gainXp(p, hit.maxHp); this.kill(hit); } }
         break;
       }
       case "heal": { const h = ROT.RNG.getUniformInt(8, 16) + Math.max(0, abilityMod(p.int)); p.hp = Math.min(p.maxHp, p.hp + h); this.log.add(`${this.sub(p)} ${this.verbS(p, "mend")} ${h} HP.`, "good"); break; }
-      case "map": { this.level.revealAll(); this.log.add("A light client reveals the whole level.", "sys"); break; }
+      case "map": { this.level.revealAll(); this.log.add("A a scrying reveals the whole level.", "sys"); break; }
       case "sense": { p.senseTurns = Math.max(p.senseTurns, 12); this.log.add(`${this.sub(p)} ${this.verbS(p, "sense")} the minds around ${p.name === "you" ? "you" : "them"}.`, "sys"); break; }
       case "tele": { let pos = this.level.randomFloor(), t = 0; while (t < 40 && (this.monsterAt(pos.x, pos.y) || this.level.tileAt(pos.x, pos.y) === "stairsDown")) { pos = this.level.randomFloor(); t++; } p.x = pos.x; p.y = pos.y; this.recomputeFOV(); this.log.add(`${this.sub(p)} ${this.verbS(p, "jump")} across the level.`, "sys"); break; }
-      case "haste": { p.hasteTurns = Math.max(p.hasteTurns, 20); this.scheduler.remove(p); this.scheduler.add(p, true); this.log.add(`${this.sub(p)} ${this.verbS(p, "overclock")}! (haste)`, "good"); break; }
+      case "haste": { p.hasteTurns = Math.max(p.hasteTurns, 20); this.scheduler.remove(p); this.scheduler.add(p, true); this.log.add(`${this.sub(p)} ${this.verbS(p, "quicken")}! (haste)`, "good"); break; }
       case "fireball": {
         this.castRay(p.x, p.y, dx, dy, 8, (e) => {
           if (this.elementResisted(e, "fire")) return;
@@ -3599,8 +3599,8 @@ export class Game {
       }
       case "charm": {
         const hit = this.firstMonsterInDir(p, dx, dy);
-        if (!hit) { this.log.add("The delegate spell finds no one to sway.", "dim"); break; }
-        if (hit.def.boss || hit.def.fearless) { this.log.add(`${cap(hit.name)} shrugs off the delegate spell.`, "dim"); break; }
+        if (!hit) { this.log.add("The charm spell finds no one to sway.", "dim"); break; }
+        if (hit.def.boss || hit.def.fearless) { this.log.add(`${cap(hit.name)} shrugs off the charm spell.`, "dim"); break; }
         hit.peaceful = true; hit.frightened = 0;
         this.log.add(`${cap(hit.name)} is swayed to your side — it stands down.`, "good");
         break;
@@ -3612,7 +3612,7 @@ export class Game {
         if (dug) this.recomputeFOV();
         break;
       }
-      case "slow": { const hit = this.firstMonsterInDir(p, dx, dy); if (hit) { hit.speedMod = 0.5; this.scheduler.remove(hit); this.scheduler.add(hit, true); this.log.add(`${cap(hit.name)} slows to a crawl.`, "good"); } else this.log.add("The throttle finds nothing.", "dim"); break; }
+      case "slow": { const hit = this.firstMonsterInDir(p, dx, dy); if (hit) { hit.speedMod = 0.5; this.scheduler.remove(hit); this.scheduler.add(hit, true); this.log.add(`${cap(hit.name)} slows to a crawl.`, "good"); } else this.log.add("The slow finds nothing.", "dim"); break; }
       case "sleep": { const hit = this.firstMonsterInDir(p, dx, dy); if (hit) { hit.sleepTurns = ROT.RNG.getUniformInt(5, 10); this.log.add(`${cap(hit.name)} freezes in stasis.`, "good"); } else this.log.add("The stasis field grips nothing.", "dim"); break; }
       case "turn": {
         let n = 0;
@@ -3622,7 +3622,7 @@ export class Game {
           const d = ROT.RNG.getUniformInt(4, 9) + (demonish ? 6 : 0); m.hp -= d; n++;
           if (m.hp <= 0) { this.gainXp(p, m.maxHp); this.kill(m); }
         }
-        this.log.add(n ? `A wave of finality scours ${n} nearby foe${n > 1 ? "s" : ""} — the unfinalized recoil.` : "You slash at the unfinalized — but none are near.", n ? "good" : "dim");
+        this.log.add(n ? `A wave of restoration scours ${n} nearby foe${n > 1 ? "s" : ""} — the unfinalized recoil.` : "You slash at the unfinalized — but none are near.", n ? "good" : "dim");
         break;
       }
     }
@@ -3637,13 +3637,13 @@ export class Game {
     return undefined;
   }
 
-  // ── polymorph self / "fork" (Phase 8b) ──────────────────────────────────────
-  /** Hard-fork into a monster form: its glyph, attacks, speed, and HP pool, for a while. */
+  // ── polymorph self / "polymorph" (Phase 8b) ──────────────────────────────────────
+  /** Polymorph into a monster form: its glyph, attacks, speed, and HP pool, for a while. */
   polySelf(p: Player, form?: MonsterDef): void {
-    if (p.amulet?.type.id === "amulet_unchanging") { this.log.add("You feel a fleeting urge to change shape — the finality lock holds you fast.", "dim"); return; }
+    if (p.amulet?.type.id === "amulet_unchanging") { this.log.add("You feel a fleeting urge to change shape — the restoration lock holds you fast.", "dim"); return; }
     if (p.polyForm) this.revertPoly(p, true);
     // System shock: the strain of an unstable rewrite can jolt you before the new form settles —
-    // less likely the tougher (higher-CON) you are. A blessed/controlled fork (an explicit form) is safe.
+    // less likely the tougher (higher-CON) you are. A blessed/controlled polymorph (an explicit form) is safe.
     if (!form && ROT.RNG.getUniform() < Math.max(0.05, 0.25 - abilityMod(p.con) * 0.04)) {
       const d = ROT.RNG.getUniformInt(4, 10); p.hp -= d;
       this.log.add(`System shock! The unstable rewrite jolts you for ${d} before it snaps back.`, "bad");
@@ -3656,13 +3656,13 @@ export class Game {
     p.savedHp = p.hp; p.savedMaxHp = p.maxHp;
     p.maxHp = f.hp; p.hp = f.hp;
     p.attackDmg = f.dmg;
-    this.log.add(`${this.sub(p)} ${this.verbS(p, "hard-fork")} into ${f.name}!`, "sys");
+    this.log.add(`${this.sub(p)} ${this.verbS(p, "shift")} into ${f.name}!`, "sys");
   }
 
   /** Lycanthropy: while infected, a small chance each turn to involuntarily shift into the were-beast
-   *  (unless already in a form). The fork reverts on its own; the infection persists until cured. */
+   *  (unless already in a form). The form reverts on its own; the infection persists until cured. */
   tickLycanthropy(p: Player): void {
-    if (!p.lycanthrope || p.polyForm || !p.alive || p.amulet?.type.id === "amulet_unchanging") return; // the finality lock holds your shape
+    if (!p.lycanthrope || p.polyForm || !p.alive || p.amulet?.type.id === "amulet_unchanging") return; // the restoration lock holds your shape
     if (ROT.RNG.getUniform() < 0.04) {
       this.log.add(`${this.sub(p)} ${this.verbS(p, "convulse")} — the change takes you, against your will!`, "bad", p);
       this.polySelf(p, p.lycanthrope);
@@ -3680,7 +3680,7 @@ export class Game {
   }
 
   // ── tools (the `apply` command, Phase 7c) ────────────────────────────────────
-  /** Sound an auditor's horn (unicorn horn): clear afflictions + a little mend. Returns false if there's nothing to fix. */
+  /** Sound an unicorn horn (unicorn horn): clear afflictions + a little mend. Returns false if there's nothing to fix. */
   /** `a` an indexer (crystal ball) — gaze to reveal every mind on the floor. INT + Fortune + BUC gate
    *  success; a failed gaze swims and confuses, and a cursed ball dazzles you outright. Reusable. */
   applyCrystalBall(p: Player, ball: Item): boolean {
@@ -3763,11 +3763,11 @@ export class Game {
     return true;
   }
 
-  /** `a` a cold-storage kit (tinning kit) on a corpse underfoot — seal it into a portable tin. Charged. */
+  /** `a` a preserving kit (tinning kit) on a corpse underfoot — seal it into a portable tin. Charged. */
   applyTinningKit(p: Player, kit: Item): boolean {
     const fi = this.level.items.find((i) => i.x === p.x && i.y === p.y && i.corpse);
     if (!fi || !fi.corpse) { this.log.add("You need to stand over a corpse to tin it.", "dim"); return false; }
-    if ((kit.charges ?? 0) <= 0) { this.log.add("The cold-storage kit is spent.", "dim"); return false; }
+    if ((kit.charges ?? 0) <= 0) { this.log.add("The preserving kit is spent.", "dim"); return false; }
     const def = fi.corpse.def;
     this.level.items = this.level.items.filter((i) => i !== fi);
     kit.charges = (kit.charges ?? 0) - 1;
@@ -3810,13 +3810,13 @@ export class Game {
     return true;
   }
 
-  /** `a` a delegation cord (leash) — clip/unclip your retinue so it keeps to your side. */
+  /** `a` a leash (leash) — clip/unclip your retinue so it keeps to your side. */
   applyLeash(): boolean {
     const pack = this.livingPets();
     if (!pack.length) { this.log.add("You've no hound to leash.", "dim"); return false; }
     const on = !pack[0].leashed; // toggle the whole retinue to the lead's new state
     for (const pet of pack) pet.leashed = on;
-    this.log.add(on ? "You clip the delegation cord — your retinue will keep to your side now." : "You unclip the delegation cord.", "good");
+    this.log.add(on ? "You clip the leash — your retinue will keep to your side now." : "You unclip the leash.", "good");
     return true;
   }
 
@@ -3993,30 +3993,30 @@ export class Game {
 
   applyHorn(p: Player): boolean {
     if (p.poison === 0 && p.confused === 0 && p.stoning === 0 && p.illness === 0 && p.blind === 0 && p.paralyzed === 0 && p.silenced === 0 && p.hp >= p.maxHp) {
-      this.log.add("The auditor's horn finds nothing amiss.", "dim"); return false;
+      this.log.add("The unicorn horn finds nothing amiss.", "dim"); return false;
     }
     p.poison = 0; p.confused = 0; p.stoning = 0; p.illness = 0; p.blind = 0; p.paralyzed = 0; p.silenced = 0;
     p.hp = Math.min(p.maxHp, p.hp + ROT.RNG.getUniformInt(2, 6));
     this.recomputeFOV();
-    this.log.add(`${this.sub(p)} ${this.verbS(p, "sound")} the auditor's horn — afflictions clear.`, "good");
+    this.log.add(`${this.sub(p)} ${this.verbS(p, "sound")} the unicorn horn — afflictions clear.`, "good");
     return true;
   }
 
-  /** Upend a faucet bag (bag of tricks) — spit a depth-appropriate foe into an open neighbour. Charged. */
+  /** Upend a fountain bag (bag of tricks) — spit a depth-appropriate foe into an open neighbour. Charged. */
   applyTrickbag(p: Player, bag: Item): boolean {
-    if (!bag.charges || bag.charges <= 0) { this.log.add("You shake the faucet bag — limp and empty.", "dim"); return true; }
+    if (!bag.charges || bag.charges <= 0) { this.log.add("You shake the fountain bag — limp and empty.", "dim"); return true; }
     const spot = this.adjacentFree(p.x, p.y);
-    if (!spot) { this.log.add("The faucet bag bulges, but there's nowhere for what's inside to land.", "dim"); return false; }
+    if (!spot) { this.log.add("The fountain bag bulges, but there's nowhere for what's inside to land.", "dim"); return false; }
     bag.charges--;
     const def = this.pickMonster(p.depth);
     const m = new Monster(this, def, spot.x, spot.y);
     this.monsters.push(m); this.scheduler.add(m, true);
-    this.log.add(`You upend the faucet bag — ${def.name} tumbles out!`, "bad");
+    this.log.add(`You upend the fountain bag — ${def.name} tumbles out!`, "bad");
     this.draw();
     return true;
   }
 
-  /** Apply a directional tool (excavator digs walls; state reader probes an adjacent foe). */
+  /** Apply a directional tool (excavator digs walls; stethoscope probes an adjacent foe). */
   applyTool(item: Item, dx: number, dy: number): boolean {
     const p = this.acting;
     if (item.type.id === "pickaxe") {
@@ -4032,7 +4032,7 @@ export class Game {
     }
     if (item.type.id === "scope") {
       const m = this.monsterAt(p.x + dx, p.y + dy);
-      if (!m) { this.log.add("You press the state reader to empty air.", "dim"); return false; }
+      if (!m) { this.log.add("You press the stethoscope to empty air.", "dim"); return false; }
       const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.stealsGold && "gold thief", m.def.stealsLuck && "Fortune leech", m.def.drains && "life-draining", m.def.engulfs && "engulfing", m.def.silences && "silencing", m.def.drainsStat && "mind-draining", m.def.infects && "infectious", m.def.muse && "self-mending", m.def.zaps && "caster", m.def.throws && "thrower", m.def.diseases && "sickening", m.def.seduces && "seductive", m.def.paralyzes && "paralyzing gaze", m.def.splits && "splits", m.def.corrodes && "corrodes", m.def.acidic && "acidic", m.def.slows && "slowing", m.def.blinds && "blinding", m.def.curses && "cursing", m.cancelled && "nullified", m.worn > 0 && "armored", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
       this.log.add(`State-read ${m.name}: ${m.hp}/${m.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       return true;
@@ -4125,7 +4125,7 @@ export class Game {
     return it.type.kind === "wand" || it.type.id === "marker" || it.type.id === "trickbag";
   }
 
-  /** Read a scroll of gas top-up onto a chosen wand/tool. Blessed adds more; cursed drains it. */
+  /** Read a scroll of recharging onto a chosen wand/tool. Blessed adds more; cursed drains it. */
   chargeItem(buc: Buc, target: Item): boolean {
     if (!this.canCharge(target)) { this.log.add(`${this.ident.name(target.type)} holds no charge to top up.`, "dim"); return true; }
     const cur = target.charges ?? 0;
@@ -4231,8 +4231,8 @@ export class Game {
     if (fi.coins != null) { this.collectGold(who, fi); return true; }
     if (fi.chest) { this.log.add("It's a chest — press o to open it.", "dim"); return false; }
     if (fi.corpse) { this.log.add(`Best eaten where it lies — press e to eat the ${monName(fi.corpse.def)} corpse.`, "dim"); return false; }
-    if (fi.type.id === "jam") {
-      who.hasJam = true;
+    if (fi.type.id === "amulet_yendor") {
+      who.hasAmulet = true;
       this.level.items = this.level.items.filter((i) => i !== fi);
       this.log.add(`${who.name === "you" ? "You seize" : who.name + " seizes"} the Amulet of Yendor! Now ASCEND — climb back to the surface (press <).`, "good");
       return true;
@@ -4422,7 +4422,7 @@ export class Game {
       const ch = it.charges != null ? ` [${it.charges}]` : it.type.id === "vault" ? ` {${it.contents?.length ?? 0} held}` : "";
       const relic = it.relic ? ` +${it.enchant ?? 0} ✦` : "";
       const buc = it.bucKnown && it.buc ? `${it.buc} ` : "";
-      const ero = it.erosion ? (["", "rusty ", "corroded ", "very corroded "][it.erosion] ?? "") : (it.proofed ? "audited " : "");
+      const ero = it.erosion ? (["", "rusty ", "corroded ", "very corroded "][it.erosion] ?? "") : (it.proofed ? "blessed " : "");
       const unpaid = it.unpaid ? ` (unpaid, ${it.unpaid} gold)` : "";
       const tone = it.unpaid ? "bad" : it.bucKnown && it.buc === "cursed" ? "bad" : it.bucKnown && it.buc === "blessed" ? "good" : it.relic ? "sys" : "dim";
       this.log.add(`  ${inv.letter(i)}) ${buc}${ero}${this.ident.name(it.type)}${relic}${ch}${lbl}${eq}${unpaid}`, tone);
@@ -4433,15 +4433,15 @@ export class Game {
     const p = this.acting;
     switch (effect) {
       case "heal": {
-        // Blessed finality mends more; a cursed draught barely closes the wound.
+        // Blessed restoration mends more; a cursed draught barely closes the wound.
         const amt = buc === "blessed" ? ROT.RNG.getUniformInt(16, 24) : buc === "cursed" ? ROT.RNG.getUniformInt(4, 8) : ROT.RNG.getUniformInt(10, 16);
         p.hp = Math.min(p.maxHp, p.hp + amt);
         if (p.poison > 0 && buc !== "cursed") { p.poison = 0; this.log.add("The poison is purged.", "good"); }
-        this.log.add("Finality washes over you — your wounds seal.", "good"); break;
+        this.log.add("restoration washes over you — your wounds seal.", "good"); break;
       }
       case "harm": {
         p.hp -= ROT.RNG.getUniformInt(4, 8);
-        this.log.add("A reorg tears through you!", "bad"); break;
+        this.log.add("A rift tears through you!", "bad"); break;
       }
       case "water": {
         // Holy water (blessed) purifies; unholy water (cursed) burns; plain water is just water.
@@ -4467,13 +4467,13 @@ export class Game {
       }
       case "map": {
         this.level.revealAll();
-        this.log.add("A light client reveals the whole level.", "sys"); break;
+        this.log.add("A a scrying reveals the whole level.", "sys"); break;
       }
       case "detect_obj": {
         const n = this.level.items.length; // every floor item, gold piles included
         for (const i of this.level.items) i.detected = true;
         this.recomputeFOV();
-        this.log.add(n ? `Auditing the ledger — you sense ${n} object${n > 1 ? "s" : ""} scattered across the level.` : "You audit the ledger, but sense no objects here.", n ? "good" : "dim");
+        this.log.add(n ? `Auditing the tally — you sense ${n} object${n > 1 ? "s" : ""} scattered across the level.` : "You audit the tally, but sense no objects here.", n ? "good" : "dim");
         break;
       }
       case "speed": {
@@ -4510,7 +4510,7 @@ export class Game {
           if (!m.alive || m.peaceful || m.def.boss || m.def.fearless) continue;
           if (Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) <= range) { m.peaceful = true; m.frightened = 0; n++; }
         }
-        this.log.add(n ? `A wave of goodwill rolls out — ${n} foe${n > 1 ? "s" : ""} stand down and delegate to you.` : "A wave of goodwill rolls out, but no one near is swayed.", n ? "good" : "dim");
+        this.log.add(n ? `A wave of goodwill rolls out — ${n} foe${n > 1 ? "s" : ""} stand down and charm to you.` : "A wave of goodwill rolls out, but no one near is swayed.", n ? "good" : "dim");
         break;
       }
       case "fireburst": {
@@ -4551,21 +4551,21 @@ export class Game {
         let n = 0;
         for (const i of this.level.items) if (i.coins != null) { i.detected = true; n++; }
         this.recomputeFOV();
-        this.log.add(n ? `A balance check pings — you sense ${n} gold pile${n > 1 ? "s" : ""} across the floor.` : "A balance check pings, but no gold lies loose on this floor.", n ? "good" : "dim");
+        this.log.add(n ? `A coin-sense pings — you sense ${n} gold pile${n > 1 ? "s" : ""} across the floor.` : "A coin-sense pings, but no gold lies loose on this floor.", n ? "good" : "dim");
         break;
       }
       case "clairvoyance": {
         const r = buc === "blessed" ? 14 : 8;
         const n = this.level.revealAround(p.x, p.y, r);
         this.recomputeFOV();
-        this.log.add(n ? "A remote view floods your mind — the surrounding halls lay themselves bare." : "A remote view floods your mind, but you already know these halls.", n ? "sys" : "dim");
+        this.log.add(n ? "A farsight floods your mind — the surrounding halls lay themselves bare." : "A farsight floods your mind, but you already know these halls.", n ? "sys" : "dim");
         break;
       }
       case "detect_trap": {
         let n = 0;
         for (const tr of this.level.traps) { tr.revealed = true; tr.detected = true; n++; }
         this.recomputeFOV();
-        this.log.add(n ? `An exploit scan — you sense ${n} trap${n > 1 ? "s" : ""} laid across the level.` : "You scan for exploits, but the level is clean of traps.", n ? "good" : "dim");
+        this.log.add(n ? `An trap-sense — you sense ${n} trap${n > 1 ? "s" : ""} laid across the level.` : "You scan for exploits, but the level is clean of traps.", n ? "good" : "dim");
         break;
       }
       case "identify": {
@@ -4582,7 +4582,7 @@ export class Game {
         if (p.weapon) {
           const d = buc === "blessed" ? 2 : buc === "cursed" ? -1 : 1;
           p.weaponBonus += d; p.applyWeapon();
-          if (d > 0) this.log.add(`Your ${p.weapon.type.name} thrums with finality. (+${p.weaponBonus})`, "good");
+          if (d > 0) this.log.add(`Your ${p.weapon.type.name} thrums with restoration. (+${p.weaponBonus})`, "good");
           else this.log.add(`Your ${p.weapon.type.name} corrodes — a malformed enchantment! (${p.weaponBonus >= 0 ? "+" : ""}${p.weaponBonus})`, "bad");
         } else this.log.add("You have no weapon to enchant.", "dim");
         break;
@@ -4610,10 +4610,10 @@ export class Game {
         for (const it of p.inventory.items) {
           if (it.buc === "cursed") { it.buc = wash ? "blessed" : "uncursed"; n++; }
           it.bucKnown = true;
-          if (it.type.kind === "armor" || it.type.kind === "weapon") { it.erosion = 0; it.proofed = true; } // audited = rust-proof
+          if (it.type.kind === "armor" || it.type.kind === "weapon") { it.erosion = 0; it.proofed = true; } // blessed = rust-proof
         }
         p.applyWeapon(); p.recomputeAC();
-        this.log.add(n > 0 ? `Verification passes — ${n} curse${n > 1 ? "s" : ""} lifted; your pack is audited.` : "Verification passes — your gear is clean.", "good");
+        this.log.add(n > 0 ? `Verification passes — ${n} curse${n > 1 ? "s" : ""} lifted; your pack is blessed.` : "Verification passes — your gear is clean.", "good");
         break;
       }
     }
@@ -4713,10 +4713,10 @@ export class Game {
     this.scheduler.remove(m);
     if (m.def.weight > 0 && !m.def.keeper && !m.def.priest) this.dropGold(m.x, m.y); // ordinary foes may scatter a few coins
     // Slay the resurrected Warden while it holds the Amulet of Yendor and you wrest it back.
-    if (m.isHunter && this.jamStolen) {
-      this.jamStolen = false;
+    if (m.isHunter && this.amuletStolen) {
+      this.amuletStolen = false;
       const recip = this.nearestPlayer(m.x, m.y);
-      recip.hasJam = true;
+      recip.hasAmulet = true;
       this.log.add("You tear the Amulet of Yendor from the Warden's ribs — it is yours again. Climb on.", "good", recip);
     }
     // A slain thief disgorges whatever it stole — reclaim it where it fell.
@@ -4854,10 +4854,10 @@ export class Game {
    *  20-HP adventurer can't be one-shot in the first few floors. */
   private static readonly TRAP_TABLE: { kind: TrapKind; weight: number; minDepth: number }[] = [
     { kind: "gas", weight: 4, minDepth: 1 }, { kind: "dart", weight: 3, minDepth: 1 }, { kind: "squeak", weight: 3, minDepth: 1 },
-    { kind: "web", weight: 3, minDepth: 2 }, { kind: "slash", weight: 3, minDepth: 2 }, { kind: "reorg", weight: 2, minDepth: 2 },
+    { kind: "web", weight: 3, minDepth: 2 }, { kind: "slash", weight: 3, minDepth: 2 }, { kind: "teleport", weight: 2, minDepth: 2 },
     { kind: "bear", weight: 2, minDepth: 3 }, { kind: "rust", weight: 2, minDepth: 3 }, { kind: "antimagic", weight: 2, minDepth: 3 }, { kind: "spikepit", weight: 2, minDepth: 3 },
     { kind: "fire", weight: 2, minDepth: 4 }, { kind: "rockfall", weight: 2, minDepth: 4 }, { kind: "statue", weight: 2, minDepth: 5 },
-    { kind: "fork", weight: 1, minDepth: 5 }, { kind: "boulder", weight: 1, minDepth: 6 }, { kind: "magic", weight: 1, minDepth: 7 },
+    { kind: "polymorph", weight: 1, minDepth: 5 }, { kind: "boulder", weight: 1, minDepth: 6 }, { kind: "magic", weight: 1, minDepth: 7 },
     { kind: "landmine", weight: 1, minDepth: 8 },
   ];
 
@@ -4889,13 +4889,13 @@ export class Game {
     switch (trap.kind) {
       case "gas": { const d = ROT.RNG.getUniformInt(3, 7); p.hp -= d; this.log.add(`A gas trap drains ${d} from you!`, "bad"); break; }
       case "slash": { const d = ROT.RNG.getUniformInt(6, 12); p.hp -= d; this.log.add(`A slashing trap bites for ${d}!`, "bad"); break; }
-      case "reorg": {
+      case "teleport": {
         let pos = this.level.randomFloor(), t = 0;
         while (t < 40 && (this.monsterAt(pos.x, pos.y) || this.level.tileAt(pos.x, pos.y) === "stairsDown")) { pos = this.level.randomFloor(); t++; }
         p.x = pos.x; p.y = pos.y; this.recomputeFOV();
-        this.log.add("A reorg trap flings you across the level!", "bad"); break;
+        this.log.add("A teleport trap flings you across the level!", "bad"); break;
       }
-      case "fork": { this.log.add("A fork trap! Reality splits around you —", "bad"); this.polySelf(p); break; }
+      case "polymorph": { this.log.add("A polymorph trap! Reality twists around you —", "bad"); this.polySelf(p); break; }
       case "web": {
         if (p.webbed > 0) { this.log.add("You're already tangled in the honeypot web.", "dim"); break; }
         p.webbed = ROT.RNG.getUniformInt(3, 6);
@@ -5063,7 +5063,7 @@ export class Game {
       else if (m.t === "input" && typeof m.key === "string" && m.key.length <= 24) this.remoteInput(m.key); // a key name is short; anything longer is junk
       else if (m.t === "chat" && typeof m.text === "string") {
         const now = performance.now();
-        if (now - this.lastRemoteChat < 400) return;                   // chat throttle — ≤ ~2.5/s, no banner spam
+        if (now - this.lastRemoteChat < 400) return;                   // chat slow — ≤ ~2.5/s, no banner spam
         this.lastRemoteChat = now;
         const text = m.text.slice(0, 80);                              // hard length cap (the send side is 60)
         const power = m.power === "whisper" || m.power === "shout" ? m.power : "say"; // whitelist — never index with attacker data
@@ -5139,7 +5139,7 @@ export class Game {
       case "g": this.gehennomOpen = true; this.debugWarp(MAX_DEPTH + 1); this.log.add(`[DEBUG] Gehennom opened, warped to depth ${MAX_DEPTH + 1}.`, "sys"); break;
       case "F": this.gehennomOpen = true; this.debugWarp(36); this.log.add("[DEBUG] warped to the Council Fort (d36).", "sys"); break;
       case "J": this.gehennomOpen = true; this.debugWarp(GEHENNOM_BOTTOM); this.log.add("[DEBUG] warped to the Amulet of Yendor floor (Moloch).", "sys"); break;
-      case "P": this.player.hasJam = true; this.enterPlane(1); this.log.add("[DEBUG] → the Planes (Amulet granted; < to climb).", "sys"); break;
+      case "P": this.player.hasAmulet = true; this.enterPlane(1); this.log.add("[DEBUG] → the Planes (Amulet granted; < to climb).", "sys"); break;
       case "r": this.level.revealAll(); this.recomputeFOV(); this.draw(); this.log.add("[DEBUG] level revealed.", "sys"); break;
       case "h": this.debugHeal(p); if (this.coPlayer) this.debugHeal(this.coPlayer); this.draw(); this.log.add("[DEBUG] fully healed.", "sys"); break;
       case "G": this.godMode = !this.godMode; this.log.add(`[DEBUG] god mode ${this.godMode ? "ON" : "off"}.`, "sys"); break;
@@ -5296,7 +5296,7 @@ export class Game {
       if (pl.floorKey !== onFloor) continue; // only adventurers standing on this viewer's floor
       if (!pl.alive) { if (this.downed.has(pl) && (vis(pl.x, pl.y) || sensed)) cells.push([pl.x, pl.y, "@", "#804040"]); continue; } // a fallen partner's body — dim red @ (step onto it to revive)
       if (pl !== me && !(vis(pl.x, pl.y) || sensed)) continue; // you always see yourself; your partner only when in sight
-      const ch = pl.polyForm ? pl.polyForm.ch : "@"; // you wear your fork's shape
+      const ch = pl.polyForm ? pl.polyForm.ch : "@"; // you wear your form's shape
       const fg = pl.polyForm ? pl.polyForm.fg : pl === this.player ? pl.fg : PARTNER_FG;
       cells.push([pl.x, pl.y, ch, fg]);
     }
@@ -5334,7 +5334,7 @@ export class Game {
       (p.lycanthrope ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Lycan` : "") +
       (p.intrinsics.has("fast") ? `%c{${COLORS.dim}}  %c{${COLORS.good}}Fast` : "") +
       (this.hasLight(p) ? `%c{${COLORS.dim}}  %c{${COLORS.gold}}Lit` : "") +
-      (p.hasJam ? `%c{${COLORS.dim}}  %c{${COLORS.gold}}✦Amulet — ASCEND (<)` : this.jamStolen ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Amulet STOLEN — slay the Warden!` : `%c{${COLORS.dim}}  ${this.gehennomOpen ? `Amulet: depth ${GEHENNOM_BOTTOM}` : `Invoke @ depth ${MAX_DEPTH}`}`)
+      (p.hasAmulet ? `%c{${COLORS.dim}}  %c{${COLORS.gold}}✦Amulet — ASCEND (<)` : this.amuletStolen ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Amulet STOLEN — slay the Warden!` : `%c{${COLORS.dim}}  ${this.gehennomOpen ? `Amulet: depth ${GEHENNOM_BOTTOM}` : `Invoke @ depth ${MAX_DEPTH}`}`)
     );
   }
 

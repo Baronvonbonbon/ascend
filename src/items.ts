@@ -24,7 +24,7 @@ export function bucDelta(buc?: Buc): number {
 }
 
 /** The Amulet of Yendor — the Amulet of Yendor of this world. Unique; never randomly spawned. */
-export const Amulet: ItemType = { id: "jam", kind: "amulet", name: "the Amulet of Yendor", ch: "*", fg: "#f4e89a", weight: 0 };
+export const Amulet: ItemType = { id: "amulet_yendor", kind: "amulet", name: "the Amulet of Yendor", ch: "*", fg: "#f4e89a", weight: 0 };
 
 /** Generic corpse glyph; the real identity rides on FloorItem.corpse (eat for effects). */
 export const CORPSE: ItemType = { id: "corpse", kind: "food", name: "a corpse", ch: "%", fg: "#b06a5a", nutrition: 0, weight: 0 };
@@ -100,7 +100,7 @@ export const ITEMS: ItemType[] = [
   { id: "ench",   kind: "scroll", name: "a scroll of enchant armor", ch: "?", fg: "#e0d090", effect: "enchant",  weight: 3 },
   { id: "cure",   kind: "scroll", name: "a scroll of cleansing",     ch: "?", fg: "#c0e0e0", effect: "cure",     weight: 3 },
   { id: "uncurse",kind: "scroll", name: "a scroll of remove curse", ch: "?", fg: "#d0f0c0", effect: "uncurse", weight: 3 },
-  { id: "fork",   kind: "scroll", name: "a scroll of polymorph",   ch: "?", fg: "#e090e0", effect: "polyself", weight: 2 },
+  { id: "scroll_poly", kind: "scroll", name: "a scroll of polymorph",   ch: "?", fg: "#e090e0", effect: "polyself", weight: 2 },
   { id: "dobj",   kind: "scroll", name: "a scroll of treasure detection", ch: "?", fg: "#e8d070", effect: "detect_obj",  weight: 3 },
   { id: "dtrap",  kind: "scroll", name: "a scroll of trap detection",     ch: "?", fg: "#d09060", effect: "detect_trap", weight: 3 },
   { id: "charge", kind: "scroll", name: "a scroll of charging",           ch: "?", fg: "#e0c080", effect: "charge",      weight: 2, minDepth: 4 },
