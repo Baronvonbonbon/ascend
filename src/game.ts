@@ -29,8 +29,32 @@ const QUEUE_MOVE_GLYPH: Record<string, string> = {
 };
 function keyGlyph(k: string): string { return QUEUE_MOVE_GLYPH[k] ?? (k.length === 1 ? k : "•"); }
 
-// Gold prices for shop wares, by item kind.
+// Gold prices for shop wares, by item kind (the fallback when a type has no specific cost).
 const PRICE_GOLD: Record<string, number> = { weapon: 60, armor: 55, potion: 35, scroll: 35, food: 8, ring: 90, wand: 80, tool: 50, spellbook: 70, amulet: 120 };
+// Per-type base cost (NetHack's o_init price tiers) — the tell for **price identification**: an
+// unidentified ware shows its appearance + this price, so a "swirly potion — 300 gold" reads as one of
+// the pricey potions. Shared tiers leave real ambiguity (several amulets all cost 150), exactly as NetHack.
+const ITEM_COST: Record<string, number> = {
+  // potions
+  water: 20, heal: 20, harm: 100, boost: 150, blind: 150, speed: 200, enlight: 200, gainlvl: 300,
+  // scrolls
+  ident: 20, uncurse: 80, ench: 80, cure: 80, tele: 100, map: 100, scare: 100, fireb: 100,
+  dobj: 100, dtrap: 100, gold: 100, clair: 100, tame: 200, scroll_poly: 200, charge: 300, geno: 300,
+  // wands
+  wand_light: 100, wand_bolt: 150, wand_slow: 150, wand_speed: 150, wand_invis: 150, wand_secret: 150,
+  wand_open: 150, wand_probe: 150, wand_dig: 150, wand_silence: 150, wand_cold: 175, wand_fire: 175,
+  wand_lightning: 175, wand_missile: 175, wand_create: 200, wand_cancel: 200, wand_poly: 200,
+  wand_sleep: 200, wand_banish: 200, wand_death: 500, wand_wish: 500,
+  // rings
+  ring_res: 100, ring_sustain: 100, ring_digest: 100, ring_warn: 100, ring_hunger: 100, ring_aggravate: 100,
+  ring_priv: 150, ring_acc: 150, ring_dmg: 150, ring_poison: 150, ring_stealth: 150, ring_seeinv: 150,
+  ring_firered: 150, ring_coldred: 150, ring_shockred: 150, ring_regen: 200, ring_free: 200,
+  ring_search: 200, ring_teleport: 200,
+  // amulets (mostly one tier — price narrows to "an amulet", not the exact one)
+  amulet_life: 150, amulet_reflect: 150, amulet_esp: 150, amulet_breathe: 150, amulet_unchanging: 150, amulet_seeinvis: 150,
+};
+/** The shop price of a ware — its per-type cost if it has one, else the flat kind rate. */
+const wareCost = (t: ItemType): number => ITEM_COST[t.id] ?? PRICE_GOLD[t.kind] ?? 30;
 const STARTING_GOLD = 25;     // a small purse so the first shop isn't out of reach
 // What a wand of wishing can grant — a curated menu of wish-worthy items (each blessed; gear enchanted).
 const WISHES: { id: string; enchant?: number }[] = [
@@ -4714,7 +4738,7 @@ export class Game {
         const x = c.x + dx, y = c.y + dy;
         if (this.level.isPassable(x, y) && !this.level.itemAt(x, y) &&
             this.level.tileAt(x, y) !== "stairsDown" && !(x === this.player.x && y === this.player.y)) {
-          this.level.items.push({ x, y, type: t, price: PRICE_GOLD[t.kind] ?? 30, buc: "uncursed", bucKnown: true });
+          this.level.items.push({ x, y, type: t, price: wareCost(t), buc: "uncursed", bucKnown: true });
           break;
         }
       }
