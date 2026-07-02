@@ -129,8 +129,6 @@ if (screen && logEl) {
   syncMode();
   // (the intro story is kicked off below, after options load, so reduce-motion is honoured)
 
-  // Wallet connect + on-chain (PAS) payments are deferred — to be reintroduced in a later update.
-
   // On-screen touch controls: each button carries a data-key; tapping it drives the
   // game through the very same keyboard path (synthetic keydown on window).
   const touch = document.getElementById("touch");

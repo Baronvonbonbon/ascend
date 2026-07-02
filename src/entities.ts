@@ -6,12 +6,12 @@ import { bucDelta, ITEMS, ItemType, ArmorSlot, Idents } from "./items";
 import { runAi, wanderStep, cheb, MONSTER_BEHAVIORS, PET_BEHAVIORS } from "./ai";
 import type { FloorItem } from "./level";
 
-type Verb = "wield" | "wear" | "takeoff" | "quaff" | "read" | "eat" | "drop" | "zap" | "throw" | "forge" | "apply" | "quiver" | "name" | "offhand" | "dip" | "charge" | "grease";
+type Verb = "wield" | "wear" | "takeoff" | "quaff" | "read" | "eat" | "drop" | "zap" | "throw" | "apply" | "quiver" | "name" | "offhand" | "dip" | "charge" | "grease";
 const VERB_PROMPT: Record<Verb, string> = {
   wield: "Wield which weapon?", wear: "Wear/put on which item?",
   quaff: "Quaff which potion?", read: "Read which scroll?",
   eat: "Eat what?", drop: "Drop which item?", zap: "Zap which wand?",
-  throw: "Throw which item?", forge: "Forge which piece of gear into an NFT relic?",
+  throw: "Throw which item?",
   takeoff: "Take off which worn piece?", apply: "Apply which tool?",
   quiver: "Ready which item in your quiver?",
   name: "Name which item?", offhand: "Wield which weapon in your off-hand?",
@@ -60,7 +60,6 @@ const MOVES: Record<string, [number, number]> = {
 
 export class Player extends Entity {
   depth = 1;
-  pas = 0; // PAS balance — wired to chain in Phase 2
   nutrition = 900;
   ac = 0; // total evasion bonus from worn armor (higher = harder to hit)
   inventory = new Inventory();
@@ -100,7 +99,7 @@ export class Player extends Entity {
   riding = false;                          // mounted on the steed (#ride / M)
   private regenTimer = 0;
   hasJam = false;
-  gold = 0;            // in-game coin — buys standard wares (NFT gear still needs the wallet)
+  gold = 0;            // coin — buys wares at the bazaar
   maxDepthReached = 1;
   weaponBonus = 0; // from scrolls of enchantment
   prayerCooldown = 0;
@@ -478,7 +477,6 @@ export class Player extends Entity {
       case "T": return this.startSelect("takeoff");
       case "S": return this.toggleSheath(); // sheathe your weapon (free your hands) / draw it back
       case "E": return this.game.engrave() ? this.endTurn() : false;
-      case "F": return this.startSelect("forge");
     }
     return false;
   }
@@ -909,8 +907,6 @@ export class Player extends Entity {
         if (item.buc === "cursed") { item.bucKnown = true; this.game.log.add(`Your ${ident.name(t)} is welded on — it's cursed. Uncurse it first.`, "bad"); return this.endTurn(); }
         this.unequip(item);
         this.game.log.add(`You take off ${ident.name(t)}.`); return this.endTurn();
-      case "forge":
-        void this.game.forge(item); return false; // a direct wallet tx — no game turn
     }
     return false;
   }

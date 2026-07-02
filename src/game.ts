@@ -13,13 +13,8 @@ import {
 } from "./data";
 import { skin } from "./flavor";
 import { Idents, Appearances, ITEMS, JAM, CORPSE, CHEST, GOLD, WRITABLE_SCROLLS, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
-import { connectWallet, Wallet } from "./chain/wallet";
-import { walletBalancePas, buyDirect } from "./chain/bank";
-import { recordRun, readRecent, RunEntry } from "./chain/ledger";
+import { recordRun, readRecent, RunEntry } from "./hall";
 import { bumpGames, bumpDeaths } from "./net/counter";
-import { readGear, forgeGear, forgePrice } from "./chain/gear";
-import { claimDeed, readDeed, deedConfigured } from "./chain/deed";
-import { RARITY } from "./chain/config";
 import type { Peer } from "./net/peer";
 import { MusicEngine, MusicContext } from "./audio/music";
 import type { CoopMode, Cell, NetMsg } from "./net/protocol";
@@ -34,7 +29,7 @@ const QUEUE_MOVE_GLYPH: Record<string, string> = {
 };
 function keyGlyph(k: string): string { return QUEUE_MOVE_GLYPH[k] ?? (k.length === 1 ? k : "•"); }
 
-// Gold prices for standard (non-NFT) shop wares, by item kind. NFT gear is priced separately, in PAS.
+// Gold prices for shop wares, by item kind.
 const PRICE_GOLD: Record<string, number> = { weapon: 60, armor: 55, potion: 35, scroll: 35, food: 8, ring: 90, wand: 80, tool: 50, spellbook: 70, amulet: 120 };
 const STARTING_GOLD = 25;     // a small purse so the first shop isn't out of reach
 // What a wand of wishing can grant — a curated menu of wish-worthy items (each blessed; gear enchanted).
@@ -42,7 +37,6 @@ const WISHES: { id: string; enchant?: number }[] = [
   { id: "plate", enchant: 3 }, { id: "sword", enchant: 3 }, { id: "amulet_life" }, { id: "amulet_reflect" },
   { id: "ring_free" }, { id: "vault" }, { id: "wand_death" }, { id: "wand_cold" },
 ];
-const RELIC_IMPORT_CAP = 3;   // up to this many owned NFT relics carried into a run
 
 const W = 80;
 const MAP_H = 30;
@@ -125,15 +119,12 @@ export class Game {
   private censorTimer = 0;                        // turns until the next resurrection rises
   private inQuest = false;                        // currently in your archetype's Quest homeland
   private questDone = false;                      // your nemesis is slain and the artifact claimed
-  private loadedRelics = new Set<number>();      // NFT relic tokenIds already pulled into this run's pack
-  wallet: Wallet | null = null;
   readonly music = new MusicEngine(); // procedural area soundtracks + danger tension layer
-  onWallet?: (address: string, pas: number) => void;
-  recentRuns: RunEntry[] = []; // leaderboard cache + bones pool
+  recentRuns: RunEntry[] = []; // local Hall of Fame cache + bones pool
   private scheduler = new ROT.Scheduler.Speed<Entity>(); // fast/slow actors act more/less often
   private engine!: ROT.Engine;
   private over = false;
-  private busy = false; // a wallet transaction is in flight — input is frozen
+  private busy = false; // reserved: input frozen during a blocking action
   private debugPending = false; // DEBUG: a backtick was pressed; the next key is a debug command
   private godMode = false;      // DEBUG: negate player death
 
@@ -229,7 +220,7 @@ export class Game {
         gehennomOpen: this.gehennomOpen, jamStolen: this.jamStolen, censorTimer: this.censorTimer,
         inQuest: this.inQuest, questDone: this.questDone, nextFloorShared: this.nextFloorShared,
         archetypeId: this.archetypeId, raceId: this.raceId,
-        defeatedBosses: [...this.defeatedBosses], loadedRelics: [...this.loadedRelics],
+        defeatedBosses: [...this.defeatedBosses],
         genesisAltars: this.genesisAltars, altarEthos: [...this.altarEthos.entries()],
         downed: [this.downed.has(this.player), this.coPlayer ? this.downed.has(this.coPlayer) : false],
       },
@@ -260,7 +251,6 @@ export class Game {
       this.nextFloorShared = meta.nextFloorShared as boolean;
       this.currentChain = meta.currentChain ? ([...CHAINS, ...BRANCHES].find((c) => c.id === meta.currentChain) ?? null) : null;
       this.defeatedBosses = new Set(meta.defeatedBosses as number[]);
-      this.loadedRelics = new Set(meta.loadedRelics as number[]);
       this.genesisAltars = meta.genesisAltars as typeof this.genesisAltars;
       this.altarEthos = new Map(meta.altarEthos as [string, Ethos][]);
 
@@ -381,7 +371,6 @@ export class Game {
     this.censorTimer = 0;
     this.inQuest = false;
     this.questDone = false;
-    this.loadedRelics.clear();
     this.downed.clear();
     this.turn = 0;
     this.currentChain = null;
@@ -419,80 +408,17 @@ export class Game {
     for (const line of grayPaper()) this.log.add(line, "dim", "both");
     if (this.coop) this.log.add("Co-op — Host and Guest share this dungeon. Slip past each other; Kick (K) to fight; mind your line of fire. Find the JAM together.", "sys", "both");
     else this.log.add("Your nominator (d) pads at your heels — it backs you, and bites for you.", "dim");
-    this.log.add(`Keys: move · , pick up · o open chest · @ sheet · p buy · F forge · P pray · O offer · q faucet · s search/sit · z zap · Z cast · t throw · a apply · S sheathe · E engrave${this.coop ? ' · " chat (or the box below)' : ""} · < > stairs · i/w/W/q/r/e/d items.`, "dim", "both");
+    this.log.add(`Keys: move · , pick up · o open chest · @ sheet · p buy · P pray · O offer · q faucet · s search/sit · z zap · Z cast · t throw · a apply · S sheathe · E engrave${this.coop ? ' · " chat (or the box below)' : ""} · < > stairs · i/w/W/q/r/e/d items.`, "dim", "both");
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
     void bumpGames(); // a fresh run joins the perpetual global tally
     this.revealGame(); // drop the splash — we're descending now
-    void this.fetchLeaderboard();
-    if (this.wallet && !this.coop) void this.loadRelics(); // carry owned NFT gear into the new run (solo only — per-wallet gear would desync a shared co-op world)
+    this.fetchLeaderboard();
   }
 
-  /** Pull the player's owned NFT relics into the pack — persistent, tradeable gear
-   *  that survives permadeath and rides into every descent. */
-  private async loadRelics(): Promise<void> {
-    if (!this.wallet) return;
-    const owned = await readGear(this.wallet.address);
-    let added = 0;
-    for (const g of owned) {
-      if (added >= RELIC_IMPORT_CAP) break; // only a limited kit may ride into a run
-      if (this.loadedRelics.has(g.tokenId)) continue;
-      const type = itemById(g.itemId);
-      if (!type || !isGear(type)) continue;
-      if (this.player.inventory.full) break;
-      this.giveItem(type, { enchant: g.enchant, relic: true, buc: "blessed", bucKnown: true });
-      this.loadedRelics.add(g.tokenId);
-      added++;
-    }
-    if (added > 0) {
-      this.log.add(`✦ ${added} on-chain relic${added > 1 ? "s" : ""} materialise in your pack (up to ${RELIC_IMPORT_CAP} per run — yours forever, tradeable).`, "good");
-      this.draw();
-    }
-    const deed = await readDeed(this.wallet.address);
-    if (deed) this.log.add(`✦ This wallet bears a soulbound Deed of Ascension (#${deed.tokenId}, depth ${deed.depth}) — you have ascended before.`, "good");
-  }
-
-  /** Forge a held piece of gear into a tradeable NFT relic — a direct wallet tx.
-   *  The contract rolls rarity on-chain (Common→Legendary), which lifts the enchant. */
-  async forge(item: Item): Promise<void> {
-    if (this.busy) return;
-    if (this.coop) { this.log.add("Shops & forging are solo-only in co-op for now.", "dim"); return; }
-    if (!this.wallet) { this.log.add("The forge lies dormant — relic-forging returns in a later update.", "dim"); return; }
-    if (!isGear(item.type)) { this.log.add("Only equipment — weapons, armor, rings, wands — can be forged.", "dim"); return; }
-    if (item.relic) { this.log.add(`${cap(this.ident.name(item.type))} is already an on-chain relic.`, "dim"); return; }
-    const base = Math.min(item.enchant ?? 0, 3); // the forge accepts at most +3 of base enchant
-    this.busy = true;
-    let priceWei: bigint;
-    try { priceWei = await forgePrice(base); }
-    catch { this.busy = false; this.log.add("The forge is cold — couldn't read its price.", "bad"); return; }
-    const pricePas = Number(priceWei) / 1e18;
-    if (this.player.pas < pricePas) { this.busy = false; this.log.add(`Not enough PAS to forge — needs ${pricePas}, your wallet holds ${this.player.pas.toFixed(1)}.`, "bad"); return; }
-
-    this.log.add(`You lay ${this.ident.name(item.type)} on the forge. Confirm ${pricePas} PAS in your wallet — the chain rolls its rarity…`, "sys"); this.draw();
-    const r = await forgeGear(this.wallet.provider, item.type.id, base, priceWei, (hash) => {
-      this.log.add(`Forge lit (${hash.slice(0, 10)}…). The chain decides its fate — hold fast…`, "dim"); this.draw();
-    });
-    if (!r.ok) { this.busy = false; this.log.add(`The forge fails — ${r.error}.`, "bad"); this.draw(); return; }
-
-    this.breakConduct(this.player, "bankless"); // forging on-chain ends Bankless
-    // The held item *becomes* the forged relic (rarity bonus baked into its enchant).
-    item.relic = true; item.enchant = r.enchant ?? base; item.buc = "blessed"; item.bucKnown = true;
-    if (item === this.player.weapon) this.player.applyWeapon();
-    else if (this.player.wornArmor.includes(item)) this.player.recomputeAC();
-    this.music.sfx("forge");
-    const tier = RARITY[r.rarity ?? 0] ?? "common";
-    this.log.add(`✦ You forge a ${tier.toUpperCase()} ${this.ident.name(item.type)} +${item.enchant} — minted as a tradeable NFT you own. It returns in future runs.`, (r.rarity ?? 0) >= 2 ? "good" : "sys");
-    // Re-sync owned token ids so loadRelics won't double-add this run.
-    for (const g of await readGear(this.wallet.address)) this.loadedRelics.add(g.tokenId);
-    this.player.pas = await walletBalancePas(this.wallet.address);
-    this.onWallet?.(this.wallet.address, this.player.pas);
-    this.busy = false;
-    this.draw();
-  }
-
-  private async fetchLeaderboard(): Promise<void> {
-    try { this.recentRuns = await readRecent(12); } catch { /* offline is fine */ }
+  private fetchLeaderboard(): void {
+    this.recentRuns = readRecent(12); // the local Hall of Fame (past runs on this device)
   }
 
   private giveStartingKit(who: Player): void {
@@ -638,7 +564,6 @@ export class Game {
     // conducts
     const kept = CONDUCTS.filter((c) => p.conducts.has(c.id));
     this.log.add(`  Vows kept: ${kept.length ? kept.map((c) => c.label).join(", ") : "none"}.`, kept.length ? "good" : "dim");
-    // on-chain wallet/PAS readout is deferred — to be reintroduced in a later update.
   }
 
   /** `#overview` (V) — a dungeon overview: every floor you've visited, with its notable features. */
@@ -2714,28 +2639,14 @@ export class Game {
       this.log.add(`✦ ${cap(w.name)} carries the JAM into the light — the party ASCENDS together. You win! ✦`, "good");
     } else {
       this.log.add("✦ You climb into the light, the JAM blazing in your grasp. ✦", "good");
-      this.log.add("ASCENSION! The chain needs no master. You have won, Seeker.", "sys");
+      this.log.add("ASCENSION! The Dungeon has met its master. You have won, Seeker.", "sys");
     }
     this.conductReport(w);
     this.log.add("Press R to begin a new descent.", "dim");
     this.music.playStinger("ascend");
     this.draw();
-    void this.recordResult(true);
-    void this.mintDeed(w);
+    this.recordResult(true);
     void this.showHallOfFame();
-  }
-
-  /** On a true ascension, mint the winner's soulbound Deed of Ascension (their own wallet pays). */
-  private async mintDeed(w: Player): Promise<void> {
-    if (!this.wallet) { return; }
-    if (!deedConfigured()) { this.log.add("(deploy AscendDeed to mint your soulbound Deed of Ascension)", "dim"); return; }
-    const existing = await readDeed(this.wallet.address);
-    if (existing) { this.log.add(`Your soulbound Deed of Ascension (#${existing.tokenId}) already adorns this wallet.`, "good"); return; }
-    this.log.add("Confirm in your wallet to mint your soulbound Deed of Ascension…", "sys"); this.draw();
-    const r = await claimDeed(this.wallet.provider, w.maxDepthReached, w.level, (h) => this.log.add(`Minting deed… ${h.slice(0, 10)}…`, "dim"));
-    if (r.ok) this.log.add("✦ A soulbound Deed of Ascension is minted to your wallet — proof, forever, that you ascended. It cannot be sold, only earned. ✦", "good");
-    else this.log.add(`Deed mint: ${r.error}`, "dim");
-    this.draw();
   }
 
   private gameOver(): void {
@@ -2754,26 +2665,21 @@ export class Game {
     void this.showHallOfFame();
   }
 
-  // ── on-chain persistence (Phase 4) ─────────────────────────────────────────
-  private async recordResult(won: boolean): Promise<void> {
-    if (!this.wallet) return; // on-chain run records are deferred — to be reintroduced in a later update
-    const depth = won ? GEHENNOM_BOTTOM : this.player.maxDepthReached; // a win means wresting the JAM from the bottom
-    const r = await recordRun(this.wallet.provider, this.wallet.address, depth, won);
-    if (r.ok) { this.log.add("Your run is etched into the on-chain Hall of Fame (gasless).", "sys"); void this.fetchLeaderboard(); }
-    else this.log.add(`Could not record run: ${r.error}`, "dim");
+  // ── local Hall of the Fallen (past runs on this device) ─────────────────────
+  private recordResult(won: boolean): void {
+    const depth = won ? GEHENNOM_BOTTOM : this.player.maxDepthReached; // a win means wresting the Amulet from the bottom
+    recordRun("an adventurer", depth, won);
+    this.fetchLeaderboard();
   }
 
-  async showHallOfFame(): Promise<void> {
-    if (this.recentRuns.length === 0) await this.fetchLeaderboard();
-    this.log.add("— Hall of Fame (on-chain) —", "sys");
+  showHallOfFame(): void {
+    this.fetchLeaderboard();
+    this.log.add("— Hall of the Fallen —", "sys");
     if (this.recentRuns.length === 0) { this.log.add("  No runs recorded yet — be the first.", "dim"); return; }
     const top = [...this.recentRuns]
       .sort((a, b) => (b.won ? 100 : 0) + b.depth - ((a.won ? 100 : 0) + a.depth))
       .slice(0, 6);
-    for (const r of top) {
-      const who = `${r.player.slice(0, 6)}…${r.player.slice(-4)}`;
-      this.log.add(`  ${who} — ${r.won ? "★ ASCENDED" : "fell at depth " + r.depth}`, r.won ? "good" : "dim");
-    }
+    for (const r of top) this.log.add(`  ${cap(r.name)} — ${r.won ? "★ ASCENDED" : "fell at depth " + r.depth}`, r.won ? "good" : "dim");
   }
 
   private maybePlaceBones(): void {
@@ -2781,7 +2687,7 @@ export class Game {
     const r = ROT.RNG.getItem(this.recentRuns)!;
     const pos = this.level.randomFloor();
     if (this.level.tileAt(pos.x, pos.y) !== "floor" || this.level.graveAt(pos.x, pos.y)) return;
-    const who = `${r.player.slice(0, 6)}…${r.player.slice(-4)}`;
+    const who = cap(r.name);
     this.level.graves.push({ x: pos.x, y: pos.y, label: r.won ? `${who} ascended from here` : `Here fell ${who}, at depth ${r.depth}` });
   }
 
@@ -3351,7 +3257,7 @@ export class Game {
     return take;
   }
 
-  /** Add an item to the pack, rolling wand charges. NFT relics carry enchant + a relic mark; every item gets a BUC. */
+  /** Add an item to the pack, rolling wand charges. Artifacts carry enchant + a relic mark; every item gets a BUC. */
   giveItem(type: ItemType, opts?: { enchant?: number; relic?: boolean; buc?: Buc; bucKnown?: boolean }): Item {
     const it = this.acting.inventory.add(type);
     if (type.kind === "wand") it.charges = type.id === "wand_wish" ? ROT.RNG.getUniformInt(1, 2) : ROT.RNG.getUniformInt(3, 6); // wishes are precious
@@ -3998,7 +3904,7 @@ export class Game {
   petFetchableNear(x: number, y: number, range: number): FloorItem | null {
     let best: FloorItem | null = null, bd = range + 1;
     for (const it of this.level.items) {
-      if (it.corpse || it.chest || it.price || it.coins || it.relic || it.nft || it.type.kind === "amulet") continue;
+      if (it.corpse || it.chest || it.price || it.coins || it.relic || it.type.kind === "amulet") continue;
       const d = Math.max(Math.abs(it.x - x), Math.abs(it.y - y));
       if (d < bd && this.level.isPassable(it.x, it.y)) { bd = d; best = it; }
     }
@@ -4008,7 +3914,7 @@ export class Game {
   /** The pet takes up the trinket it's standing on, to carry back to you. */
   petPickup(pet: Pet): void {
     const it = this.level.itemAt(pet.x, pet.y);
-    if (!it || it.corpse || it.chest || it.price || it.coins || it.relic || it.nft || it.type.kind === "amulet") return;
+    if (!it || it.corpse || it.chest || it.price || it.coins || it.relic || it.type.kind === "amulet") return;
     this.level.items = this.level.items.filter((z) => z !== it);
     pet.carrying = it;
   }
@@ -4715,21 +4621,7 @@ export class Game {
     this.draw();
   }
 
-  // ── wallet + shops (Phase 2: gasless PAS economy) ──────────────────────────
-  async connect(): Promise<void> {
-    try {
-      this.wallet = await connectWallet();
-      this.player.pas = await walletBalancePas(this.wallet.address);
-      const a = this.wallet.address;
-      this.log.add(`Wallet connected: ${a.slice(0, 6)}…${a.slice(-4)} — ${this.player.pas.toFixed(1)} PAS. Standard wares cost gold; only NFT relics charge your wallet.`, "sys");
-      this.onWallet?.(a, this.player.pas);
-      this.draw();
-      void this.loadRelics(); // bring any owned NFT relics into the current pack
-    } catch (e) {
-      this.log.add(`Wallet: ${e instanceof Error ? e.message : "failed"}`, "bad");
-    }
-  }
-
+  // ── shops (gold economy) ────────────────────────────────────────────────────
   private spawnShop(): void {
     const centers = this.level.roomCenters.slice(1); // not the start room
     if (centers.length === 0) return;
@@ -4751,8 +4643,7 @@ export class Game {
         }
       }
     }
-    // NFT relic wares (bought with PAS from a connected wallet) are deferred — to be
-    // reintroduced in a later update. The bazaar carries gold-priced standard stock only.
+    // The bazaar carries gold-priced stock.
     // Post a Marketmaker to mind the stall — peaceful while you pay, lethal if you don't.
     const ring = [[2, 1], [1, 2], [-2, -1], [-1, -2], [2, -1], [-2, 1], [1, -2], [-1, 2], [2, 0], [-2, 0], [0, 2], [0, -2]];
     let keeper = false;
@@ -4792,42 +4683,16 @@ export class Game {
       this.log.add("There is nothing for sale here.", "dim"); return;
     }
 
-    // Standard wares are bought with in-game gold — instant, no wallet. Works in co-op too:
-    // each adventurer spends their own purse (giveItem credits the acting player).
-    if (!fi.nft) {
-      const p = this.acting;
-      if (p.gold < fi.price) { this.log.add(`Not enough gold — ${this.ident.name(fi.type)} costs ${fi.price}, you hold ${p.gold}.`, "bad"); return; }
-      p.gold -= fi.price;
-      this.breakConduct(p, "bankless");
-      this.giveItem(fi.type, { enchant: fi.enchant, relic: fi.relic, buc: fi.buc, bucKnown: fi.bucKnown });
-      this.level.items = this.level.items.filter((i) => i !== fi);
-      this.log.add(`${this.sub(p)} ${this.verbS(p, "buy")} ${this.ident.name(fi.type)} for ${fi.price} gold. (${p.gold} left)`, "good");
-      this.draw();
-      return;
-    }
-
-    // NFT gear — a real wallet transaction, like an NFT trade/mint. Solo-only for now (one wallet).
-    if (this.coop) { this.log.add("NFT relics are a solo-only purchase for now — but standard wares take gold.", "dim"); return; }
-    if (!this.wallet) { this.log.add("That's an NFT relic — connect a wallet (button above) to mint-buy it.", "bad"); return; }
-    if (this.player.pas < fi.price) { this.log.add(`Not enough PAS — ${this.ident.name(fi.type)} costs ${fi.price}, your wallet holds ${this.player.pas.toFixed(1)}.`, "bad"); return; }
-
-    // A direct wallet transaction — the game halts until it confirms on-chain.
-    this.busy = true;
-    this.log.add(`The Marketmaker slides a terminal across the counter. Confirm ${fi.price} PAS in your wallet…`, "sys"); this.draw();
-    const r = await buyDirect(this.wallet.provider, fi.price, (hash) => {
-      this.log.add(`Payment broadcast (${hash.slice(0, 10)}…). Settling on the chain — hold fast…`, "dim"); this.draw();
-    });
-    if (!r.ok) { this.busy = false; this.log.add(`The deal falls through — ${r.error}.`, "bad"); this.draw(); return; }
-
-    this.breakConduct(this.acting, "bankless"); // a purchase ends Bankless
+    // Wares are bought with in-game gold — each adventurer spends their own purse (giveItem
+    // credits the acting player), so it works in co-op too.
+    const p = this.acting;
+    if (p.gold < fi.price) { this.log.add(`Not enough gold — ${this.ident.name(fi.type)} costs ${fi.price}, you hold ${p.gold}.`, "bad"); return; }
+    p.gold -= fi.price;
+    this.breakConduct(p, "bankless");
     this.giveItem(fi.type, { enchant: fi.enchant, relic: fi.relic, buc: fi.buc, bucKnown: fi.bucKnown });
     this.level.items = this.level.items.filter((i) => i !== fi);
-    this.player.pas = await walletBalancePas(this.wallet.address);
-    this.onWallet?.(this.wallet.address, this.player.pas);
     const tag = fi.relic ? ` +${fi.enchant ?? 0} ✦` : "";
-    this.log.add(`Settled on-chain. You buy ${this.ident.name(fi.type)}${tag} for ${fi.price} PAS. Wallet: ${this.player.pas.toFixed(1)}.`, "good");
-    if (fi.enchant && isGear(fi.type)) this.log.add("A fine piece — forge it (F) into a tradeable NFT relic when you like.", "dim");
-    this.busy = false;
+    this.log.add(`${this.sub(p)} ${this.verbS(p, "buy")} ${this.ident.name(fi.type)}${tag} for ${fi.price} gold. (${p.gold} left)`, "good");
     this.draw();
   }
 
@@ -4879,7 +4744,7 @@ export class Game {
         const prize = ROT.RNG.getItem(goodies)!;
         const enchant = ROT.RNG.getUniformInt(1, 3);
         if (!this.level.itemAt(m.x, m.y)) this.level.items.push({ x: m.x, y: m.y, type: prize, enchant, buc: "blessed", bucKnown: true });
-        this.log.add(`${cap(m.name)} falls! It leaves a prize — ${prize.name} +${enchant}. Forge it (F) into a tradeable NFT relic.`, "good");
+        this.log.add(`${cap(m.name)} falls! It leaves a prize — ${prize.name} +${enchant}.`, "good");
       }
     } else {
       this.log.add(`${cap(m.name)} is destroyed.`, "good");
@@ -5362,7 +5227,7 @@ export class Game {
     const ae = document.activeElement; // typing in a text field (chat box, lobby paste) must not drive the game
     if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA")) return;
     if (this.coop && this.netRole !== "solo" && (e.key === "\"" || e.key === "'")) { this.focusChat(); e.preventDefault(); return; } // open the chat box
-    if (this.busy) { e.preventDefault(); return; } // frozen while a wallet tx settles
+    if (this.busy) { e.preventDefault(); return; } // frozen while a blocking action resolves
     if (this.over) {
       if (e.key === "r" || e.key === "R") {
         if (this.netRole === "guest") this.peer?.send({ t: "input", key: e.key }); // ask the host to reseed
@@ -5454,7 +5319,6 @@ export class Game {
       (p.polyForm ? `%c{${COLORS.dim}}  %c{#d070d0}Fork:${p.polyForm.name.replace(/^an? /, "")} ${p.polyTurns}` : "") +
       (p.weapon === null && !p.polyForm ? `%c{${COLORS.dim}}  %c{#9ad0e0}${p.sheathed ? "Bare(S)" : "Bare"}` : "") +
       `%c{${COLORS.dim}}  Gold %c{${COLORS.gold}}${p.gold}` +
-      (this.wallet && !this.coop ? `%c{${COLORS.dim}}  PAS %c{${COLORS.gold}}${p.pas.toFixed(1)}` : "") +
       (hunger ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}${hunger}` : "") +
       (p.encumbrance().level ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}${p.encumbrance().level}` : "") +
       (p.paralyzed > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Para${p.paralyzed}` : "") +

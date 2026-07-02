@@ -272,10 +272,10 @@ export class Idents {
 }
 
 const BY_ID = new Map<string, ItemType>(ITEMS.map((it) => [it.id, it]));
-/** Resolve an item id (e.g. an on-chain relic's itemId) back to its type. */
+/** Resolve an item id back to its type. */
 export function itemById(id: string): ItemType | undefined { return BY_ID.get(id); }
 
-/** Gear eligible to become a tradeable NFT relic — equipment, never consumables. */
+/** Gear that can bear an artifact enchant — equipment, never consumables. */
 export const GEAR_KINDS: ReadonlySet<ItemKind> = new Set(["weapon", "armor", "ring", "wand"]);
 export function isGear(t: ItemType): boolean { return GEAR_KINDS.has(t.kind); }
 

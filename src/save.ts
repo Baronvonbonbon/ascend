@@ -134,7 +134,7 @@ export function restoreItem(d: Json): Item | null {
 // ── floor items (their own shape: type ref + optional corpse def / chest / shop data) ──
 export function serFloorItem(fi: Record<string, Json>): Json {
   const o: Record<string, Json> = { x: fi.x, y: fi.y, type: (fi.type as ItemType).id };
-  for (const k of ["price", "nft", "coins", "enchant", "relic", "mintOnBuy", "buc", "bucKnown", "detected"] as const) {
+  for (const k of ["price", "coins", "enchant", "relic", "buc", "bucKnown", "detected"] as const) {
     if (fi[k] !== undefined) o[k] = fi[k] as Json;
   }
   if (fi.corpse) { const c = fi.corpse as { def: MonsterDef; born: number }; o.corpse = { def: serDef(c.def), born: c.born }; }
@@ -146,7 +146,7 @@ export function restoreFloorItem(d: Json): Record<string, Json> | null {
   const type = itemById(o.type as string);
   if (!type) return null;
   const fi: Record<string, Json> = { x: o.x, y: o.y, type };
-  for (const k of ["price", "nft", "coins", "enchant", "relic", "mintOnBuy", "buc", "bucKnown", "detected"] as const) {
+  for (const k of ["price", "coins", "enchant", "relic", "buc", "bucKnown", "detected"] as const) {
     if (o[k] !== undefined) fi[k] = o[k];
   }
   if (o.corpse) { const c = o.corpse as Record<string, Json>; fi.corpse = { def: restoreDef(c.def), born: c.born }; }
