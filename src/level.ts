@@ -32,6 +32,7 @@ export class Level {
   portals: Portal[] = []; // XCM portals to parachain branches
   branchEntries: { x: number; y: number; branchId: string }[] = []; // branch-stairs into sub-dungeons (the Mines)
   roomCenters: { x: number; y: number }[] = [];
+  lightSources: { x: number; y: number }[] = []; // abstract torch/brazier points — the lit map radiates from these (recomputed as doors open)
   start = { x: 1, y: 1 };
   stairs = { x: 1, y: 1 };
   readonly kind: LevelKind;
@@ -85,7 +86,7 @@ export class Level {
       graves: this.graves, drawbridges: this.drawbridges, coopTuned: this.coopTuned,
       traps: this.traps, engravings: this.engravings, boulders: this.boulders,
       portals: this.portals.map((p) => ({ x: p.x, y: p.y, quest: p.quest, chain: p.chain.id })),
-      branchEntries: this.branchEntries, roomCenters: this.roomCenters,
+      branchEntries: this.branchEntries, roomCenters: this.roomCenters, lightSources: this.lightSources,
       start: this.start, stairs: this.stairs, vault: this.vault, vaultBreach: this.vaultBreach, shop: this.shop,
     };
   }
@@ -104,6 +105,7 @@ export class Level {
       .map((p) => ({ x: p.x, y: p.y, quest: p.quest, chain: CHAINS.find((c) => c.id === p.chain)! }))
       .filter((p) => p.chain) as Level["portals"];
     lv.branchEntries = d.branchEntries as Level["branchEntries"]; lv.roomCenters = d.roomCenters as Level["roomCenters"];
+    lv.lightSources = (d.lightSources as Level["lightSources"]) ?? [];
     lv.start = d.start as { x: number; y: number }; lv.stairs = d.stairs as { x: number; y: number };
     lv.vault = d.vault as Level["vault"]; lv.vaultBreach = d.vaultBreach as Level["vaultBreach"]; lv.shop = d.shop as Level["shop"];
     lv.rebuildFloors();
@@ -416,15 +418,26 @@ export class Level {
   /** Light a fraction of the rooms (NetHack lit/dark rooms). A lit room (a flood-filled pool around a
    *  lit center) is visible whole when you can see into it; dark rooms + corridors need a carried light.
    *  `litChance` 0 = a wholly dark level (the dread depths); the big room is always lit. */
+  /** Choose which rooms hold a light source (a torch/brazier), scaled by `litChance`, then compute the
+   *  lit map from them. The sources are abstract points — no fixture is drawn; the room simply glows. */
   markLighting(litChance: number): void {
-    if (this.kind === "bigroom") { for (const f of this.floors) this.lit[f.y][f.x] = true; return; }
-    for (const c of this.roomCenters) {
-      if (ROT.RNG.getUniform() >= litChance) continue;
-      // flood-fill the open area around the center (bounded) — the room glows; corridors stay dark
-      const seen = new Set<string>([`${c.x},${c.y}`]); const q = [{ x: c.x, y: c.y, d: 0 }];
+    this.lightSources = [];
+    if (this.kind === "bigroom") { for (const f of this.floors) this.lit[f.y][f.x] = true; return; } // the whole cavern is lit
+    for (const c of this.roomCenters) if (ROT.RNG.getUniform() < litChance) this.lightSources.push({ x: c.x, y: c.y });
+    this.computeLighting();
+  }
+
+  /** (Re)compute the lit map as the union of radial light from each source, spilling through OPEN doors
+   *  (closed / locked / hidden doors block it) — like a light spell cast at each point. Re-run whenever a
+   *  door opens or closes, so a lit room's glow pours into the corridor the moment you open the way. */
+  computeLighting(radius = 7): void {
+    if (this.kind === "bigroom") return; // the whole cavern stays lit
+    for (let y = 0; y < this.height; y++) for (let x = 0; x < this.width; x++) this.lit[y][x] = false;
+    for (const s of this.lightSources) {
+      const seen = new Set<string>([`${s.x},${s.y}`]); const q = [{ x: s.x, y: s.y, d: 0 }];
       while (q.length) {
         const cur = q.shift()!; this.lit[cur.y][cur.x] = true;
-        if (cur.d >= 6) continue;
+        if (cur.d >= radius) continue;
         for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as [number, number][]) {
           const nx = cur.x + dx, ny = cur.y + dy, k = `${nx},${ny}`;
           if (seen.has(k)) continue; seen.add(k);

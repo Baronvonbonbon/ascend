@@ -925,6 +925,7 @@ export class Player extends Entity {
     if (tile === "lever") return this.game.pullLever(this) ? this.endTurn() : false; // throw the lever — raise/lower the bridge
     if (tile === "doorClosed") {
       this.game.level.tiles[ny][nx] = "door";
+      this.game.level.computeLighting(); // a lit room's glow now spills through the opened doorway
       this.game.recomputeFOV();
       this.game.music.sfx("door");
       this.game.log.add("You open the door.", "dim");

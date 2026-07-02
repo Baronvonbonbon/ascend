@@ -831,7 +831,9 @@ export class Game {
     }
     // Lit vs dark rooms (NetHack): the dread depths (Foot of the Relay + Gehennom + Sanctum) are wholly
     // dark; elsewhere ~half the rooms are lit. Caves/mazes have few room centers, so they read dark too.
-    const litChance = this.plane > 0 ? 0.5 : this.acting.depth >= MAX_DEPTH ? 0 : 0.55;
+    // Lit rooms thin out with depth: the surface floors are bright (~90% of rooms hold a torch),
+    // tapering to sparse (~15%) by the deep floors, and pitch-dark in the dread depths (Gehennom+).
+    const litChance = this.plane > 0 ? 0.5 : this.acting.depth >= MAX_DEPTH ? 0 : Math.max(0.15, 0.9 - (this.acting.depth - 1) * 0.032);
     this.level.markLighting(litChance);
     this.placeParty();
     this.rebuildSchedule();
@@ -2014,11 +2016,11 @@ export class Game {
     const fi = this.level.items.find((i) => i.chest && i.x === nx && i.y === ny);
     if (fi) { this.log.add("Step onto the chest, then press o to open it.", "dim"); return false; }
     if (tile === "door") { this.log.add("That door is already open.", "dim"); return false; }
-    if (tile === "doorClosed") { this.level.tiles[ny][nx] = "door"; this.recomputeFOV(); this.log.add(`${this.sub(p)} ${this.verbS(p, "open")} the door.`, "dim"); this.draw(); return true; }
+    if (tile === "doorClosed") { this.level.tiles[ny][nx] = "door"; this.level.computeLighting(); this.recomputeFOV(); this.log.add(`${this.sub(p)} ${this.verbS(p, "open")} the door.`, "dim"); this.draw(); return true; }
     if (tile === "doorLocked") {
       const how = p.weapon ? `force the door with ${this.ident.name(p.weapon.type)}` : "shoulder the door";
       if (!this.tryForce(p)) { this.log.add(`You ${how} — the lock holds. (try again, or K to kick)`, "dim"); return true; }
-      this.level.tiles[ny][nx] = "door"; this.recomputeFOV();
+      this.level.tiles[ny][nx] = "door"; this.level.computeLighting(); this.recomputeFOV();
       this.log.add(`${this.sub(p)} ${this.verbS(p, "force")} the door open.`, "good"); this.draw(); return true;
     }
     this.log.add("There's nothing there to open.", "dim"); return false;
@@ -2031,7 +2033,7 @@ export class Game {
     if (this.monsterAt(nx, ny) || this.playerAt(nx, ny) || this.level.boulderAt(nx, ny) || this.level.itemAt(nx, ny)) {
       this.log.add("Something's in the doorway — it won't close.", "dim"); return false;
     }
-    this.level.tiles[ny][nx] = "doorClosed"; this.recomputeFOV();
+    this.level.tiles[ny][nx] = "doorClosed"; this.level.computeLighting(); this.recomputeFOV();
     this.log.add(`${this.sub(p)} ${this.verbS(p, "pull")} the door shut.`, "dim"); this.draw(); return true;
   }
 
@@ -2070,7 +2072,7 @@ export class Game {
     const tile = this.level.tileAt(nx, ny);
     if (tile === "sink") return this.kickSink(p, nx, ny);
     if (tile === "doorLocked") return this.kickDoor(p, nx, ny);
-    if (tile === "doorClosed") { this.level.tiles[ny][nx] = "door"; this.recomputeFOV(); this.log.add("You kick the door open.", "good"); this.draw(); return true; }
+    if (tile === "doorClosed") { this.level.tiles[ny][nx] = "door"; this.level.computeLighting(); this.recomputeFOV(); this.log.add("You kick the door open.", "good"); this.draw(); return true; }
     if (tile === "wall" || tile === "doorHidden") { this.log.add("You kick the wall. Ow — that was foolish.", "dim"); if (ROT.RNG.getUniform() < 0.4) { p.hp -= 1; if (p.hp <= 0) this.killPlayer(p); } return true; }
     this.log.add("You kick at the air.", "dim"); return false;
   }
@@ -2445,6 +2447,7 @@ export class Game {
     const chance = Math.max(0.15, 0.3 + abilityMod(p.str) * 0.08);
     if (ROT.RNG.getUniform() < chance) {
       this.level.tiles[ny][nx] = "door";
+      this.level.computeLighting();
       this.recomputeFOV();
       this.log.add(`${this.sub(p)} ${this.verbS(p, "kick")} the door — it bursts open!`, "good");
     } else {
