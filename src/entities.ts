@@ -66,6 +66,7 @@ export class Player extends Entity {
   inventory = new Inventory();
   ident!: Idents;     // this adventurer's own identification knowledge (shared world appearances)
   weapon: Item | null = null;
+  sheathed: Item | null = null; // a weapon holstered by `S` — remembered, and snatched back the moment you strike
   wornArmor: Item[] = []; // up to one piece per slot
   ring: Item | null = null;
   amulet: Item | null = null; // worn around the neck (life-saving / reflection)
@@ -129,6 +130,34 @@ export class Player extends Entity {
       const b = this.weaponBonus + (this.weapon.enchant ?? 0) + bucDelta(this.weapon.buc); // scroll enchant + relic enchant + sanctity
       this.attackDmg = [this.weapon.type.dmg![0] + b, this.weapon.type.dmg![1] + b];
     } else this.attackDmg = [1, 3];
+  }
+
+  /** Bare-handed and free — no weapon or off-hand in your grip (and not a handless fork). Gates the
+   *  unhanded benefits: martial arts, free-hands utility, an open-handed pause in foes, and a lighter step. */
+  unhanded(): boolean { return this.weapon === null && this.offhand === null && !this.polyForm; }
+
+  /** `S` — sheathe your weapon to free your hands, or draw the sheathed one back. Each costs a turn;
+   *  a cursed blade won't leave your grip. Sheathing is a full commitment to the unhanded stance:
+   *  while sheathed you fight bare-handed (martial arts) until you press `S` again to re-arm — striking
+   *  never auto-draws, so if you want to punch a dragon, punch away. */
+  toggleSheath(): boolean {
+    if (this.handless()) { this.game.log.add(`Your ${this.polyForm!.name.replace(/^an? /, "")} form has no hands to sheathe with.`, "dim"); return false; }
+    if (this.weapon === null) {
+      if (!this.sheathed) { this.game.log.add("Your hands are already empty. (wield a weapon first, then S to sheathe it)", "dim"); return false; }
+      this.weapon = this.sheathed; this.sheathed = null; this.applyWeapon();
+      this.game.music.sfx("equip");
+      this.game.log.add(`You draw ${this.ident.name(this.weapon.type)} back to hand.`, "good", this);
+      return this.endTurn();
+    }
+    if (this.weapon.buc === "cursed") {
+      this.weapon.bucKnown = true;
+      this.game.log.add(`You can't sheathe ${this.ident.name(this.weapon.type)} — it's cursed, welded to your grip!`, "bad", this);
+      return this.endTurn();
+    }
+    this.sheathed = this.weapon; this.weapon = null; this.applyWeapon();
+    this.game.music.sfx("equip");
+    this.game.log.add(`You sheathe ${this.ident.name(this.sheathed.type)} and free your hands.`, "good", this);
+    return this.endTurn();
   }
 
   /** Effective evasion of one armor piece: base + enchant + sanctity − erosion (min 0). */
@@ -215,7 +244,8 @@ export class Player extends Entity {
     const ride = this.riding ? 30 : 0;           // a nominator steed quickens your stride
     if (this.polyForm) return Math.max(20, this.polyForm.speed ?? 100) + haste + ride; // move as your fork
     const base = this.intrinsics.has("fast") ? 130 : 100; // intrinsic speed from a fork-daemon corpse
-    return Math.max(20, base + haste + ride - this.encumbrance().speed); // a heavy pack drags your stride
+    const light = this.unhanded() ? 15 : 0; // empty-handed and unburdened by steel — a quicker step (sheathe and run)
+    return Math.max(20, base + haste + ride + light - this.encumbrance().speed); // a heavy pack drags your stride
   }
 
   /** Carry capacity from Stake-weight (STR) + Resilience (CON) — how much your pack can bear before it drags. */
@@ -443,6 +473,7 @@ export class Player extends Entity {
       case "Z": return this.startCast();
       case "O": return this.game.offerCorpse(this) ? this.endTurn() : false;
       case "T": return this.startSelect("takeoff");
+      case "S": return this.toggleSheath(); // sheathe your weapon (free your hands) / draw it back
       case "E": return this.game.engrave() ? this.endTurn() : false;
       case "F": return this.startSelect("forge");
     }
@@ -883,6 +914,7 @@ export class Player extends Entity {
 
   private unequip(item: Item): void {
     if (this.weapon === item) { this.weapon = null; this.applyWeapon(); }
+    if (this.sheathed === item) this.sheathed = null; // a sheathed weapon dropped/stolen is no longer yours to snatch back
     if (this.offhand === item) this.offhand = null;
     if (this.quiver === item) this.quiver = null;
     if (this.wornArmor.includes(item)) { this.wornArmor = this.wornArmor.filter((a) => a !== item); this.recomputeAC(); }
@@ -919,7 +951,7 @@ export class Player extends Entity {
     const fallen = this.game.downedAllyAt(this, nx, ny);
     if (fallen) return this.game.revivePartner(this, fallen) ? this.endTurn() : false;
     const foe = this.game.monsterAt(nx, ny);
-    if (foe && !foe.peaceful) { this.game.attack(this, foe); return this.endTurn(); } // only hostiles get hit
+    if (foe && !foe.peaceful) { this.game.attack(this, foe); return this.endTurn(); } // only hostiles get hit — unhanded, you punch (draw with S first if you'd rather use steel)
     // Your co-op partner is a friendly NPC: you slip past (swap), never auto-attack. To deliberately
     // turn on them, Kick (K) into them; rays/AoE still strike anyone caught in the line of fire.
     const ally = this.game.otherPlayerAt(this, nx, ny);

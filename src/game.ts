@@ -324,9 +324,9 @@ export class Game {
     const idx = new Map(items.map((it, i) => [it, i] as const));
     const eq = (it: Item | null) => (it ? idx.get(it) ?? null : null);
     return {
-      fields: serFields(p, ["inventory", "ident", "weapon", "ring", "amulet", "offhand", "quiver", "wornArmor"]),
+      fields: serFields(p, ["inventory", "ident", "weapon", "sheathed", "ring", "amulet", "offhand", "quiver", "wornArmor"]),
       inv: items.map(serItem),
-      weapon: eq(p.weapon), ring: eq(p.ring), amulet: eq(p.amulet), offhand: eq(p.offhand), quiver: eq(p.quiver),
+      weapon: eq(p.weapon), sheathed: eq(p.sheathed), ring: eq(p.ring), amulet: eq(p.amulet), offhand: eq(p.offhand), quiver: eq(p.quiver),
       wornArmor: p.wornArmor.map(eq),
       ident: p.ident.snapshot(),
     };
@@ -337,7 +337,7 @@ export class Game {
     p.inventory = new Inventory();
     p.inventory.items = (d.inv as unknown[]).map(restoreItem).filter((x): x is Item => !!x);
     const at = (i: unknown) => (i === null || i === undefined ? null : p.inventory.items[i as number] ?? null);
-    p.weapon = at(d.weapon); p.ring = at(d.ring); p.amulet = at(d.amulet); p.offhand = at(d.offhand); p.quiver = at(d.quiver);
+    p.weapon = at(d.weapon); p.sheathed = at(d.sheathed); p.ring = at(d.ring); p.amulet = at(d.amulet); p.offhand = at(d.offhand); p.quiver = at(d.quiver);
     p.wornArmor = (d.wornArmor as unknown[]).map(at).filter((x): x is Item => !!x);
     p.ident = new Idents(this.appearances); p.ident.restore(d.ident as string[]);
     return p;
@@ -419,7 +419,7 @@ export class Game {
     for (const line of grayPaper()) this.log.add(line, "dim", "both");
     if (this.coop) this.log.add("Co-op — Host and Guest share this dungeon. Slip past each other; Kick (K) to fight; mind your line of fire. Find the JAM together.", "sys", "both");
     else this.log.add("Your nominator (d) pads at your heels — it backs you, and bites for you.", "dim");
-    this.log.add(`Keys: move · , pick up · o open chest · @ sheet · p buy · F forge · P pray · O offer · q faucet · s search/sit · z zap · Z cast · t throw · a apply · E engrave${this.coop ? ' · " chat (or the box below)' : ""} · < > stairs · i/w/W/q/r/e/d items.`, "dim", "both");
+    this.log.add(`Keys: move · , pick up · o open chest · @ sheet · p buy · F forge · P pray · O offer · q faucet · s search/sit · z zap · Z cast · t throw · a apply · S sheathe · E engrave${this.coop ? ' · " chat (or the box below)' : ""} · < > stairs · i/w/W/q/r/e/d items.`, "dim", "both");
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
     this.engine.start();
@@ -2205,8 +2205,8 @@ export class Game {
   /** Search the surrounding tiles: Insight (WIS) reveals hidden traps & doors; then carefully
    *  disarm (DEX) any revealed trap beside you — your way past a path-blocking reorg trap. */
   search(p: Player): boolean {
-    const find = Math.max(0.25, Math.min(0.92, 0.5 + abilityMod(p.wis) * 0.06 + this.luckOf(p) * 0.02));
-    const disarm = Math.max(0.2, 0.4 + abilityMod(p.dex) * 0.07);
+    const find = Math.max(0.25, Math.min(0.95, 0.5 + abilityMod(p.wis) * 0.06 + this.luckOf(p) * 0.02 + (p.unhanded() ? 0.12 : 0))); // both hands free to feel along the wall
+    const disarm = Math.max(0.2, 0.4 + abilityMod(p.dex) * 0.07 + (p.unhanded() ? 0.12 : 0)); // bare hands work a trap free more surely
     let found = 0, disarmed = 0;
     const around: [number, number][] = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]];
     for (const [dx, dy] of around) {
@@ -2877,7 +2877,10 @@ export class Game {
     if (a instanceof Player && d instanceof Monster) this.noteSkillHit(a); // a landed blow trains the weapon's skill
     // A rust/corrosion striker (rust bug) eats away a random worn piece on a hit.
     if (a instanceof Monster && !a.cancelled && a.def.corrodes && d instanceof Player) this.corrodeArmor(d);
-    if (a instanceof Player && d instanceof Monster) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg}.`, "good", who);
+    if (a instanceof Player && d instanceof Monster) {
+      this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg}.`, "good", who);
+      if (a.weapon === null && d.hp > 0 && !d.def.boss) this.martialFollowUp(a, d, who); // an unarmed blow can daze or throw a foe, by martial skill
+    }
     else if (a instanceof Monster && d instanceof Player) {
       this.log.add(`${cap(a.name)} hits ${d.name} for ${dmg}.`, "bad", who);
       if (!a.cancelled && a.def.inflict && d.hp > 0 && ROT.RNG.getUniform() < 0.3) this.applyStatus(d, a.def.inflict);
@@ -2967,6 +2970,23 @@ export class Game {
   skillAccBonus(p: Player): number { return p.skillRank[this.weaponSkillClass(p)] ?? 0; }
   /** A touch of extra damage at Skilled (+1) and Expert (+2). */
   skillDmgBonus(p: Player): number { const r = p.skillRank[this.weaponSkillClass(p)] ?? 0; return r >= 3 ? 2 : r >= 2 ? 1 : 0; }
+
+  /** An unarmed strike's martial follow-through: a trained fist can daze a foe (it loses its next
+   *  turn) and, at Expert, hurl it back a tile. Chance and force scale with the martial-arts rank —
+   *  the payoff for fighting unhanded (a committed weaponless build, or a weapon sheathed for the stance). */
+  private martialFollowUp(a: Player, d: Monster, who: LogWho): void {
+    const rank = a.skillRank["martial"] ?? 0;
+    if (rank <= 0 || ROT.RNG.getUniform() >= 0.06 + rank * 0.09) return; // Basic ~15% … Expert ~33%
+    d.sleepTurns = Math.max(d.sleepTurns, 1);
+    const blow = ["strike", "palm-strike", "hammer-fist", "iron-palm blow"][Math.min(rank, 3)];
+    this.log.add(`${this.sub(a)} ${this.verbS(a, "land")} a ${blow} — ${d.name} reels, dazed.`, "good", who);
+    if (rank >= 3 && ROT.RNG.getUniform() < 0.5) { // Expert: a chance to throw it back a tile
+      const dx = Math.sign(d.x - a.x), dy = Math.sign(d.y - a.y), bx = d.x + dx, by = d.y + dy;
+      if ((dx || dy) && this.level.isPassable(bx, by) && !this.monsterAt(bx, by) && !this.petAt(bx, by) && !this.playerAt(bx, by) && !this.level.boulderAt(bx, by)) {
+        d.x = bx; d.y = by; this.log.add(`${cap(d.name)} is hurled back!`, "good", who);
+      }
+    }
+  }
 
   /** Tally a landed melee blow toward the wielded weapon's skill. */
   noteSkillHit(p: Player): void {
@@ -4103,7 +4123,7 @@ export class Game {
       return true;
     }
     if (item.type.id === "lockpick") {
-      const chance = Math.max(0.2, Math.min(0.9, 0.45 + abilityMod(p.dex) * 0.08));
+      const chance = Math.max(0.2, Math.min(0.95, 0.45 + abilityMod(p.dex) * 0.08 + (p.unhanded() ? 0.12 : 0))); // a free off-hand steadies the pick
       const tx = p.x + dx, ty = p.y + dy;
       if (this.level.tileAt(tx, ty) === "doorLocked") {
         if (ROT.RNG.getUniform() < chance) { this.level.tiles[ty][tx] = "doorClosed"; this.recomputeFOV(); this.log.add("The lock clicks open — push the door to enter.", "good"); }
@@ -5401,6 +5421,7 @@ export class Game {
       (p.maxEnergy > 5 || p.spells.size ? `%c{${COLORS.dim}}  En %c{#7aa0e0}${p.energy}%c{${COLORS.dim}}/${p.maxEnergy}` : "") +
       (this.luckOf(p) !== 0 ? `%c{${COLORS.dim}}  Luck %c{${this.luckOf(p) > 0 ? COLORS.good : COLORS.bad}}${this.luckOf(p) > 0 ? "+" : ""}${this.luckOf(p)}` : "") +
       (p.polyForm ? `%c{${COLORS.dim}}  %c{#d070d0}Fork:${p.polyForm.name.replace(/^an? /, "")} ${p.polyTurns}` : "") +
+      (p.weapon === null && !p.polyForm ? `%c{${COLORS.dim}}  %c{#9ad0e0}${p.sheathed ? "Bare(S)" : "Bare"}` : "") +
       `%c{${COLORS.dim}}  Gold %c{${COLORS.gold}}${p.gold}` +
       (this.wallet && !this.coop ? `%c{${COLORS.dim}}  PAS %c{${COLORS.gold}}${p.pas.toFixed(1)}` : "") +
       (hunger ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}${hunger}` : "") +

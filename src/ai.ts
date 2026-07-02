@@ -282,6 +282,13 @@ export const MONSTER_BEHAVIORS: Behavior<Monster>[] = [
   // Melee. NEW — opportunism: with your hound also in reach it will sometimes turn
   // on the hound instead (and reliably if the hound is nearly down), thinning your
   // support before finishing you.
+  // NEW — open hands give pause: an unblooded foe hesitates at an UNHANDED adventurer (no weapon
+  // drawn), losing its turn instead of striking — the social edge of going unarmed. Once you've
+  // bloodied it (or if it's a boss / fearless / the shopkeeper), the pause is over and it commits.
+  { name: "wary-of-open-hands",
+    score: (_g, s, c) => (c.dist === 1 && !s.peaceful && c.p.unhanded() && s.hp === s.maxHp && !s.def.boss && !s.def.fearless && !s.def.keeper && ROT.RNG.getUniform() < 0.35 ? 1 : 0),
+    act: (g, s, c) => { if (g.level.isVisible(s.x, s.y)) g.log.add(`${s.name[0].toUpperCase() + s.name.slice(1)} hesitates at your open hands.`, "dim", c.p); } },
+
   { name: "melee", score: (_g, _s, c) => (c.dist === 1 ? 1 : 0),
     act: (g, s, c) => {
       const pet = g.adjacentPet(s.x, s.y);
