@@ -434,7 +434,7 @@ export class Player extends Entity {
       case "t": return this.startSelect("throw");
       case "Q": return this.startSelect("quiver");
       case "f": return this.fireQuiver();
-      case "c": this.pendingChat = true; this.game.log.add("Chat in which direction? (a move key, Esc to cancel)", "sys"); return false;
+      case "c": this.pendingChat = true; this.game.log.add("Chat in which direction? (toward your hound to play with it; a move key, Esc to cancel)", "sys"); return false;
       case ";": this.pendingLook = true; this.game.log.add("Look in which direction? (a move key, Esc to cancel)", "sys"); return false;
       case "/": this.pendingWhatIs = true; this.game.log.add("What is that symbol? (type any glyph, Esc to cancel)", "sys"); return false;
       case "x": this.game.enhanceSkills(this); return false; // #enhance — a free review/advance
@@ -646,7 +646,10 @@ export class Player extends Entity {
     if (e.key === "Escape") { this.game.log.add("Never mind.", "dim"); return false; }
     const mv = MOVES[e.key];
     if (!mv) { this.game.log.add("That is not a direction.", "dim"); return false; }
-    const foe = this.game.monsterAt(this.x + mv[0], this.y + mv[1]);
+    const nx = this.x + mv[0], ny = this.y + mv[1];
+    const pet = this.game.petAt(nx, ny);
+    if (pet) return this.game.playWithPet(this, pet) ? this.endTurn() : false; // pet/play — a real moment, so it costs a turn
+    const foe = this.game.monsterAt(nx, ny);
     if (!foe) { this.game.log.add("There's no one there to chat with.", "dim"); return false; }
     this.game.chat(foe); // a free social action — costs no turn
     return false;
@@ -1125,6 +1128,9 @@ export class Monster extends Entity {
 export const PET_MAX_NUTR = 1200; // a full belly — feeding caps here
 export const PET_HUNGRY = 250;    // below this it forages / won't play fetch
 export const PET_MAX_LOYAL = 20;  // devotion ceiling (dog.c mtame)
+export const PET_MAX_BOND = 100;  // the depth of the bond — earned by ATTENTION (play), not food
+export const BOND_TIERS = [25, 50, 75, 100];                                       // acquainted · companion · bonded · soulbound
+export const BOND_LABELS = ["a stranger still", "acquainted with you", "companionable", "bonded to you", "soulbound to you"];
 
 /** The player's nominator — follows and savages adjacent enemies, but now with its own
  *  belly and a devotion that must be earned: feed it and it grows loyal; starve or forsake
@@ -1133,6 +1139,9 @@ export class Pet extends Entity {
   leashed = false; // clipped to a leash — it's pulled to your side if it ever strays too far
   nutrition = 800;         // its own hunger clock (dog.c EDOG.hungrytime)
   loyalty = 12;            // tameness 1..20; starve it to 0 and it turns feral
+  bond = 0;                // the RELATIONSHIP (0..100) — deepened by play, not the belly; gates trait perks
+  lastPlayTurn = -100;     // for diminishing returns when you fuss over it every few steps
+  settledTurns = 0;        // a recently played-with restless dog holds close instead of straying
   // A seeded PERSONALITY (rolled at spawn from the run's RNG, so it's deterministic / co-op-safe).
   // Every pet — the starting nominator and any tamed beast — gets its own temperament.
   profile = { aggression: 0.5, fetch: 0.5, appetite: 0.5, wander: 0.5 };
@@ -1157,6 +1166,9 @@ export class Pet extends Entity {
     if (p.aggression < 0.28) return "timid";
     return traits.filter(([v]) => v > 0.62).sort((a, b) => b[0] - a[0])[0]?.[1] ?? "steady";
   }
+
+  /** 0 (a stranger) … 4 (soulbound) — how many bond thresholds the relationship has crossed. */
+  bondTier(): number { return BOND_TIERS.filter((t) => this.bond >= t).length; }
 
   /** Re-skin this pet as a tamed creature's species (name, glyph, vitality). */
   adopt(def: MonsterDef): void {
@@ -1190,11 +1202,21 @@ export class Pet extends Entity {
       // A restless dog's devotion frays faster when starving — so a restless, already-disloyal hound
       // turns feral soonest (trait interaction: wander × low loyalty).
       const fray = 0.3 + this.profile.wander * 0.35; // 0.3 (steady) … 0.65 (restless)
-      if (ROT.RNG.getUniform() < fray && --this.loyalty <= 0) { this.game.petGoesFeral(this); return; }
+      if (ROT.RNG.getUniform() < fray && --this.loyalty <= 0) {
+        // A deeply bonded hound clings to you past where hunger would turn a stranger feral —
+        // love holds the line devotion has lost (bond raises the feral floor).
+        if (this.bondTier() >= 3 && ROT.RNG.getUniform() < 0.4 + this.bond / 300) {
+          this.loyalty = 1;
+          this.game.log.add(`${this.name[0].toUpperCase() + this.name.slice(1)} presses to your side despite its hunger — it will not leave you.`, "sys", p);
+        } else { this.game.petGoesFeral(this); return; }
+      }
     } else {
       if (this.nutrition > PET_HUNGRY) this.starveWarned = false;
       if (this.nutrition > 400 && this.hp < this.maxHp && this.game.turn % 12 === 0) this.hp++; // well-fed mend
     }
+    if (this.settledTurns > 0) this.settledTurns--;
+    // Bonded restless SCOUT: it ranges ahead on its nose and sniffs out a hidden hazard near itself.
+    if (this.bondTier() >= 2 && this.profile.wander > 0.55) this.game.petScout(this);
 
     // Leashed: if it drifts beyond the tether, it's yanked back to your side before it decides.
     if (this.leashed && cheb(this.x, this.y, p.x, p.y) > 2 && p.floorKey === this.floorKey) {

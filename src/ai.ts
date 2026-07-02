@@ -460,7 +460,7 @@ export const PET_BEHAVIORS: Behavior<Pet>[] = [
       if (daring < 0.45) return 0;                                     // needs BOTH bold and keen
       if (g.adjacentEnemy(s.x, s.y)) return 0;                         // never with teeth already at its throat
       if (cheb(s.x, s.y, c.p.x, c.p.y) > 4) return 0;                  // stay near you
-      const it = g.petFetchableNear(s.x, s.y, 2);
+      const it = g.petFetchableNear(s.x, s.y, 2 + (s.bondTier() >= 2 ? s.bondTier() - 1 : 0)); // bond perk: a bonded fetcher reaches farther
       if (!it || ROT.RNG.getUniform() > daring) return 0;
       c.fetch = it;
       return 1;
@@ -512,9 +512,9 @@ export const PET_BEHAVIORS: Behavior<Pet>[] = [
     score: (g, s, c) => {
       if (s.carrying) return 1;                          // always want to deliver the goods
       if (s.nutrition < 250) return 0;                   // too hungry to play
-      if (cheb(s.x, s.y, c.p.x, c.p.y) > 3) return 0;    // stay close
-      const it = g.petFetchableNear(s.x, s.y, 2);
-      if (!it || ROT.RNG.getUniform() > 0.15 + s.profile.fetch * 0.65) return 0; // a keen fetcher grabs ~4/5; an aloof one rarely bothers
+      if (cheb(s.x, s.y, c.p.x, c.p.y) > 3 + (s.bondTier() >= 3 ? 1 : 0)) return 0; // stay close (a bonded fetcher ranges a touch farther)
+      const it = g.petFetchableNear(s.x, s.y, 2 + (s.bondTier() >= 2 ? 1 : 0));
+      if (!it || ROT.RNG.getUniform() > 0.15 + s.profile.fetch * 0.65 + s.bondTier() * 0.05) return 0; // a keen fetcher grabs ~4/5; an aloof one rarely bothers
       c.fetch = it;
       return 1;
     },
@@ -538,6 +538,7 @@ export const PET_BEHAVIORS: Behavior<Pet>[] = [
   { name: "idle", score: () => 1,
     act: (g, s, c) => {
       const roam = 2 + Math.round(s.profile.wander * 2) + (s.loyalty < 8 ? 1 : 0); // 2 (settled) … up to 5 (restless & disloyal)
-      if (ROT.RNG.getUniform() < 0.1 + s.profile.wander * 0.5) { const bx = s.x, by = s.y; wanderStep(g, s); if (cheb(s.x, s.y, c.p.x, c.p.y) > roam) { s.x = bx; s.y = by; } }
+      const fidget = s.settledTurns > 0 ? 0 : 0.1 + s.profile.wander * 0.5; // recently played-with: it holds close instead of straying
+      if (ROT.RNG.getUniform() < fidget) { const bx = s.x, by = s.y; wanderStep(g, s); if (cheb(s.x, s.y, c.p.x, c.p.y) > roam) { s.x = bx; s.y = by; } }
     } },
 ];

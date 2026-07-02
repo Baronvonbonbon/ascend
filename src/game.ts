@@ -1,6 +1,6 @@
 import * as ROT from "rot-js";
 import { Level, Trap, TrapKind, LevelKind, FloorItem } from "./level";
-import { Entity, Player, Monster, Pet, SATIATED, CHOKE } from "./entities";
+import { Entity, Player, Monster, Pet, SATIATED, CHOKE, PET_HUNGRY, PET_MAX_BOND, PET_MAX_LOYAL, BOND_LABELS } from "./entities";
 import { Item, Inventory } from "./inventory";
 import { SAVE_VERSION, writeSave, readSave, clearSave, serFields, restoreFields, serItem, restoreItem, serDef, restoreDef, serFloorItem, restoreFloorItem } from "./save";
 import { Log } from "./log";
@@ -2381,8 +2381,9 @@ export class Game {
     if (pet) {
       const hb = pet.nutrition <= 0 ? "starving" : pet.nutrition < 60 ? "weak with hunger" : pet.nutrition < 250 ? "hungry" : pet.nutrition > 1000 ? "well-fed" : "fed";
       const lb = pet.loyalty >= 16 ? "devoted" : pet.loyalty >= 10 ? "loyal" : pet.loyalty >= 5 ? "wary" : "restive";
+      const bb = pet.bond > 0 ? `, ${BOND_LABELS[pet.bondTier()]}` : "";
       const carry = pet.carrying ? `, carrying ${this.ident.name(pet.carrying.type)}` : "";
-      this.log.add(`You see ${pet.name} — ${pet.temperament()}, ${lb}, ${hb}${carry}.`, "sys");
+      this.log.add(`You see ${pet.name} — ${pet.temperament()}, ${lb}, ${hb}${bb}${carry}.`, "sys");
       return;
     }
     const m = this.monsterAt(x, y);
@@ -2852,6 +2853,18 @@ export class Game {
       if (a instanceof Player && d instanceof Monster) this.log.add(`${this.sub(a)} ${this.verbS(a, "miss")} ${d.name}.`, "dim", who);
       else if (a instanceof Monster && d instanceof Player) this.log.add(`${cap(a.name)} misses ${d.name}.`, "dim", who);
       return;
+    }
+    // Bond perk (valor): a bonded, bold hound at your side throws itself into a blow meant for you.
+    if (a instanceof Monster && d instanceof Player) {
+      const guard = this.interceptor(d);
+      if (guard) {
+        const [glo, ghi] = a.attackDmg;
+        const gd = ROT.RNG.getUniformInt(glo, ghi);
+        guard.hp -= gd;
+        this.log.add(`${cap(guard.name)} throws itself into the blow meant for ${d.name} — taking ${gd} in your place.`, "good", d);
+        if (guard.hp <= 0) this.kill(guard);
+        return;
+      }
     }
     // Fighting on a warded tile scuffs the sigil away faster.
     if (a instanceof Player) { const e = this.level.engravingAt(a.x, a.y); if (e) e.life -= 3; }
@@ -3853,6 +3866,18 @@ export class Game {
   /** A living pet adjacent to (x,y) — for monsters that swat at the retinue. */
   adjacentPet(x: number, y: number): Pet | undefined { return this.livingPets().find((p) => Math.max(Math.abs(p.x - x), Math.abs(p.y - y)) === 1); }
 
+  /** Bond perk (valor): a bonded, bold hound beside you that will body-block an incoming blow.
+   *  Reliability climbs with the bond — tier 2 ≈ 30%, tier 4 ≈ 60%. */
+  private interceptor(p: Player): Pet | null {
+    for (const pet of this.livingPets()) {
+      if (pet.floorKey !== p.floorKey) continue;
+      if (Math.max(Math.abs(pet.x - p.x), Math.abs(pet.y - p.y)) !== 1) continue;
+      if (pet.profile.aggression <= 0.55 || pet.bondTier() < 2 || pet.hp <= 2) continue; // won't fling a near-dead dog onto the blade
+      if (ROT.RNG.getUniform() < 0.15 * pet.bondTier()) return pet;
+    }
+    return null;
+  }
+
   // ── the nominator's belly, devotion & fetch (Pet depth) ────────────────────
   /** A morsel the pet may eat where it stands (food scrap or a fresh, non-petrifying corpse). */
   petEdibleAt(x: number, y: number): FloorItem | null {
@@ -3881,6 +3906,13 @@ export class Game {
     pet.feed(nutr, 1);
     const what = it.corpse ? `${monName(it.corpse.def)} corpse` : this.ident.name(it.type);
     this.log.add(`${cap(pet.name)} wolfs down ${what}.`, "dim", this.player);
+    // Bond perk (acquisitiveness): a bonded, greedy hound drags a share of its kill to you.
+    const p = this.player;
+    if (pet.bondTier() >= 2 && pet.profile.appetite > 0.55 && p.nutrition < SATIATED &&
+        Math.max(Math.abs(pet.x - p.x), Math.abs(pet.y - p.y)) <= 1 && pet.floorKey === p.floorKey) {
+      const share = Math.min(SATIATED - p.nutrition, Math.round(nutr * 0.3));
+      if (share > 0) { p.nutrition += share; this.log.add(`${cap(pet.name)} tears off a share and drops it at your feet — you eat.`, "good", p); }
+    }
   }
 
   /** Starved past the last of its loyalty, the nominator turns feral and rounds on you. */
@@ -3935,6 +3967,69 @@ export class Game {
     if (this.level.itemAt(dx, dy)) { const s = this.adjacentFree(dx, dy); if (s) { dx = s.x; dy = s.y; } }
     it.x = dx; it.y = dy; this.level.items.push(it); pet.carrying = null;
     this.log.add(`${cap(pet.name)} lays ${this.ident.name(it.type)} at your feet.`, "good", this.player);
+  }
+
+  /** `c` toward your hound — pet/play with it. Attention deepens the BOND (0..100), which is
+   *  distinct from food-driven loyalty: it gates the trait perks and holds a starving companion
+   *  to your side. Temperament sets the play — and a hungry or half-feral dog may snap instead. */
+  playWithPet(p: Player, pet: Pet): boolean {
+    if (!pet.alive) return false;
+    const prof = pet.profile;
+    const hungry = pet.nutrition < PET_HUNGRY;
+    const wary = pet.loyalty < 5;
+    // Risk & stakes: an out-of-sorts dog may nip the reaching hand — bold, hungry ones bite hardest.
+    if (hungry || wary) {
+      let nip = (hungry ? 0.4 : 0) + (wary ? 0.3 : 0);
+      nip = Math.min(0.85, nip * (0.5 + prof.aggression));
+      if (ROT.RNG.getUniform() < nip) {
+        const d = ROT.RNG.getUniformInt(1, 2 + Math.round(prof.aggression * 3));
+        p.hp -= d;
+        pet.bond = Math.max(0, pet.bond - 4);
+        pet.loyalty = Math.max(0, pet.loyalty - 1);
+        this.log.add(`${cap(pet.name)} is in no mood to be handled and nips you for ${d}.${hungry ? " (feed it first)" : ""}`, "bad", p);
+        if (p.hp <= 0) this.killPlayer(p);
+        return true;
+      }
+    }
+    // Attention deepens the bond — with diminishing returns near the ceiling, and blunted if you
+    // fuss over it every few steps. Temperament picks the play, and the payoff.
+    const recent = this.turn - pet.lastPlayTurn < 8;
+    let mult = 1, msg = `You scratch ${pet.name} behind the ears; it leans its weight into your hand.`;
+    const throwable = !!p.quiver || p.inventory.items.some((it) => it.type.kind === "weapon");
+    const treat = p.inventory.items.find((it) => it.type.kind === "food" && it.type.id !== "corpse");
+    // Style by the strongest EXPRESSED trait — each dog craves a different kind of attention.
+    if (prof.fetch > 0.55 && prof.fetch >= prof.appetite && throwable && !hungry) {
+      mult = 1.5; msg = `You send a plaything skittering across the floor — ${pet.name} tears after it, tail a blur, and trots it back to your feet.`;
+    } else if (prof.appetite > 0.55 && treat) {
+      mult = 1.4; pet.feed(treat.type.nutrition ?? 120, 0); p.inventory.remove(treat);
+      msg = `You slip ${pet.name} ${this.ident.name(treat.type)} from your pack; it gulps it down and presses close for more.`;
+    } else if (prof.aggression < 0.4) {
+      mult = 1.5; msg = `You crouch and murmur to ${pet.name}; the timid thing steadies, and nuzzles your palm.`;
+    } else if (prof.aggression > 0.6) {
+      mult = 1.15; msg = `You rough-and-tumble with ${pet.name}; it play-growls and bounds back for more, spoiling for a real fight now.`;
+    } else if (prof.wander > 0.55) {
+      mult = 0.85; pet.settledTurns = 12; msg = `You coax the restless ${pet.name} to sit a while; for now it holds close instead of ranging off.`;
+    }
+    const before = pet.bondTier();
+    let gain = 6 * (1 - pet.bond / (PET_MAX_BOND + 20)) * mult;
+    if (recent) gain *= 0.3;
+    pet.bond = Math.min(PET_MAX_BOND, pet.bond + Math.max(1, Math.round(gain)));
+    pet.lastPlayTurn = this.turn;
+    if (!recent) pet.loyalty = Math.min(PET_MAX_LOYAL, pet.loyalty + 1); // kindness also mildly reassures
+    this.log.add(recent ? `${cap(pet.name)} has had its fill of fuss for now, but wags all the same.` : msg, "good", p);
+    const after = pet.bondTier();
+    if (after > before) this.log.add(`Your bond with ${pet.name} deepens — it is ${BOND_LABELS[after]}.`, "good", p);
+    return true;
+  }
+
+  /** A bonded scout's nose finds a hidden trap or door within two tiles and reveals it. */
+  petScout(pet: Pet): void {
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const x = pet.x + dx, y = pet.y + dy;
+      const trap = this.level.trapAt(x, y);
+      if (trap && !trap.revealed) { trap.revealed = true; this.recomputeFOV(); this.log.add(`${cap(pet.name)} freezes and stares at the floor — it has scented out a hidden ${this.trapName(trap.kind)}.`, "sys", this.player); return; }
+      if (this.level.tileAt(x, y) === "doorHidden") { this.level.tiles[y][x] = "doorClosed"; this.recomputeFOV(); this.log.add(`${cap(pet.name)} paws at the wall — a hidden door gives way.`, "sys", this.player); return; }
+    }
   }
 
   applyHorn(p: Player): boolean {
