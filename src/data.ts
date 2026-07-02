@@ -153,6 +153,11 @@ export const SPELLS: Spell[] = [
   { id: "cryo",  name: "cone of cold",      cost: 8, dir: true,  school: "attack" },
   { id: "charm", name: "charm monster",     cost: 8, dir: true,  school: "enchantment" },
   { id: "clair", name: "clairvoyance",      cost: 7, dir: false, school: "divination" },
+  { id: "light", name: "light",             cost: 4, dir: false, school: "divination" },
+  { id: "drainlife", name: "drain life",    cost: 8, dir: true,  school: "attack" },
+  { id: "stoneflesh", name: "stone to flesh", cost: 6, dir: false, school: "clerical" },
+  { id: "fear",  name: "cause fear",        cost: 6, dir: false, school: "enchantment" },
+  { id: "knock", name: "knock",             cost: 4, dir: true,  school: "escape" },
 ];
 export function spellById(id: string): Spell | undefined { return SPELLS.find((s) => s.id === id); }
 /** A spell's display name, flavored. */

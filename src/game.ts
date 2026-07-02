@@ -3741,6 +3741,46 @@ export class Game {
         this.log.add(n ? `A wave of restoration scours ${n} nearby foe${n > 1 ? "s" : ""} — the unfinalized recoil.` : "You slash at the unfinalized — but none are near.", n ? "good" : "dim");
         break;
       }
+      case "light": {
+        const R = 6;
+        for (let yy = p.y - R; yy <= p.y + R; yy++) for (let xx = p.x - R; xx <= p.x + R; xx++) {
+          if (xx >= 0 && yy >= 0 && xx < W && yy < MAP_H && this.level.tileAt(xx, yy) && Math.max(Math.abs(xx - p.x), Math.abs(yy - p.y)) <= R) this.level.lit[yy][xx] = true;
+        }
+        this.recomputeFOV(); this.log.add("Light blooms from your hand — the dark recoils.", "good");
+        break;
+      }
+      case "drainlife": {
+        const hit = this.firstMonsterInDir(p, dx, dy);
+        if (!hit) { this.log.add("The drain-life spell finds no one to leech.", "dim"); break; }
+        const d = ROT.RNG.getUniformInt(6, 12); hit.hp -= d;
+        const back = Math.min(d, p.maxHp - p.hp); p.hp += back;
+        this.log.add(`Vitality tears out of ${hit.name} for ${d}${back ? ` — ${back} flows into you` : ""}.`, "good");
+        if (hit.hp <= 0) { this.gainXp(p, hit.maxHp); this.kill(hit); }
+        break;
+      }
+      case "stoneflesh": {
+        if (p.stoning > 0) { p.stoning = 0; this.log.add("Stone softens back to flesh — the petrification lifts.", "good"); }
+        else this.log.add("Your flesh is already supple; the spell just warms you.", "dim");
+        p.hp = Math.min(p.maxHp, p.hp + ROT.RNG.getUniformInt(3, 7));
+        break;
+      }
+      case "fear": {
+        let n = 0;
+        for (const m of this.monsters) {
+          if (!m.alive || m.peaceful || m.def.boss || m.def.fearless) continue;
+          if (Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) <= 5) { m.frightened = Math.max(m.frightened, ROT.RNG.getUniformInt(5, 9)); n++; }
+        }
+        this.log.add(n ? `A wave of dread rolls out — ${n} foe${n > 1 ? "s" : ""} break and flee.` : "You cast cause fear, but nothing near quails.", n ? "good" : "dim");
+        break;
+      }
+      case "knock": {
+        const fi = this.level.itemAt(p.x, p.y);
+        if (fi?.chest?.locked) { fi.chest.locked = false; this.log.add("The chest's lock springs open. (o to open)", "good"); break; }
+        let x = p.x, y = p.y, done = false;
+        for (let step = 0; step < 8 && !done; step++) { x += dx; y += dy; const t = this.level.tileAt(x, y); if (t === "doorLocked" || t === "doorClosed") { this.level.tiles[y][x] = "door"; this.recomputeFOV(); this.log.add("The knock spell springs the lock — the door swings open.", "good"); done = true; } else if (t === "wall" || t == null) break; }
+        if (!done) this.log.add("The knock spell finds no lock to spring.", "dim");
+        break;
+      }
     }
     this.draw();
     return true;

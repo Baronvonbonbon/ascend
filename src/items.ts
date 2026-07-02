@@ -216,6 +216,11 @@ export const ITEMS: ItemType[] = [
   { id: "book_cryo",  kind: "spellbook", name: "a spellbook of cone of cold",  ch: "+", fg: "#90d0f0", teaches: "cryo",  weight: 1 },
   { id: "book_charm", kind: "spellbook", name: "a spellbook of charm monster", ch: "+", fg: "#e0b0d0", teaches: "charm", weight: 1 },
   { id: "book_clair", kind: "spellbook", name: "a spellbook of clairvoyance",  ch: "+", fg: "#a0d0e0", teaches: "clair", weight: 1 },
+  { id: "book_light", kind: "spellbook", name: "a spellbook of light",         ch: "+", fg: "#f0f0c0", teaches: "light", weight: 2 },
+  { id: "book_drainlife", kind: "spellbook", name: "a spellbook of drain life", ch: "+", fg: "#b060a0", teaches: "drainlife", weight: 1 },
+  { id: "book_stoneflesh", kind: "spellbook", name: "a spellbook of stone to flesh", ch: "+", fg: "#d0b090", teaches: "stoneflesh", weight: 1 },
+  { id: "book_fear",  kind: "spellbook", name: "a spellbook of cause fear",    ch: "+", fg: "#c08060", teaches: "fear",  weight: 2 },
+  { id: "book_knock", kind: "spellbook", name: "a spellbook of knock",         ch: "+", fg: "#b0c090", teaches: "knock", weight: 2 },
 ];
 
 /** Scrolls a rune-scribe's kit (magic marker) can inscribe, in menu order. */
