@@ -23,13 +23,13 @@ export class Level {
   lit: boolean[][] = [];         // lit tiles (in lit rooms) — visible at any LOS distance; dark tiles need a light
   items: FloorItem[] = [];
   graves: { x: number; y: number; label: string }[] = []; // bones of fallen heroes
-  drawbridges: { x: number; y: number }[] = []; // consensus-bridge spans a lever raises/lowers (dbridge.c)
+  drawbridges: { x: number; y: number }[] = []; // accord-bridge spans a lever raises/lowers (dbridge.c)
   coopTuned = 1;       // co-op: how many players this floor's monster budget was populated for
   coopSoloBudget = 0;  // co-op: the solo (1-player) monster count this floor was sized from — for reinforcement math
   traps: Trap[] = [];
   engravings: Engraving[] = []; // Gray-Paper wards scratched in the dust
   boulders: { x: number; y: number }[] = []; // pushable blocks (Sokoban-flavor)
-  portals: Portal[] = []; // XCM portals to parachain branches
+  portals: Portal[] = []; // the planar gate portals to dungeon branches
   branchEntries: { x: number; y: number; branchId: string }[] = []; // branch-stairs into sub-dungeons (the Mines)
   roomCenters: { x: number; y: number }[] = [];
   lightSources: { x: number; y: number }[] = []; // abstract torch/brazier points — the lit map radiates from these (recomputed as doors open)
@@ -249,7 +249,7 @@ export class Level {
     this.finishLayout();
   }
 
-  /** Swamp: open water studded with island rooms, joined by narrow causeways (the Liquidity Pools). */
+  /** Swamp: open water studded with island rooms, joined by narrow causeways (the the Sunken Pools). */
   private generateSwamp(): void {
     const w = this.width, h = this.height;
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) this.tiles[y][x] = (x === 0 || y === 0 || x === w - 1 || y === h - 1) ? "wall" : "water";
@@ -337,7 +337,7 @@ export class Level {
     this.roomCenters = ROT.RNG.shuffle(this.floors.slice()).slice(0, 16);
   }
 
-  /** The Mempool: one vast open chamber (NetHack's Big Room) — a swarm arena. */
+  /** The Great Hall: one vast open chamber (NetHack's Big Room) — a swarm arena. */
   private generateBigRoom(): void {
     for (let y = 1; y < this.height - 1; y++) {
       for (let x = 1; x < this.width - 1; x++) {
@@ -410,7 +410,7 @@ export class Level {
         else if (ch === ">") this.stairs = { x, y };
       }
     }
-    this.tiles[this.start.y][this.start.x] = "stairsUp"; // the way back out (toward the relay)
+    this.tiles[this.start.y][this.start.x] = "stairsUp"; // the way back out (toward the dungeon)
     this.roomCenters = [this.start, this.stairs];
   }
 

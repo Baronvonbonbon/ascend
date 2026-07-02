@@ -29,19 +29,19 @@ export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: strin
   stairsUp:   { ch: "<", fg: COLORS.stairs, fgDim: "#6a5a28" },
   altar:      { ch: "_", fg: "#c0d0e0",     fgDim: "#4a5560" },
   portal:     { ch: "Ω", fg: "#e060d0",     fgDim: "#6a3060" },
-  faucet:     { ch: "{", fg: "#4fb0e0",     fgDim: "#2a5570" }, // a testnet faucet — quaff (q)
-  throne:     { ch: "\\", fg: "#e0c040",    fgDim: "#6a5a20" }, // the Sudo Throne — sit (s)
+  faucet:     { ch: "{", fg: "#4fb0e0",     fgDim: "#2a5570" }, // a fountain — quaff (q)
+  throne:     { ch: "\\", fg: "#e0c040",    fgDim: "#6a5a20" }, // the throne — sit (s)
   sink:       { ch: "=", fg: "#7fa0b0",     fgDim: "#3a4a55" }, // a burn sink — quaff (q) for chaos, kick (K) for a ring
   vibrating:  { ch: "≈", fg: "#ff60ff",     fgDim: "#7a307a" }, // the vibrating square — invoke (I) the ritual here
-  water:      { ch: "}", fg: "#3f7ad0",     fgDim: "#1d3a66" }, // open water — impassable; cross by causeway or XCM jump (the Liquidity Pools)
-  branchDown: { ch: ">", fg: "#c07a30",     fgDim: "#5a3a18" }, // a craggy side-stair into a branch (the Storage Caverns) — copper, not the gold main stair
-  pit:        { ch: "^", fg: "#6a78b0",     fgDim: "#33415e" }, // a chasm (Consensus Vault) — impassable; shove a boulder in to fill it
-  drawbridge: { ch: "=", fg: "#9a7a4a",     fgDim: "#4a3a22" }, // a consensus bridge, lowered — walk across
+  water:      { ch: "}", fg: "#3f7ad0",     fgDim: "#1d3a66" }, // open water — impassable; cross by causeway or the planar gate jump (the the Sunken Pools)
+  branchDown: { ch: ">", fg: "#c07a30",     fgDim: "#5a3a18" }, // a craggy side-stair into a branch (the Gnomish Mines) — copper, not the gold main stair
+  pit:        { ch: "^", fg: "#6a78b0",     fgDim: "#33415e" }, // a chasm (Sokoban) — impassable; shove a boulder in to fill it
+  drawbridge: { ch: "=", fg: "#9a7a4a",     fgDim: "#4a3a22" }, // a drawbridge, lowered — walk across
   drawbridgeUp: { ch: "▚", fg: "#9a7a4a",   fgDim: "#4a3a22" }, // raised — an impassable span (blocks passage + sight)
   lever:      { ch: "|", fg: "#d0b040",     fgDim: "#665820" }, // a lever — walk into it to raise/lower the bridge
 };
 
-export const MAX_DEPTH = 25; // the foot of the relay — the vibrating square; the Invocation opens Gehennom below (NetHack-scale ~25-floor main descent)
+export const MAX_DEPTH = 25; // the foot of the dungeon — the vibrating square; the Invocation opens Gehennom below (NetHack-scale ~25-floor main descent)
 
 // ── Phase 6: the character sheet ─────────────────────────────────────────────
 /** The six attributes. Stored 3–18; modifier is D&D-style. */
@@ -110,11 +110,11 @@ export function ethosName(e: string): string {
 /** Per-archetype Quest (Phase 13c): a homeland portal, a nemesis, and your signature artifact. */
 export interface Quest { homeland: string; portalDepth: number; artifactId: string; nemesis: MonsterDef; }
 export const QUESTS: Record<string, Quest> = {
-  validator: {
+  sentinel: {
     homeland: "the Knight's Keep", portalDepth: 14, artifactId: "art_sceptre",
     nemesis: { name: "the Doppel-King", ch: "E", fg: "#ff6060", hp: 42, dmg: [5, 10], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, splits: true },
   },
-  nominator: {
+  hound: {
     homeland: "the Cleric's Sanctuary", portalDepth: 14, artifactId: "art_aegis",
     nemesis: { name: "the Glutton Lord", ch: "N", fg: "#e0a040", hp: 48, dmg: [5, 9], ai: "chase", minDepth: 99, weight: 0, boss: true, fearless: true, summons: true },
   },
@@ -131,7 +131,7 @@ export const QUESTS: Record<string, Quest> = {
 export function questHomeland(q: Quest): string { return q.homeland; }
 /** A monster's display name, flavored. */
 export function monName(d: MonsterDef): string { return d.name; }
-export function questFor(archetypeId: string): Quest { return QUESTS[archetypeId] ?? QUESTS.validator; }
+export function questFor(archetypeId: string): Quest { return QUESTS[archetypeId] ?? QUESTS.sentinel; }
 
 // ── Phase 8: spellcasting ("extrinsics" cast from energy) ────────────────────
 export interface Spell { id: string; name: string; cost: number; dir: boolean; school: string; }
@@ -158,34 +158,34 @@ export function spellById(id: string): Spell | undefined { return SPELLS.find((s
 /** A spell's display name, flavored. */
 export function spellName(s: Spell): string { return s.name; }
 
-/** XCM destinations: each parachain branch scales difficulty + loot vs. the relay. */
-// `layout` = the parachain's signature level generator, so each branch feels distinct.
+/** the planar gate destinations: each dungeon branch scales difficulty + loot vs. the dungeon. */
+// `layout` = the dungeon's signature level generator, so each branch feels distinct.
 export interface ChainDef { id: string; name: string; difficulty: number; loot: number; color: string; layout?: string; }
 export const CHAINS: ChainDef[] = [
   { id: "wildlands",    name: "the Wildlands",     difficulty: 1.6, loot: 1.6, color: "#e060d0", layout: "maze" }, // chaos, high risk/reward
-  { id: "moonkeep",  name: "the Moonlit Keep",  difficulty: 1.3, loot: 1.4, color: "#53cbc9", layout: "grid" }, // an EVM contract-city
+  { id: "moonkeep",  name: "the Moonlit Keep",  difficulty: 1.3, loot: 1.4, color: "#53cbc9", layout: "grid" }, // an EVM rune-city
   { id: "starvault",     name: "the Star Vault",    difficulty: 1.2, loot: 1.3, color: "#1b6dff", layout: "grid" },
   { id: "shroudedvale",     name: "the Shrouded Vale", difficulty: 1.1, loot: 1.2, color: "#cdfa50", layout: "maze" }, // privacy/compute — a dark labyrinth
   { id: "coinbridge",  name: "the Coinbridge",    difficulty: 1.0, loot: 1.5, color: "#f7931a", layout: "cave" }, // treasure caverns (BTC bridge)
   { id: "bifrostspire",   name: "Bifrost",          difficulty: 0.9, loot: 1.0, color: "#5a25f0", layout: "labyrinth" },
-  { id: "drownedmarsh", name: "the Drowned Marsh", difficulty: 0.8, loot: 1.1, color: "#f6297c", layout: "swamp" }, // the Liquidity Pools — open water + islands
+  { id: "drownedmarsh", name: "the Drowned Marsh", difficulty: 0.8, loot: 1.1, color: "#f6297c", layout: "swamp" }, // the the Sunken Pools — open water + islands
   { id: "haven",     name: "the Haven",         difficulty: 0.6, loot: 0.8, color: "#e40c5b", layout: "normal" }, // safe DeFi haven
 ];
-/** A parachain/realm's display name, flavored. */
+/** A dungeon/realm's display name, flavored. */
 export function chainName(c: ChainDef): string { return c.name; }
 
 /** A mandatory-feeling sub-dungeon branch off the main descent (NetHack's Mines/Sokoban).
- *  Unlike an XCM parachain it has a fixed run of floors entered by a branch-stair (not a portal),
+ *  Unlike an the planar gate dungeon it has a fixed run of floors entered by a branch-stair (not a portal),
  *  a floor-by-floor climb, and a guaranteed prize on its end floor. `dir` is which way it runs. */
 export interface BranchDef extends ChainDef {
   branch: true;
   entryDepth: number; // the main-dungeon depth that hosts the branch-stair
   floors: number;     // how many floors deep the branch runs
   prizeId: string;    // the guaranteed reward on the end floor
-  end: string;        // the themed name of the end floor ("the Storage Caverns' End")
+  end: string;        // the themed name of the end floor ("the Gnomish Mines' End")
   entryFlavor?: string; // override the entry message (e.g. the Vault "climbs up")
-  sokoban?: boolean;  // hand-built boulder-puzzle floors (the Consensus Vault) instead of procedural
-  upward?: boolean;   // a tower you climb (the Validator's Tower) — flips "deeper/up" wording
+  sokoban?: boolean;  // hand-built boulder-puzzle floors (the Sokoban) instead of procedural
+  upward?: boolean;   // a tower you climb (the Vlad's Tower) — flips "deeper/up" wording
   bossDef?: MonsterDef; // a unique boss wards the End floor's prize (else a plain guardian)
   prizeEnchant?: number; // enchant the guaranteed End prize (a tower climax earns more than +0)
 }
@@ -193,12 +193,12 @@ export const BRANCHES: BranchDef[] = [
   {
     id: "mines", name: "the Gnomish Mines", branch: true, difficulty: 1.15, loot: 1.6, color: "#c9a04a",
     layout: "cave", entryDepth: 5, floors: 3, prizeId: "hodlstone", end: "the Mines' End",
-  }, // a DA/storage parachain rendered as treasure caverns; its End yields a luckstone-grade HODL stone
+  }, // a DA/storage dungeon rendered as treasure caverns; its End yields a luckstone-grade luckstone
   {
     id: "vault", name: "Sokoban", branch: true, sokoban: true, difficulty: 0.5, loot: 0.5,
     color: "#7ad0c0", layout: "normal", entryDepth: 9, floors: 1, prizeId: "vault", end: "Sokoban's Prize",
     entryFlavor: "You squeeze up into Sokoban — a sealed puzzle of boulders and chasms. Shove the boulders into the pits; claim the prize at the top.",
-  }, // a Sokoban-style boulder puzzle; clear it for a guaranteed multisig vault (bag of holding)
+  }, // a Sokoban-style boulder puzzle; clear it for a guaranteed bag of holding (bag of holding)
   {
     id: "tower", name: "Vlad's Tower", branch: true, upward: true,
     difficulty: 1.4, loot: 1.4, color: "#c04040", layout: "fortress", entryDepth: 16, floors: 3,
@@ -212,10 +212,10 @@ export function branchById(id: string): BranchDef | undefined { return BRANCHES.
 export function branchEnd(b: BranchDef): string { return b.end; }
 export function branchEntryFlavor(b: BranchDef): string | undefined { return b.entryFlavor; }
 
-/** Realms deepen and grow chaotic — a nod to Polkadot → Kusama. */
+/** Realms deepen and grow chaotic — a nod to Yendor → the Wilds. */
 export function realmName(depth: number): string {
   if (depth >= 48) return "Moloch's Sanctum";           // GEHENNOM_BOTTOM
-  if (depth >= 26) return "Gehennom, the Dark Forest";  // below the foot of the relay
+  if (depth >= 26) return "Gehennom, the Dark Forest";  // below the foot of the dungeon
   if (depth >= 25) return "the Castle Gate";       // MAX_DEPTH — the vibrating square
   if (depth >= 18) return "the Deep Caverns";
   if (depth >= 9) return "the Dungeon Reaches";
@@ -231,7 +231,7 @@ const GRAY_PAPER_F = [
 /** The opening prophecy, flavored. */
 export function grayPaper(): string[] { return GRAY_PAPER_F; }
 
-/** The scrolling splash intro — flavor-aware (fantasy vs Polkadot). Blank strings are beats/pauses. */
+/** The scrolling splash intro — flavor-aware (fantasy vs Yendor). Blank strings are beats/pauses. */
 export function introStory(): string[] {
   return [
     "In the age before the long dark, one relic kept the realm in accord —",
@@ -250,7 +250,7 @@ export function introStory(): string[] {
 }
 
 export interface MonsterDef {
-  name: string;        // polkadot flavor
+  name: string;        // flavor
   ch: string;
   fg: string;
   hp: number;
@@ -258,7 +258,7 @@ export interface MonsterDef {
   ai: "chase" | "wander";
   minDepth: number;
   weight: number;        // spawn weight
-  splits?: boolean;      // a sybil — occasionally replicates (the Sybil attack)
+  splits?: boolean;      // a phantom — occasionally replicates (the Phantom attack)
   pack?: [number, number]; // a social hunter — spawns as a cluster of this many, so surround/flank tactics bite
   speed?: number;        // turn speed (100 = normal; higher acts more often)
   inflict?: "poison" | "confuse"; // status applied on a hit (30% chance)
@@ -270,12 +270,12 @@ export interface MonsterDef {
   breeds?: boolean;      // multiplies when a pair of its kind is adjacent
   corpseEffect?: "poisonous" | "petrify" | "speed" | "telepathy" | "levelup" | "fire" | "cold" | "shock"; // what eating its corpse does
   corrodes?: boolean | number; // its touch may rust/corrode a worn armor piece — true = default chance (0.35), or a per-hit probability 0..1
-  drains?: boolean;      // a barrow-wight (wraith) — its touch saps an epoch (XP level); eat its corpse to regain one
+  drains?: boolean;      // a barrow-wight (wraith) — its touch saps an level (XP level); eat its corpse to regain one
   steals?: boolean;      // a thief — snatches a pack item and flees (the rug pull)
-  stealsGold?: boolean;  // an airdrop farmer (leprechaun) — snatches gold and blinks away
+  stealsGold?: boolean;  // an coin-hoarder (leprechaun) — snatches gold and blinks away
   stealsLuck?: boolean;  // a doubt gremlin — leeches your Fortune (Luck) on a hit
   paralyzes?: boolean;   // a watcher eye (floating eye) — passive, but melee it and its gaze freezes you
-  engulfs?: boolean;     // a trapper (liquidity trap) — a hit swallows you whole; struggle out or cut free
+  engulfs?: boolean;     // a trapper ( trap) — a hit swallows you whole; struggle out or cut free
   silences?: boolean;    // a gag wraith — a hit smothers you in silence (no casting; in co-op, no chat)
   drainsStat?: boolean;  // a mind flayer — a hit drains a random attribute (restored by prayer)
   infects?: boolean;     // a werewolf — a hit may infect you with lycanthropy (uncontrolled were-forms)
@@ -352,7 +352,7 @@ export const MONSTERS: MonsterDef[] = [
   { name: "an iron enforcer",   ch: "B", fg: "#d06030", hp: 34, dmg: [6, 10], ai: "chase", minDepth: 13, weight: 2, corrodes: 0.3, speed: 85, muse: true }, // hits hard already; corrosion is a side threat
   { name: "a deepwater horror", ch: "Y", fg: "#5060c0", hp: 30, dmg: [5, 9],  ai: "chase", minDepth: 15, weight: 2, ranged: true, inflict: "confuse", corpseEffect: "cold" },
   { name: "an arch-lich",       ch: "Z", fg: "#e02020", hp: 42, dmg: [6, 11], ai: "chase", minDepth: 17, weight: 1, summons: true, fearless: true, muse: true, zaps: "blind" },
-  // ── rival adventurers (mplayer.c) — other ascendants who came for the JAM and never left; deep only ──
+  // ── rival adventurers (mplayer.c) — other ascendants who came for the Amulet of Yendor and never left; deep only ──
   { name: "a rogue",            ch: "@", fg: "#c0b070", hp: 40, dmg: [6, 11], ai: "chase", minDepth: 20, weight: 1, steals: true, muse: true, speed: 110 },
   { name: "a valkyrie",         ch: "@", fg: "#b8c8e8", hp: 48, dmg: [7, 12], ai: "chase", minDepth: 26, weight: 1, muse: true, throws: "dart", zaps: "sleep" },
   // ── the deep Gehennom apex — the last terrors before Moloch ──
@@ -361,7 +361,7 @@ export const MONSTERS: MonsterDef[] = [
   { name: "a death knight",     ch: "&", fg: "#c03030", hp: 50, dmg: [7, 13], ai: "chase", minDepth: 38, weight: 1, drains: true, fearless: true, muse: true, corpseEffect: "levelup" },
 ];
 
-/** The Marketmaker — a bazaar shopkeeper. Peaceful while you pay; lethal if you shoplift. */
+/** The Shopkeeper — a bazaar shopkeeper. Peaceful while you pay; lethal if you shoplift. */
 export const SHOPKEEPER: MonsterDef = {
   name: "the Shopkeeper", ch: "$", fg: "#e8c84a", hp: 54, dmg: [6, 11], ai: "chase", minDepth: 1, weight: 0, fearless: true, keeper: true,
 };
@@ -378,12 +378,12 @@ export const ORACLE: MonsterDef = {
 
 /** Major consultations — genuinely useful guidance (skin() reflavors the proper nouns). */
 export const ORACLE_HINTS = [
-  "The foot of the relay hides a vibrating square — bring the Bell, the Candelabrum, and the Gray Paper, and #invoke there.",
+  "The foot of the dungeon hides a vibrating square — bring the Bell, the Candelabrum, and the Gray Paper, and #invoke there.",
   "A blessed scroll of formal verification audits your gear — proofed, it will never rust.",
-  "Slay the barrow-wight, then eat its corpse: the epoch it drained returns to you.",
+  "Slay the barrow-wight, then eat its corpse: the level it drained returns to you.",
   "Dip a worthy blade in a fountain and you may draw the lawful relic.",
   "Cursed gear welds fast to the flesh — a remove-curse alone will free it.",
-  "Eat a censor-imp's corpse and your mind will sense the unseen, even in the dark.",
+  "Eat a warden-imp's corpse and your mind will sense the unseen, even in the dark.",
   "Prayer mends the direst troubles — but never pray twice before the cooldown lapses, lest wrath answer.",
   "The Treasury is sealed to feet — only a blink or teleport finds the gold within.",
   "Reflection rebounds a dragon's breath; an amulet of life saving spends itself to deny one death.",
@@ -393,12 +393,12 @@ export const ORACLE_HINTS = [
 export const ORACLE_RUMORS = [
   "Not all that shimmers is a token; some is only worthless glass.",
   "Probe a foe before you strike, and you will not be surprised.",
-  "The HODL stone steadies the fortunate and chains the cursed.",
-  "A shout carries far through the relay — and the deep is always listening.",
+  "The luckstone steadies the fortunate and chains the cursed.",
+  "A shout carries far through the dungeon — and the deep is always listening.",
   "Trapdoors yawn on the descent; tread light, lest the floor give way.",
   "A silenced tongue casts no spell.",
   "Some doors only look like walls; search, and they reveal themselves.",
-  "The thirstier the liquidity, the harder it is to climb back out.",
+  "The thirstier the , the harder it is to climb back out.",
 ];
 
 /** The Council Guard — keeper of the Treasury vault. Peaceful escort; lethal if you strike it. */
@@ -416,12 +416,12 @@ export const HONEYPOT: MonsterDef = {
   name: "a mimic", ch: "m", fg: "#e0b020", hp: 16, dmg: [3, 7], ai: "chase", minDepth: 3, weight: 0, mimic: true, speed: 90,
 };
 
-/** The Censor — high keeper of the vibrating square at the foot of the relay (MAX_DEPTH). */
-export const CENSOR: MonsterDef = {
+/** The Warden — high keeper of the vibrating square at the foot of the dungeon (MAX_DEPTH). */
+export const WARDEN: MonsterDef = {
   name: "THE WARDEN", ch: "C", fg: "#ff3b3b", hp: 48, dmg: [6, 11], ai: "chase", minDepth: 99, weight: 0, fearless: true,
 };
 
-/** MOLOCH, the Central Planner — the final tyrant who hoards the JAM at the bottom of Gehennom. */
+/** MOLOCH, the Central Planner — the final tyrant who hoards the Amulet of Yendor at the bottom of Gehennom. */
 export const MOLOCH: MonsterDef = {
   name: "MOLOCH, the Dark Lord", ch: "&", fg: "#ff2020", hp: 80, dmg: [8, 14], ai: "chase", minDepth: 99, weight: 0, fearless: true, boss: true, summons: true, breath: 20,
 };

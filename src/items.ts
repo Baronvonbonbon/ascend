@@ -23,8 +23,8 @@ export function bucDelta(buc?: Buc): number {
   return buc === "blessed" ? 1 : buc === "cursed" ? -1 : 0;
 }
 
-/** The JAM — the Amulet of Yendor of this world. Unique; never randomly spawned. */
-export const JAM: ItemType = { id: "jam", kind: "amulet", name: "the Amulet of Yendor", ch: "*", fg: "#f4e89a", weight: 0 };
+/** The Amulet of Yendor — the Amulet of Yendor of this world. Unique; never randomly spawned. */
+export const Amulet: ItemType = { id: "jam", kind: "amulet", name: "the Amulet of Yendor", ch: "*", fg: "#f4e89a", weight: 0 };
 
 /** Generic corpse glyph; the real identity rides on FloorItem.corpse (eat for effects). */
 export const CORPSE: ItemType = { id: "corpse", kind: "food", name: "a corpse", ch: "%", fg: "#b06a5a", nutrition: 0, weight: 0 };
@@ -38,7 +38,7 @@ export const GOLD: ItemType = { id: "gold", kind: "tool", name: "gold", ch: "$",
 export interface ItemType {
   id: string;
   kind: ItemKind;
-  name: string;            // identified name (polkadot flavor)
+  name: string;            // identified name (flavor)
   fname?: string;          // identified name (fantasy flavor — the default skin)
   ch: string;
   fg: string;
@@ -49,7 +49,7 @@ export interface ItemType {
   effect?: EffectId;       // potion / scroll
   teaches?: string;        // spellbook — the spell id it studies into
   skill?: string;          // weapon skill class (#enhance) — "blade" / "blunt"
-  value?: number;          // gem — gold value when sold to the Marketmaker (worthless glass ≈ 0)
+  value?: number;          // gem — gold value when sold to the Shopkeeper (worthless glass ≈ 0)
   weight: number;          // spawn weight
   minDepth?: number;       // earliest depth this can random-spawn (powerful items stay out of the shallows)
 }
@@ -89,7 +89,7 @@ export const ITEMS: ItemType[] = [
   { id: "harm",   kind: "potion", name: "a potion of harming",     ch: "!", fg: "#c75c5c", effect: "harm",     weight: 3 },
   { id: "boost",  kind: "potion", name: "a potion of gain strength", ch: "!", fg: "#e0b94d", effect: "strength", weight: 3 },
   { id: "blind",  kind: "potion", name: "a potion of blindness", ch: "!", fg: "#707070", effect: "blind", weight: 2 },
-  { id: "water",  kind: "potion", name: "a potion of water",     ch: "!", fg: "#8ac0e0", effect: "water", weight: 4 }, // holy (blessed) / unholy (cursed) — consecrate on Gavin's altar; #dip gear to bless/curse it
+  { id: "water",  kind: "potion", name: "a potion of water",     ch: "!", fg: "#8ac0e0", effect: "water", weight: 4 }, // holy (blessed) / unholy (cursed) — consecrate on Marduk's altar; #dip gear to bless/curse it
   { id: "speed",  kind: "potion", name: "a potion of speed",       ch: "!", fg: "#e0e060", effect: "speed",     weight: 3 },
   { id: "gainlvl",kind: "potion", name: "a potion of gain level",  ch: "!", fg: "#e0a0f0", effect: "gainlevel", weight: 2, minDepth: 5 },
   { id: "enlight",kind: "potion", name: "a potion of enlightenment", ch: "!", fg: "#a0e0e0", effect: "enlighten", weight: 2 },
@@ -165,8 +165,8 @@ export const ITEMS: ItemType[] = [
   { id: "tinopener", kind: "tool", name: "a tin opener",        ch: "(", fg: "#b0b0b0", weight: 1 }, // held, it lets you open (eat) sealed tins
   { id: "lockpick", kind: "tool", name: "a lock pick",         ch: "(", fg: "#c0c0a0", weight: 1 }, // apply + direction — DEX-gated, pick a locked door/chest (reusable)
   { id: "tinkit",  kind: "tool", name: "a tinning kit",       ch: "(", fg: "#b0c0b0", weight: 2 }, // apply on a corpse underfoot — seal it into a tin (charged)
-  { id: "whistle", kind: "tool", name: "a magic whistle",     ch: "(", fg: "#d0d0e0", weight: 1 }, // apply — blink your nominator to your side
-  { id: "leash",   kind: "tool", name: "a leash",             ch: "(", fg: "#a08050", weight: 1 }, // apply — tether your nominator so it keeps to your side
+  { id: "whistle", kind: "tool", name: "a magic whistle",     ch: "(", fg: "#d0d0e0", weight: 1 }, // apply — blink your hound to your side
+  { id: "leash",   kind: "tool", name: "a leash",             ch: "(", fg: "#a08050", weight: 1 }, // apply — tether your hound so it keeps to your side
   { id: "drum",    kind: "tool", name: "a drum",              ch: "(", fg: "#c09050", weight: 2 }, // apply — beat it: nearby foes waver and recoil (reusable)
   { id: "towel",   kind: "tool", name: "a towel",             ch: "(", fg: "#d0d0c0", weight: 1 }, // apply — wipe your face, or bind it over your eyes (ESP scanning with telepathy)
   { id: "lamp",    kind: "tool", name: "an oil lamp",         ch: "(", fg: "#e0d060", weight: 3 }, // apply to light/douse — full sight in the dark
@@ -212,10 +212,10 @@ export const ITEMS: ItemType[] = [
   { id: "book_clair", kind: "spellbook", name: "a spellbook of clairvoyance",  ch: "+", fg: "#a0d0e0", teaches: "clair", weight: 1 },
 ];
 
-/** Scrolls a contract deployer (magic marker) can inscribe, in menu order. */
+/** Scrolls a rune-scribe's kit (magic marker) can inscribe, in menu order. */
 export const WRITABLE_SCROLLS = ["tele", "map", "ident", "ench", "cure", "uncurse", "dobj", "dtrap"];
 
-// Unidentified appearances — fantasy + polkadot, same length so an assigned index maps across both.
+// Unidentified appearances — random fantasy labels, one per unidentified type.
 const POTION_LOOKS_F = ["a ruby potion", "a murky potion", "a glowing vial", "a smoking flask", "a bubbling phial", "a milky potion", "an effervescent vial", "a cloudy flask"];
 const SCROLL_LOOKS_F = ["a scroll labeled XYZZY", "a scroll labeled ELBERETH", "a scroll labeled NR 9", "a scroll labeled FOOBAR", "a scroll labeled VENZAR", "a scroll labeled THARR", "a scroll labeled JUYED", "a scroll labeled PRATYAVAYAH", "a scroll labeled DAIYEN FOOELS", "a scroll labeled READ ME", "a scroll labeled GARVEN DEH", "a scroll labeled VERR YED HORRE", "a scroll labeled ANDOVA BEGARIN", "a scroll labeled KIRJE", "a scroll labeled VE FORBRYDERNE", "a scroll labeled HACKEM MUCHE"];
 const GEM_COLORS = ["white", "red", "green", "blue", "yellow", "violet", "orange", "black"];
@@ -224,7 +224,7 @@ const GEM_LOOKS_F = GEM_COLORS.map((c) => `a ${c} gem`);
 /** Per-GAME randomised appearances — the world's potions/scrolls look the same to everyone.
  *  Shared by all adventurers; only *knowledge* of what they are is per-character (Idents). */
 export class Appearances {
-  private apIdx = new Map<string, number>(); // id → index into the look list (resolved to fantasy/polkadot at display time)
+  private apIdx = new Map<string, number>(); // id → index into the look list
 
   constructor() {
     for (const kind of ["potion", "scroll", "gem"] as const) {

@@ -202,7 +202,7 @@ export const MONSTER_BEHAVIORS: Behavior<Monster>[] = [
     score: (g, s, c) => (!s.def.boss && !s.def.fearless && g.level.engravingAt(c.p.x, c.p.y) ? 1 : 0),
     act: (g, s) => wanderStep(g, s) },
 
-  // The Sybil attack: a sybil with budget left occasionally replicates (bounded). Nullified ones can't.
+  // The Phantom attack: a phantom with budget left occasionally replicates (bounded). Nullified ones can't.
   { name: "split",
     score: (g, s) => (!s.cancelled && s.def.splits && s.splitsLeft > 0 && ROT.RNG.getUniform() < 0.05 && g.spawnSybilNear(s) ? 1 : 0),
     act: () => {} }, // spawnSybilNear already ran (and succeeded) in the score gate
@@ -221,8 +221,8 @@ export const MONSTER_BEHAVIORS: Behavior<Monster>[] = [
     },
     act: () => {} },
 
-  // The resurrected Censor lunges for the JAM itself — a snatch-and-blink.
-  { name: "censor-steal",
+  // The resurrected Warden lunges for the Amulet of Yendor itself — a snatch-and-blink.
+  { name: "warden-steal",
     score: (_g, s, c) => (s.isHunter && !s.cancelled && c.dist === 1 && c.p.hasJam && ROT.RNG.getUniform() < 0.18 ? 1 : 0),
     act: (g, s, c) => g.censorSteal(s, c.p) },
 
@@ -252,7 +252,7 @@ export const MONSTER_BEHAVIORS: Behavior<Monster>[] = [
       if (loot) { s.stolen = loot; g.log.add(`${cap(s.name)} slips ${g.ident.name(loot.type)} away as you swoon, and is gone.`, "bad", p); blinkAway(g, s, p); }
     } },
 
-  // The airdrop farmer: adjacent, it snatches a fistful of gold and blinks away.
+  // The coin-hoarder: adjacent, it snatches a fistful of gold and blinks away.
   { name: "gold-steal",
     score: (_g, s, c) => (!s.cancelled && s.def.stealsGold && c.dist === 1 && c.p.gold > 0 ? 1 : 0),
     act: (g, s, c) => {

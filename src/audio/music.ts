@@ -2,7 +2,7 @@
 // Web Audio API. Each area has a generative bed (drone + swelling pad), and a RHYTHM
 // GROOVE — synthesised drums (kick → hats → snare) + a rhythmic bassline — rides on top
 // as the main exploration layer, fading in and out with a hybrid intensity (per-zone
-// baseline + live danger/crowd/JAM/boss). When you've been calm for a while it settles
+// baseline + live danger/crowd/Amulet/boss). When you've been calm for a while it settles
 // back to the bare ambient bed; the groove snaps back when a threat returns.
 //
 // When fully settled (a long calm), a CHILL IDLE GROOVE takes over. Each zone has FIVE distinct idle
@@ -61,13 +61,13 @@ type Base = Omit<TrackDef, "area">;
 const BASES: Base[] = [
   { id: "legacy",    name: "The Upper Dungeon",   root: A,        chord: [0, 7, 15],        pad: "sine",     drone: "sine",     cutoff: 700,  reverb: 0.4,  pulseBpm: 0,  detune: 5,  level: 0.5,
     groove: 0.38, bpm: 80,  bass: [[0,4],[7,4],[3,4],[5,4]] },
-  { id: "parachain", name: "The Dungeon Reaches",  root: A * 1.5,  chord: [0, 7, 14, 16],    pad: "triangle", drone: "sine",     cutoff: 1100, reverb: 0.45, pulseBpm: 0,  detune: 6,  level: 0.5,
+  { id: "deeps", name: "The Dungeon Reaches",  root: A * 1.5,  chord: [0, 7, 14, 16],    pad: "triangle", drone: "sine",     cutoff: 1100, reverb: 0.45, pulseBpm: 0,  detune: 6,  level: 0.5,
     groove: 0.5,  bpm: 116, bass: [[0,2],[7,2],[4,2],[7,2],[9,2],[7,2],[5,2],[0,2]] },
   { id: "wildlands",    name: "The Deep Caverns",     root: A * 0.75, chord: [0, 6, 13],        pad: "sawtooth", drone: "sine",     cutoff: 600,  reverb: 0.5,  pulseBpm: 0,  detune: 14, level: 0.45,
     groove: 0.5,  bpm: 124, bass: [[0,2],[0,2],[6,2],[0,2],[3,2],[6,2],[0,4]] },
-  { id: "mempool",   name: "The Great Hall",       root: A,        chord: [0, 5, 10],        pad: "sawtooth", drone: "triangle", cutoff: 800,  reverb: 0.35, pulseBpm: 96, detune: 9,  level: 0.45,
+  { id: "greathall",   name: "The Great Hall",       root: A,        chord: [0, 5, 10],        pad: "sawtooth", drone: "triangle", cutoff: 800,  reverb: 0.35, pulseBpm: 96, detune: 9,  level: 0.45,
     groove: 0.62, bpm: 132, bass: [[0,2],[0,2],[7,2],[0,2],[0,2],[10,2],[7,2],[5,2]] },
-  { id: "relay",     name: "The Castle Gate",      root: A * 0.5,  chord: [0, 12],           pad: "sine",     drone: "sine",     cutoff: 400,  reverb: 0.6,  pulseBpm: 0,  detune: 3,  level: 0.5,
+  { id: "dungeon",     name: "The Castle Gate",      root: A * 0.5,  chord: [0, 12],           pad: "sine",     drone: "sine",     cutoff: 400,  reverb: 0.6,  pulseBpm: 0,  detune: 3,  level: 0.5,
     groove: 0.28, bpm: 72, idleBpm: 50, bass: [[0,4],[7,4],[0,4],[12,4]] }, // idle = a very slow heartbeat; combat quickens
   { id: "gehennom",  name: "Gehennom",          root: A * 0.5,  chord: [0, 1, 6],         pad: "sawtooth", drone: "sawtooth", cutoff: 460,  reverb: 0.5,  pulseBpm: 50, detune: 18, level: 0.5,
     groove: 0.3,  bpm: 88, idleBpm: 58, bass: [[0,4],[1,2],[6,2],[0,4],[6,2],[1,2]] }, // idle grinds slow; combat quickens
@@ -157,21 +157,21 @@ const IDLE: Record<string, IdleGroove[]> = {
     { steps: 14, kick: [0, 8], snare: [10], hat: [4, 6, 12], bass: [[0, 4], [7, 2], [REST, 2], [3, 3], [5, 3]], chimeDegs: [0, 7, 15], chimeEvery: 4 },
     { steps: 16, kick: [0, 11], snare: [4, 12], hat: [2, 6, 10, 14], bass: [[0, 3], [REST, 1], [3, 4], [7, 4], [REST, 1], [5, 3]], chimeDegs: [12, 15, 19], chimeEvery: 4.5 },
   ],
-  parachain: [
+  deeps: [
     { steps: 16, kick: [0, 6, 8, 14], snare: [4, 12], hat: [2, 6, 10, 14], bass: [[0, 2], [7, 2], [REST, 2], [4, 2], [9, 2], [7, 2], [5, 2], [REST, 2]], chimeDegs: [0, 7, 14, 16], chimeEvery: 3.5 },
     { steps: 14, kick: [0, 6, 10], snare: [8], hat: [2, 4, 8, 12], bass: [[0, 2], [4, 2], [7, 2], [REST, 2], [9, 2], [7, 2], [5, 2]], chimeDegs: [7, 14, 16], chimeEvery: 4 },
     { steps: 24, kick: [0, 6, 12, 18], snare: [9, 21], hat: [3, 9, 15, 21], bass: [[0, 3], [7, 3], [4, 3], [7, 3], [9, 3], [7, 3], [5, 3], [0, 3]], chimeDegs: [0, 7, 14], chimeEvery: 4.5 },
     { steps: 10, kick: [0, 6], snare: [4], hat: [2, 8], bass: [[0, 2], [7, 2], [4, 2], [9, 2], [7, 2]], chimeDegs: [7, 16, 19], chimeEvery: 3.5 },
     { steps: 20, kick: [0, 8, 10, 16], snare: [4, 12], hat: [2, 6, 14, 18], bass: [[0, 4], [7, 2], [4, 2], [7, 2], [9, 2], [7, 2], [5, 2], [0, 4]], chimeDegs: [0, 9, 14, 16], chimeEvery: 4 },
   ],
-  kusama: [
+  wildlands: [
     { steps: 16, kick: [0, 4, 8, 12], snare: [8], hat: [2, 6, 10, 14], bass: [[0, 2], [0, 2], [6, 2], [0, 2], [3, 2], [6, 2], [0, 4]], chimeDegs: [0, 6, 13], chimeEvery: 3.5 },
     { steps: 12, kick: [0, 6, 9], snare: [6], hat: [3, 9], bass: [[0, 3], [6, 3], [0, 3], [3, 3]], chimeDegs: [6, 13], chimeEvery: 4 },
     { steps: 18, kick: [0, 6, 10, 14], snare: [8], hat: [2, 12, 16], bass: [[0, 3], [6, 3], [0, 3], [3, 3], [6, 3], [0, 3]], chimeDegs: [0, 6, 13], chimeEvery: 4 },
     { steps: 14, kick: [0, 4, 8], snare: [10], hat: [2, 6, 12], bass: [[0, 2], [6, 2], [0, 2], [3, 2], [6, 2], [0, 2], [6, 2]], chimeDegs: [3, 6, 13], chimeEvery: 3.5 },
     { steps: 20, kick: [0, 8, 12, 16], snare: [4], hat: [2, 6, 10, 14, 18], bass: [[0, 4], [6, 2], [0, 2], [3, 4], [6, 2], [0, 2], [6, 4]], chimeDegs: [0, 6, 13], chimeEvery: 4 },
   ],
-  mempool: [
+  greathall: [
     { steps: 16, kick: [0, 4, 8, 10, 12], snare: [4, 12], hat: [2, 6, 10, 14], bass: [[0, 2], [0, 2], [7, 2], [0, 2], [0, 2], [10, 2], [7, 2], [5, 2]], chimeDegs: [0, 5, 10, 12], chimeEvery: 3 },
     { steps: 24, kick: [0, 6, 8, 12, 18, 20], snare: [9, 21], hat: [3, 9, 15, 21], bass: [[0, 3], [7, 3], [0, 3], [10, 3], [7, 3], [5, 3], [0, 3], [7, 3]], chimeDegs: [0, 7, 10], chimeEvery: 3.5 },
     { steps: 12, kick: [0, 3, 6, 9], snare: [6], hat: [2, 4, 8, 10], bass: [[0, 2], [7, 2], [0, 2], [10, 2], [7, 2], [5, 2]], chimeDegs: [5, 10, 12], chimeEvery: 3 },
@@ -186,7 +186,7 @@ const IDLE: Record<string, IdleGroove[]> = {
     { steps: 18, kick: [0, 6, 12], snare: [9, 15], hat: [3, 9, 15], bass: [[0, 3], [4, 3], [8, 3], [4, 3], [0, 3], [8, 3]], chimeDegs: [0, 4, 8], chimeEvery: 4 },
   ],
   // ── the dread trio: deep thuds + dissonant m2(1)/tritone(6) bass + low tolls; sparser + swellier per zone ──
-  relay: [ // least dread — a deep pulse persists
+  dungeon: [ // least dread — a deep pulse persists
     { steps: 16, deep: true, kick: [0], snare: [10], bass: [[0, 8], [7, 4], [0, 4]], chimeDegs: [1, 6, 11], low: true, chimeEvery: 7 },
     { steps: 24, deep: true, kick: [0, 12], snare: [18], bass: [[0, 12], [6, 6], [0, 6]], chimeDegs: [1, 6], low: true, chimeEvery: 8 },
     { steps: 12, deep: true, kick: [0], snare: [8], bass: [[0, 6], [1, 3], [0, 3]], chimeDegs: [6, 11], low: true, chimeEvery: 7 },
@@ -234,11 +234,11 @@ interface Fill {
 }
 const FILLS: Record<string, Fill> = {
   legacy:    { snare: [2, 3], hatBuild: true, turn: [5, 7], crash: true },
-  parachain: { snare: [1, 2, 3], lead: [7, 9, 12], turn: [7, 5], crash: true },   // bright turnaround
-  kusama:    { snare: [0, 1, 2, 3], kick: [0], turn: [6, 3], crash: true },        // busy 16th roll, dark walk
-  mempool:   { snare: [0, 2, 3], kick: [0, 2], hatBuild: true, turn: [10, 7], crash: true }, // driving
+  deeps: { snare: [1, 2, 3], lead: [7, 9, 12], turn: [7, 5], crash: true },   // bright turnaround
+  wildlands:    { snare: [0, 1, 2, 3], kick: [0], turn: [6, 3], crash: true },        // busy 16th roll, dark walk
+  greathall:   { snare: [0, 2, 3], kick: [0, 2], hatBuild: true, turn: [10, 7], crash: true }, // driving
   elsewhere: { snare: [1, 3], lead: [8, 4, 0], turn: [4, 0], crash: true },
-  relay:     { snare: [2, 3], kick: [0], turn: [7, 0], deep: true },               // deep, slow
+  dungeon:     { snare: [2, 3], kick: [0], turn: [7, 0], deep: true },               // deep, slow
   gehennom:  { snare: [0, 2], kick: [0], turn: [1, 6], deep: true, crash: true },  // grinding tom fall
   sanctum:   { kick: [0], turn: [6, 1, 0], deep: true },                            // doom-walk, no snare
   planes:    { lead: [7, 12, 16], crash: true },                                    // ethereal rise, no drums
@@ -255,9 +255,9 @@ interface ActiveTrack { def: TrackDef; bus: GainNode; voices: Voice[]; }
 export interface MusicContext {
   threat: number;     // 0..1 — visible foes (count + proximity) → warps the bed (murk + detune)
   danger: number;     // 0..1 — drives the tension layer (trills / fast beats / bass)
-  bossNear: boolean;  // a boss / dragon / Censor in view → a menace rumble
+  bossNear: boolean;  // a boss / dragon / Warden in view → a menace rumble
   crowd: number;      // 0..1 — how thronged the area is
-  jamNear: boolean;   // the JAM is on the level / held → a deep ominous pulse
+  jamNear: boolean;   // the Amulet is on the level / held → a deep ominous pulse
   faucet: boolean;    // standing by a faucet → drips (foley)
   altar: boolean;     // standing by an altar → a soft chime (foley)
   beast?: string;     // category of the nearest hostile in view → an occasional creature cue (foley)
@@ -636,7 +636,7 @@ export class MusicEngine {
     if (t && this.active) {
       for (const v of this.active.voices) v.osc.detune.setTargetAtTime(t.detune + warp * 30, now, 1.2); // beating sours the bed near foes
 
-      // On the Planes you always carry the JAM, so jamNear must not block the ethereal idle there.
+      // On the Planes you always carry the Amulet, so jamNear must not block the ethereal idle there.
       const planesArea = t.area === "planes" || t.area === "genesis";
       const jamBlocks = c.jamNear && !planesArea;
 
@@ -679,7 +679,7 @@ export class MusicEngine {
       } else this.nextPulse = now;
 
       // ── context reactions ──
-      if (c.jamNear && !planesArea) { while (this.nextJam < horizon) { this.pulse(t.root * 0.5, this.nextJam, this.active.bus, 0.16); this.nextJam += 2.4; } } else this.nextJam = now; // no ominous JAM pulse in the weightless Planes
+      if (c.jamNear && !planesArea) { while (this.nextJam < horizon) { this.pulse(t.root * 0.5, this.nextJam, this.active.bus, 0.16); this.nextJam += 2.4; } } else this.nextJam = now; // no ominous Amulet pulse in the weightless Planes
       if (c.altar) { while (this.nextChime < horizon) { this.note(semi(t.root, 12) * 4, this.nextChime, 2.6, this.active.bus, "sine", 0.05, 4000); this.nextChime += 3.5 + Math.random() * 2.5; } } else this.nextChime = now;
       if (c.faucet) { while (this.nextDrip < horizon) { this.drip(this.nextDrip); this.nextDrip += 0.7 + Math.random() * 1.8; } } else this.nextDrip = now;
       // foley: per-zone environment ambience + an occasional nearby-creature cue
@@ -897,8 +897,8 @@ export class MusicEngine {
   private ambientOne(): void {
     const now = this.ctx!.currentTime, bus = this.sfxBus, r = this.active?.def.root ?? 110;
     switch (this.area) {
-      case "wildlands": case "relay": this.drip(now); break;                                                       // cavern drips
-      case "mempool": case "legacy": this.noiseHit(now, 0.4, bus, 0.028, "bandpass", 220, 2); break;            // low machinery hum
+      case "wildlands": case "dungeon": this.drip(now); break;                                                       // cavern drips
+      case "greathall": case "legacy": this.noiseHit(now, 0.4, bus, 0.028, "bandpass", 220, 2); break;            // low machinery hum
       case "gehennom": case "sanctum": this.noiseHit(now, 0.9, bus, 0.05, "lowpass", 150, 1); if (Math.random() < 0.3) this.tone(semi(r, 1), semi(r, 1) * 0.98, 1.4, "sawtooth", 0.03, now, bus, 500); break; // hell rumble + distant groan
       case "planes": case "genesis": this.tone(semi(r, 19) * 2, semi(r, 24) * 2, 1.8, "sine", 0.022, now, bus, 5000); break; // ethereal wind
       default: if (Math.random() < 0.4) this.drip(now); break;

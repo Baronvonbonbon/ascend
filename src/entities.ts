@@ -201,9 +201,9 @@ export class Player extends Entity {
   private pendingThrow: Item | null = null; // an item awaiting a throw direction
   quiver: Item | null = null;               // readied missile for the `f`ire command
   private pendingApply: Item | null = null; // a tool awaiting a direction (excavator / state reader)
-  private pendingWrite: Item | null = null; // a contract deployer awaiting a scroll choice
+  private pendingWrite: Item | null = null; // a rune-scribe's kit awaiting a scroll choice
   private pendingWish: Item | null = null;  // a wand of wishing awaiting a wish choice
-  private pendingLoot: { vault: Item; mode: "menu" | "in" | "out" } | null = null; // a multisig vault being looted
+  private pendingLoot: { vault: Item; mode: "menu" | "in" | "out" } | null = null; // a bag of holding being looted
   private pendingSpell = false;             // choosing a spell to cast
   private pendingCastDir: string | null = null; // a directional spell awaiting a direction
   private pendingChat = false;              // choosing a direction to chat
@@ -241,7 +241,7 @@ export class Player extends Entity {
   getSpeed(): number {
     const haste = this.hasteTurns > 0 ? 50 : 0; // overclock spell
     if (this.riding && !(this.game.pet?.alive)) this.riding = false; // steed lost — you're afoot again
-    const ride = this.riding ? 30 : 0;           // a nominator steed quickens your stride
+    const ride = this.riding ? 30 : 0;           // a hound steed quickens your stride
     if (this.polyForm) return Math.max(20, this.polyForm.speed ?? 100) + haste + ride; // move as your fork
     const base = this.intrinsics.has("fast") ? 130 : 100; // intrinsic speed from a fork-daemon corpse
     const light = this.unhanded() ? 15 : 0; // empty-handed and unburdened by steel — a quicker step (sheathe and run)
@@ -249,13 +249,13 @@ export class Player extends Entity {
     return Math.max(20, base + haste + ride + light - slow - this.encumbrance().speed); // a heavy pack drags your stride
   }
 
-  /** Carry capacity from Stake-weight (STR) + Resilience (CON) — how much your pack can bear before it drags. */
+  /** Carry capacity from Brawn (STR) + Resilience (CON) — how much your pack can bear before it drags. */
   carryCap(): number { return Math.max(40, 60 + (this.str - 10) * 8 + (this.con - 10) * 4); }
 
   /** Total weight borne — every pack item (equipped gear stays in the pack); a bag of holding's stash is free. */
   carriedWeight(): number {
     let w = 0;
-    for (const it of this.inventory.items) w += it.type.id === "vault" ? 2 : it.type.weight ?? 0; // the multisig vault's stash weighs nothing
+    for (const it of this.inventory.items) w += it.type.id === "vault" ? 2 : it.type.weight ?? 0; // the bag of holding's stash weighs nothing
     return w;
   }
 
@@ -349,7 +349,7 @@ export class Player extends Entity {
     this.game.censorHuntTick();
     if (this.polyForm && --this.polyTurns <= 0) this.game.revertPoly(this);
     this.game.tickLycanthropy(this); // infected? a chance to involuntarily shift into the were-beast
-    this.game.tickLuck(this);        // Fortune drifts toward the mean unless a HODL stone anchors it
+    this.game.tickLuck(this);        // Fortune drifts toward the mean unless a luckstone anchors it
     this.game.checkVault();          // teleported into the Treasury? summon the Council Guard escort
     this.game.checkShopBill(this);   // left the shop carrying unpaid wares? settle the bill (or be named a thief)
     if (this.autoSearch) this.game.autoSearchAround(this); // ring of searching — reveal adjacent hidden things
@@ -422,7 +422,7 @@ export class Player extends Entity {
       case "<": return this.tryAscend();
       case "P": return this.tryPray();
       case ",": case "g": return this.game.tryPickup() ? this.endTurn() : false;
-      case "p": void this.game.tryBuy(); return false; // shop purchase (async, gasless — no turn)
+      case "p": void this.game.tryBuy(); return false; // shop purchase (async,  — no turn)
       case "H": void this.game.showHallOfFame(); return false;
       case "i": this.game.showInventory(); return false;
       case "@": this.game.showCharSheet(); return false;
@@ -630,7 +630,7 @@ export class Player extends Entity {
 
   private startCast(): boolean {
     this.game.acting = this;
-    if (this.spells.size === 0) { this.game.log.add("You know no extrinsics. Study a runtime (+) first.", "dim"); return false; }
+    if (this.spells.size === 0) { this.game.log.add("You know no extrinsics. Study a tome (+) first.", "dim"); return false; }
     this.castMenu = SPELLS.filter((s) => this.spells.has(s.id)).map((s) => s.id);
     const menu = this.castMenu.map((id, i) => { const s = spellById(id)!; return `(${i + 1}) ${s.name} [${s.cost}En]`; }).join("  ");
     this.game.log.add(`Cast which extrinsic? (En ${this.energy}/${this.maxEnergy})  ${menu}  (Esc to cancel)`, "sys");
@@ -969,7 +969,7 @@ export class Player extends Entity {
     if (tile === "doorLocked") return this.game.kickDoor(this, nx, ny) ? this.endTurn() : false;
     if (tile === "water") {
       if (this.amulet?.type.id === "amulet_breathe") { this.x = nx; this.y = ny; this.game.recomputeFOV(); this.game.log.add("You wade through the deep water, breathing easy.", "dim"); this.game.draw(); return this.endTurn(); }
-      this.game.log.add("Deep water — too deep to wade. Find a causeway, or jump it (XCM).", "dim"); return false;
+      this.game.log.add("Deep water — too deep to wade. Find a causeway, or jump it (the planar gate).", "dim"); return false;
     }
     if (!this.game.level.isPassable(nx, ny)) return false; // bumping a wall costs no turn
     // Push a boulder one tile if the space beyond is clear; otherwise it won't budge.
@@ -988,7 +988,7 @@ export class Player extends Entity {
         this.game.log.add("You heave the boulder forward.", "dim");
       } else { this.game.log.add("The boulder won't budge — break it (a fire ray) or go around.", "dim"); return false; }
     }
-    // Displace — slip past a peaceful NPC (the Marketmaker), your nominator, or your co-op partner.
+    // Displace — slip past a peaceful NPC (the Shopkeeper), your hound, or your co-op partner.
     if (foe && foe.peaceful) { foe.x = this.x; foe.y = this.y; this.game.log.add(`You slip past ${foe.name}.`, "dim"); }
     if (ally) { ally.x = this.x; ally.y = this.y; this.game.log.add(`You slip past ${ally.name}.`, "dim", this); }
     const petHere = this.game.petAt(nx, ny); // swap places with whichever of the retinue stands there
@@ -1015,7 +1015,7 @@ export class Player extends Entity {
     if (trap) this.game.triggerTrap(trap);
     if (this.game.level.tileAt(this.x, this.y) === "portal") {
       const pr = this.game.level.portalAt(this.x, this.y);
-      if (pr) this.game.log.add(`XCM portal → ${pr.chain.name} (difficulty ×${pr.chain.difficulty}, loot ×${pr.chain.loot}). Press > to call.`, "sys");
+      if (pr) this.game.log.add(`the planar gate portal → ${pr.chain.name} (difficulty ×${pr.chain.difficulty}, loot ×${pr.chain.loot}). Press > to call.`, "sys");
     }
     this.game.draw();
     return this.endTurn();
@@ -1070,13 +1070,13 @@ export class Monster extends Entity {
   museLeft = 0;   // healing draughts it still carries (muse.c) — gulped when badly hurt
   museEscaped = false; // has used its one teleport draught to flee (muse.c)
   worn = 0;       // evasion gained from armor it has donned off the floor (muse.c — wear)
-  splitsLeft = 0; // a sybil's remaining replications — bounds the swarm (children inherit one fewer)
+  splitsLeft = 0; // a phantom's remaining replications — bounds the swarm (children inherit one fewer)
   stolen: Item | null = null; // a thief (rug puller) carries what it snatched; drops it on death
-  stoleGold = 0;              // an airdrop farmer's snatched gold — disgorged when it's slain
+  stoleGold = 0;              // an coin-hoarder's snatched gold — disgorged when it's slain
   heardSound: { x: number; y: number; ttl: number } | null = null; // a partner's call it's investigating
   // A shopkeeper stands peaceful until you steal; then it hunts you down.
   peaceful = false;
-  isHunter = false; // THE CENSOR resurrected to chase the JAM-bearer (Phase 12d)
+  isHunter = false; // THE WARDEN resurrected to chase the Amulet of Yendor-bearer (Phase 12d)
   // A mimic (honeypot) wears an item's glyph until it's touched.
   revealed = false;
   disguiseCh = "*";
@@ -1108,7 +1108,7 @@ export class Monster extends Entity {
       this.disguiseCh = look.ch; this.disguiseFg = look.fg; this.disguiseType = look;
     }
     if (def.keeper || def.priest || def.seer) this.peaceful = true; // a keeper minds its stall, a priest its altar, the Oracle its springs — until provoked
-    if (def.splits) this.splitsLeft = 2; // a fresh sybil can replicate at most twice
+    if (def.splits) this.splitsLeft = 2; // a fresh phantom can replicate at most twice
     if (def.muse) this.museLeft = 2;     // it carries a couple of healing draughts
   }
 
@@ -1160,10 +1160,10 @@ export const PET_MAX_NUTR = 1200; // a full belly — feeding caps here
 export const PET_HUNGRY = 250;    // below this it forages / won't play fetch
 export const PET_MAX_LOYAL = 20;  // devotion ceiling (dog.c mtame)
 export const PET_MAX_BOND = 100;  // the depth of the bond — earned by ATTENTION (play), not food
-export const BOND_TIERS = [25, 50, 75, 100];                                       // acquainted · companion · bonded · soulbound
-export const BOND_LABELS = ["a stranger still", "acquainted with you", "companionable", "bonded to you", "soulbound to you"];
+export const BOND_TIERS = [25, 50, 75, 100];                                       // acquainted · companion · bonded · eternal
+export const BOND_LABELS = ["a stranger still", "acquainted with you", "companionable", "bonded to you", "eternal to you"];
 
-/** The player's nominator — follows and savages adjacent enemies, but now with its own
+/** The player's hound — follows and savages adjacent enemies, but now with its own
  *  belly and a devotion that must be earned: feed it and it grows loyal; starve or forsake
  *  it and its loyalty frays until it turns feral. A tamed wild beast can take its place. */
 export class Pet extends Entity {
@@ -1174,7 +1174,7 @@ export class Pet extends Entity {
   lastPlayTurn = -100;     // for diminishing returns when you fuss over it every few steps
   settledTurns = 0;        // a recently played-with restless dog holds close instead of straying
   // A seeded PERSONALITY (rolled at spawn from the run's RNG, so it's deterministic / co-op-safe).
-  // Every pet — the starting nominator and any tamed beast — gets its own temperament.
+  // Every pet — the starting hound and any tamed beast — gets its own temperament.
   profile = { aggression: 0.5, fetch: 0.5, appetite: 0.5, wander: 0.5 };
   carrying: FloorItem | null = null; // an object it fetched, to lay at your feet (apport)
   def: MonsterDef | null = null;     // set when a tamed wild beast — drives its look & name
@@ -1198,7 +1198,7 @@ export class Pet extends Entity {
     return traits.filter(([v]) => v > 0.62).sort((a, b) => b[0] - a[0])[0]?.[1] ?? "steady";
   }
 
-  /** 0 (a stranger) … 4 (soulbound) — how many bond thresholds the relationship has crossed. */
+  /** 0 (a stranger) … 4 (eternal) — how many bond thresholds the relationship has crossed. */
   bondTier(): number { return BOND_TIERS.filter((t) => this.bond >= t).length; }
 
   /** Re-skin this pet as a tamed creature's species (name, glyph, vitality). */

@@ -7,12 +7,12 @@ import { Log } from "./log";
 import type { LogWho } from "./log";
 import {
   COLORS, TILE_GLYPH, TileType, MONSTERS, MonsterDef, deaths, greetings,
-  MAX_DEPTH, CENSOR, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, PRIEST, COUNCIL_GUARD, HIGH_PRIEST, ORACLE, ORACLE_HINTS, ORACLE_RUMORS, realmName, grayPaper, ChainDef, CHAINS, BranchDef, BRANCHES, branchById, questFor,
+  MAX_DEPTH, WARDEN, MOLOCH, MINIBOSSES, HONEYPOT, SHOPKEEPER, PRIEST, COUNCIL_GUARD, HIGH_PRIEST, ORACLE, ORACLE_HINTS, ORACLE_RUMORS, realmName, grayPaper, ChainDef, CHAINS, BranchDef, BRANCHES, branchById, questFor,
   abilityMod, archetypeById, raceById, raceName, ATTRS, ATTR_LABEL, attrFlavor, spellById, Ethos,
   monName, questHomeland, archetypeName, ethosName, spellName, chainName, branchEnd, branchEntryFlavor,
 } from "./data";
 import { skin } from "./flavor";
-import { Idents, Appearances, ITEMS, JAM, CORPSE, CHEST, GOLD, WRITABLE_SCROLLS, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
+import { Idents, Appearances, ITEMS, Amulet, CORPSE, CHEST, GOLD, WRITABLE_SCROLLS, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
 import { recordRun, readRecent, RunEntry } from "./hall";
 import { bumpGames, bumpDeaths } from "./net/counter";
 import type { Peer } from "./net/peer";
@@ -41,27 +41,27 @@ const WISHES: { id: string; enchant?: number }[] = [
 const W = 80;
 const MAP_H = 30;
 const H = MAP_H + 2; // + a blank row + the status line
-const MEMPOOL_DEPTH = 13; // the Big Room special level — "the Mempool"
-const GEHENNOM_BOTTOM = 48; // after the Invocation the dungeon opens to here — Moloch + the JAM (Gehennom spans MAX_DEPTH+1 .. here)
+const MEMPOOL_DEPTH = 13; // the Big Room special level — "the Great Hall"
+const GEHENNOM_BOTTOM = 48; // after the Invocation the dungeon opens to here — Moloch + the Amulet of Yendor (Gehennom spans MAX_DEPTH+1 .. here)
 const PLANES = [ // the ascent above the surface — climb the Elemental Planes with the Amulet to the Astral altars
   { name: "the Plane of Earth", flavor: "Stone presses in on every side; you push through a churning mass of rock." },
   { name: "the Plane of Fire", flavor: "A searing waste of flame and ash — the very air burns." },
   { name: "the Plane of Water", flavor: "Endless dark water in all directions; bubbles rise where up should be." },
   { name: "the Astral Plane", flavor: "Three high altars stand in a starlit void. Offer the Amulet (O) at the one that shares your alignment." },
 ];
-const RELIC_DEPTH: Record<number, string> = { 14: "bell", 18: "candelabrum", 22: "graybook" }; // the three Invocation relics, spread across the back half of the relay descent (all before MAX_DEPTH)
+const RELIC_DEPTH: Record<number, string> = { 14: "bell", 18: "candelabrum", 22: "graybook" }; // the three Invocation relics, spread across the back half of the dungeon descent (all before MAX_DEPTH)
 // Per-Plane layouts for the ascent (Phase 17): each Plane reads as its own place, the Genesis a ringed sanctum.
 const PLANE_KINDS: LevelKind[] = ["bigroom", "cave", "labyrinth", "concentric"];
 // Conducts (Phase 13a) — self-imposed vows, kept until an action breaks them.
 const CONDUCTS: { id: string; label: string; note: string }[] = [
   { id: "pacifist",   label: "Pacifist",       note: "shed no blood by your own hand" },
-  { id: "illiterate", label: "Illiterate",     note: "read no scroll, studied no runtime, engraved no word" },
+  { id: "illiterate", label: "Illiterate",     note: "read no scroll, studied no tome, engraved no word" },
   { id: "atheist",    label: "Self-custodian", note: "knelt to no altar, sat no throne, made no offering" },
   { id: "vegetarian", label: "Vegetarian",     note: "ate no corpse" },
   { id: "bankless",   label: "Bankless",       note: "bought nothing, forged nothing — touched no market" },
 ];
-const VAULT_CAP = 12; // a multisig vault holds up to this many stashed items
-// Hand-built Consensus Vault (Sokoban) floors. A 1-wide tunnel of alternating boulders (O) and
+const VAULT_CAP = 12; // a bag of holding holds up to this many stashed items
+// Hand-built Sokoban (Sokoban) floors. A 1-wide tunnel of alternating boulders (O) and
 // chasms (_): you can only push forward, so each boulder fills the next pit — unbrickable by design.
 // `<` start/exit · `>` goal (the prize) · `#` wall · `.` floor · `O` boulder · `_` pit.
 const SOKOBAN_FLOORS: string[][] = [
@@ -94,27 +94,27 @@ export class Game {
   get ident(): Idents { return this.acting.ident; }
   monsters: Monster[] = [];
   static readonly PET_CAP = 4;                    // retinue ceiling — taming beyond this only sways loyalty
-  pets: Pet[] = [];                               // the whole retinue; the lead nominator is the first living one
-  /** The lead nominator (ride/whistle/leash target, and the sole pet in solo v1 before taming). */
+  pets: Pet[] = [];                               // the whole retinue; the lead hound is the first living one
+  /** The lead hound (ride/whistle/leash target, and the sole pet in solo v1 before taming). */
   get pet(): Pet | null { return this.pets.find((p) => p.alive) ?? this.pets[0] ?? null; }
   set pet(v: Pet | null) { this.pets = v ? [v] : []; }
   livingPets(): Pet[] { return this.pets.filter((p) => p.alive); }
   // Phase 15 — persistence: each visited level is generated once and stored, so revisiting
   // returns the *same* layout with its dropped items, bones, traps, and monsters' state.
-  // Keyed by branch+depth ("dungeon:7", "kusama:1", "quest"). Planes are excluded — the ascent
+  // Keyed by branch+depth ("dungeon:7", "wildlands:1", "quest"). Planes are excluded — the ascent
   // only ever climbs up, so a plane is never revisited.
   private slots = new Map<string, { level: Level; monsters: Monster[] }>();
   private activeKey = "dungeon:1"; // the key of the level currently in this.level
   /** The floor key whose level+monsters are currently live in `this.level` — newly spawned actors stand here. */
   get activeFloorKey(): string { return this.activeKey; }
-  private currentChain: ChainDef | null = null; // null = the main relay-chain dungeon; a BranchDef when in a sub-dungeon (the Mines)
+  private currentChain: ChainDef | null = null; // null = the main dungeon-chain dungeon; a BranchDef when in a sub-dungeon (the Mines)
   private branchFloor = 0;        // 1-based floor within the current branch (0 = not in a branch)
-  private defeatedBosses = new Set<number>();    // relay depths whose mini-boss is slain
+  private defeatedBosses = new Set<number>();    // dungeon depths whose mini-boss is slain
   private gehennomOpen = false;                  // the Invocation has been performed — the Dark Forest lies below
   private plane = 0;                              // 0 = the dungeon; 1..PLANES.length = the ascent above the surface
   private genesisAltars: { x: number; y: number; ethos: Ethos }[] = []; // the three Astral altars — only your aligned one ascends
   private altarEthos = new Map<string, Ethos>(); // per-dungeon-altar alignment (lazily assigned), keyed by floor+coords — for conversion
-  private jamStolen = false;                     // THE CENSOR has snatched the JAM — slay the hunter to reclaim it
+  private jamStolen = false;                     // THE WARDEN has snatched the Amulet of Yendor — slay the hunter to reclaim it
   private vaultGuard: Monster | null = null;     // the Council Guard, while it tends the Treasury vault escort
   private censorTimer = 0;                        // turns until the next resurrection rises
   private inQuest = false;                        // currently in your archetype's Quest homeland
@@ -394,7 +394,7 @@ export class Game {
       this.coPlayer.name = "Guest";
       this.coPlayer.ident = new Idents(this.appearances); // shared world looks, separate knowledge
       this.giveStartingKit(this.coPlayer);
-      this.applyArchetype(this.coPlayer, "cleric"); // the partner runs as a Nominator in co-op v1
+      this.applyArchetype(this.coPlayer, "cleric"); // the partner runs as a Cleric in co-op v1
       this.applyRace(this.coPlayer, "human");
       this.pet = null; // no nominators in co-op v1
     } else {
@@ -406,8 +406,8 @@ export class Game {
     this.saveActive(); // register depth 1 in the level store
     this.log.add(ROT.RNG.getItem(greetings())!, "sys", "both"); // the shared intro reaches both adventurers
     for (const line of grayPaper()) this.log.add(line, "dim", "both");
-    if (this.coop) this.log.add("Co-op — Host and Guest share this dungeon. Slip past each other; Kick (K) to fight; mind your line of fire. Find the JAM together.", "sys", "both");
-    else this.log.add("Your nominator (d) pads at your heels — it backs you, and bites for you.", "dim");
+    if (this.coop) this.log.add("Co-op — Host and Guest share this dungeon. Slip past each other; Kick (K) to fight; mind your line of fire. Find the Amulet of Yendor together.", "sys", "both");
+    else this.log.add("Your hound (d) pads at your heels — it backs you, and bites for you.", "dim");
     this.log.add(`Keys: move · , pick up · o open chest · @ sheet · p buy · P pray · O offer · q faucet · s search/sit · z zap · Z cast · t throw · a apply · S sheathe · E engrave${this.coop ? ' · " chat (or the box below)' : ""} · < > stairs · i/w/W/q/r/e/d items.`, "dim", "both");
     this.draw();
     this.engine = new ROT.Engine(this.scheduler);
@@ -462,10 +462,10 @@ export class Game {
     p.maxHp = Math.max(1, p.maxHp + (r.statMod.con ?? 0)); p.hp = p.maxHp; // a hardier/frailer body
   }
 
-  /** XP needed to reach a given epoch (level): L2=20, L3=60, L4=120, L5=200… */
+  /** XP needed to reach a given level (level): L2=20, L3=60, L4=120, L5=200… */
   private xpForLevel(L: number): number { return 10 * L * (L - 1); }
 
-  /** Award XP to a player and level them up ("reach an epoch"), gaining max HP. */
+  /** Award XP to a player and level them up ("reach an level"), gaining max HP. */
   /** Remove a vow from a player's kept set (silently — revealed only at the end). */
   breakConduct(p: Player, id: string): void { p.conducts.delete(id); }
 
@@ -478,14 +478,14 @@ export class Game {
       const gain = Math.max(2, ROT.RNG.getUniformInt(3, 8) + abilityMod(p.con));
       p.maxHp += gain; p.hp += gain;
       this.recomputeEnergy(p); p.energy = p.maxEnergy;
-      this.log.add(`${this.sub(p)} ${this.verbS(p, "reach")} epoch ${p.level}! Max HP ${p.maxHp}, En ${p.maxEnergy}.`, "good");
+      this.log.add(`${this.sub(p)} ${this.verbS(p, "reach")} level ${p.level}! Max HP ${p.maxHp}, En ${p.maxEnergy}.`, "good");
     }
   }
 
-  /** A barrow-wight's touch saps an epoch (NetHack drain-life). Eating its corpse regains one. */
+  /** A barrow-wight's touch saps an level (NetHack drain-life). Eating its corpse regains one. */
   drainLevel(p: Player, byName: string): void {
     if (!p.alive) return;
-    if (p.level <= 1) { // can't slip below epoch 1 — sap raw vitality instead
+    if (p.level <= 1) { // can't slip below level 1 — sap raw vitality instead
       const loss = ROT.RNG.getUniformInt(2, 5);
       p.maxHp = Math.max(1, p.maxHp - loss); p.hp = Math.min(p.hp, p.maxHp);
       this.log.add(`${cap(byName)} drains your vitality — max HP down ${loss}.`, "bad", p);
@@ -495,9 +495,9 @@ export class Game {
     p.level--;
     const loss = ROT.RNG.getUniformInt(3, 8) + Math.max(0, abilityMod(p.con));
     p.maxHp = Math.max(p.level, p.maxHp - loss); p.hp = Math.min(p.hp, p.maxHp);
-    p.xp = this.xpForLevel(p.level); // drop to the floor of the now-lower epoch
+    p.xp = this.xpForLevel(p.level); // drop to the floor of the now-lower level
     this.recomputeEnergy(p); p.energy = Math.min(p.energy, p.maxEnergy);
-    this.log.add(`${cap(byName)} drains an epoch — you slip to epoch ${p.level}! (max HP ${p.maxHp})`, "bad", p);
+    this.log.add(`${cap(byName)} drains an level — you slip to level ${p.level}! (max HP ${p.maxHp})`, "bad", p);
     if (p.hp <= 0) this.killPlayer(p);
   }
 
@@ -515,7 +515,7 @@ export class Game {
 
   showCharSheet(): void {
     const p = this.acting;
-    this.log.add(`— ${p.name === "you" ? "You" : p.name}, ${p.title ? p.title + " " : ""}${raceName(raceById(p.race))} ${archetypeName(archetypeById(p.archetype))} · ${ethosName(p.ethos)} · epoch ${p.level} —`, "sys");
+    this.log.add(`— ${p.name === "you" ? "You" : p.name}, ${p.title ? p.title + " " : ""}${raceName(raceById(p.race))} ${archetypeName(archetypeById(p.archetype))} · ${ethosName(p.ethos)} · level ${p.level} —`, "sys");
     this.log.add(`  ${ATTRS.map((a) => `${ATTR_LABEL[a]} ${p[a]}`).join("  ")}`, "dim");
     this.log.add(`  HP ${p.hp}/${p.maxHp}  AC ${p.ac}  Fortune ${this.luckOf(p) >= 0 ? "+" : ""}${this.luckOf(p)}  XP ${p.xp}/${this.xpForLevel(p.level + 1)}`, "dim");
     const intr = [...p.intrinsics].map((i) => ({ poisonResist: "poison resist", petrifyResist: "petrify resist", drainResist: "drain resist", fireResist: "fire resist", coldResist: "cold resist", shockResist: "shock resist", fast: "fast", telepathy: "telepathy" } as Record<string, string>)[i] ?? i);
@@ -531,7 +531,7 @@ export class Game {
   showAudit(): void {
     const p = this.acting;
     this.log.add(`— ${"Character record"}: ${p.name === "you" ? "you" : p.name}, ${p.title ? p.title + " " : ""}${raceName(raceById(p.race))} ${archetypeName(archetypeById(p.archetype))} —`, "sys");
-    this.log.add(`  ${ethosName(p.ethos)} · epoch ${p.level} · XP ${p.xp}/${this.xpForLevel(p.level + 1)}${p.crowned ? ` · ${"Knighted"} ${p.title}` : ""}.`, "dim");
+    this.log.add(`  ${ethosName(p.ethos)} · level ${p.level} · XP ${p.xp}/${this.xpForLevel(p.level + 1)}${p.crowned ? ` · ${"Knighted"} ${p.title}` : ""}.`, "dim");
     this.log.add(`  ${ATTRS.map((a) => `${ATTR_LABEL[a]} ${p[a]}`).join("  ")}`, "dim");
     this.log.add(`  HP ${p.hp}/${p.maxHp}  AC ${p.ac}  En ${p.energy}/${p.maxEnergy}  Speed ${p.getSpeed()}  Fortune ${this.luckOf(p) >= 0 ? "+" : ""}${this.luckOf(p)}.`, "dim");
     this.log.add(`  Load ${p.carriedWeight()}/${p.carryCap()}${p.encumbrance().level ? ` — ${p.encumbrance().level}` : " — unencumbered"}.`, "dim");
@@ -559,7 +559,7 @@ export class Game {
     this.log.add(`  Status: ${fx.length ? fx.join(", ") : "clear"}.`, fx.some((s) => /STONING|ill|poison/.test(s)) ? "bad" : "dim");
     // progress + the endgame
     const relics = ["bell", "candelabrum", "graybook"].filter((id) => p.inventory.items.some((it) => it.type.id === id)).map((id) => itemById(id)!.name);
-    this.log.add(`  Depth ${p.depth} (deepest ${p.maxDepthReached})${this.gehennomOpen ? " · Gehennom open" : ""}${p.hasJam ? " · BEARS THE JAM" : this.jamStolen ? " · JAM stolen" : ""}.`, "dim");
+    this.log.add(`  Depth ${p.depth} (deepest ${p.maxDepthReached})${this.gehennomOpen ? " · Gehennom open" : ""}${p.hasJam ? " · BEARS THE Amulet" : this.jamStolen ? " · Amulet stolen" : ""}.`, "dim");
     this.log.add(`  Invocation relics held: ${relics.length ? relics.join(", ") : "none"}.`, relics.length === 3 ? "good" : "dim");
     // conducts
     const kept = CONDUCTS.filter((c) => p.conducts.has(c.id));
@@ -587,7 +587,7 @@ export class Game {
       if (sink) tags.push("a sink");
       if (branch) tags.push("a branch stair");
       if (vib) tags.push("the vibrating square");
-      if (level.items.some((i) => i.type.id === "jam")) tags.push("the JAM");
+      if (level.items.some((i) => i.type.id === "jam")) tags.push("the Amulet of Yendor");
       if (level.graves.length) tags.push(`${level.graves.length} grave${level.graves.length > 1 ? "s" : ""}`);
       const here = key === this.activeKey;
       this.log.add(`  ${this.overviewLabel(key)}${tags.length ? `: ${tags.join(", ")}` : ""}${here ? "  ← you are here" : ""}`, here ? "good" : "dim");
@@ -604,7 +604,7 @@ export class Game {
 
   private overviewLabel(key: string): string {
     const [base, n] = key.split(":");
-    if (base === "dungeon") return `Relay, depth ${n}`;
+    if (base === "dungeon") return `Dungeon, depth ${n}`;
     if (base === "quest") return "the Quest homeland";
     return `${cap(base)}${n ? `, floor ${n}` : ""}`;
   }
@@ -617,7 +617,7 @@ export class Game {
     for (const c of kept) this.log.add(`  ${c.label}: ${c.note}.`, "good");
   }
 
-  /** The active sub-dungeon branch (the Mines), or null in the main dungeon / a parachain. */
+  /** The active sub-dungeon branch (the Mines), or null in the main dungeon / a dungeon. */
   private get branch(): BranchDef | null {
     return this.currentChain && (this.currentChain as BranchDef).branch ? (this.currentChain as BranchDef) : null;
   }
@@ -652,7 +652,7 @@ export class Game {
 
   // ── Co-op independent floors (staged): each actor stands on its own floorKey, and
   //    setActive loads that floor's context before the actor takes its turn. While the party
-  //    still shares a floor this is a no-op; it's the substrate for players splitting up. ──
+  //    still shares a floor this is a no-op; it's the foundation for players splitting up. ──
   /** Make `key`'s floor the live context (level + monsters + chain/branch/plane flags), saving
    *  whatever was active. Safe no-op when that floor is already loaded. */
   setActive(key: string): void {
@@ -756,7 +756,7 @@ export class Game {
         else if (this.player.depth >= GEHENNOM_BOTTOM) this.placeJamAndBoss();
       }
     }
-    // Lit vs dark rooms (NetHack): the dread depths (Foot of the Relay + Gehennom + Sanctum) are wholly
+    // Lit vs dark rooms (NetHack): the dread depths (Foot of the Dungeon + Gehennom + Sanctum) are wholly
     // dark; elsewhere ~half the rooms are lit. Caves/mazes have few room centers, so they read dark too.
     // Lit rooms thin out with depth: the surface floors are bright (~90% of rooms hold a torch),
     // tapering to sparse (~15%) by the deep floors, and pitch-dark in the dread depths (Gehennom+).
@@ -991,7 +991,7 @@ export class Game {
     return this.allPlayers().find((p) => p !== self && this.downed.has(p) && p.floorKey === this.activeKey && p.x === x && p.y === y);
   }
 
-  /** Co-op revive: haul a fallen partner up — costly and rare. The reviver spends an epoch (level drain),
+  /** Co-op revive: haul a fallen partner up — costly and rare. The reviver spends an level (level drain),
    *  and the partner returns at a quarter HP, its worst afflictions shaken off. Not while over-hunted. */
   revivePartner(reviver: Player, fallen: Player): boolean {
     this.downed.delete(fallen);
@@ -999,8 +999,8 @@ export class Game {
     fallen.poison = fallen.stoning = fallen.illness = fallen.paralyzed = fallen.confused = 0;
     fallen.engulfedBy = null; fallen.webbed = 0;
     this.scheduler.add(fallen, true);
-    this.log.add(`${cap(reviver.name)} hauls ${fallen.name} back from the brink — at the cost of an epoch of ${reviver.name === "you" ? "your" : "their"} own.`, "good", "both");
-    this.drainLevel(reviver, "The revival"); // the steep, rare price — a drained epoch
+    this.log.add(`${cap(reviver.name)} hauls ${fallen.name} back from the brink — at the cost of an level of ${reviver.name === "you" ? "your" : "their"} own.`, "good", "both");
+    this.drainLevel(reviver, "The revival"); // the steep, rare price — a drained level
     this.draw();
     return true;
   }
@@ -1068,20 +1068,20 @@ export class Game {
       this.enterLevel();
       this.saveActive();
     }
-    if (this.level.kind === "bigroom") this.log.add("You descend into THE MEMPOOL — a vast open churn of pending chaos. Loot, and a swarm.", "bad");
+    if (this.level.kind === "bigroom") this.log.add("You descend into THE GREAT HALL — a vast open cavern teeming with chaos. Loot, and a swarm.", "bad");
     else if (this.level.kind === "maze") this.log.add(`You descend into the maze of ${realmName(me.depth)} — narrow, lightless, and patient.`, "bad");
     else this.log.add(`You descend to depth ${me.depth} — ${realmName(me.depth)}.`, me.depth >= 18 ? "bad" : "sys");
-    if (me.depth >= 18 && me.depth < MAX_DEPTH) this.log.add("Chaos thickens. Expect Kusama.", "bad");
-    if (me.depth === MAX_DEPTH && !this.gehennomOpen) this.log.add("The foot of the relay. The vibrating square (≈) hums — perform the Invocation (I) with all three relics.", "bad");
-    else if (me.depth === MAX_DEPTH) this.log.add("The foot of the relay — the gate to the Dark Forest stands open below. (>)", "bad");
+    if (me.depth >= 18 && me.depth < MAX_DEPTH) this.log.add("Chaos thickens. Expect the Wilds.", "bad");
+    if (me.depth === MAX_DEPTH && !this.gehennomOpen) this.log.add("The foot of the dungeon. The vibrating square (≈) hums — perform the Invocation (I) with all three relics.", "bad");
+    else if (me.depth === MAX_DEPTH) this.log.add("The foot of the dungeon — the gate to the Dark Forest stands open below. (>)", "bad");
     else if (me.depth > MAX_DEPTH && me.depth < GEHENNOM_BOTTOM) this.log.add("You sink into the Dark Forest — Gehennom. Censorship weeps from the walls.", "bad");
-    else if (me.depth >= GEHENNOM_BOTTOM) this.log.add("The bottom of all things. MOLOCH, the Central Planner, hoards the JAM here.", "bad");
+    else if (me.depth >= GEHENNOM_BOTTOM) this.log.add("The bottom of all things. MOLOCH, the Central Planner, hoards the Amulet of Yendor here.", "bad");
     this.draw();
   }
 
-  /** A level-teleport trap: wrench the victim to a random other main-relay depth within the explored range. */
+  /** A level-teleport trap: wrench the victim to a random other main-dungeon depth within the explored range. */
   private levelTeleport(me: Player): void {
-    const hi = Math.max(1, Math.min(me.maxDepthReached, MAX_DEPTH - 1)); // stay on the relay proper, not Gehennom/Sanctum
+    const hi = Math.max(1, Math.min(me.maxDepthReached, MAX_DEPTH - 1)); // stay on the dungeon proper, not Gehennom/Sanctum
     let target = me.depth;
     for (let t = 0; t < 20 && target === me.depth; t++) target = ROT.RNG.getUniformInt(1, hi);
     me.depth = target;
@@ -1094,9 +1094,9 @@ export class Game {
     this.draw();
   }
 
-  // ── XCM: parachain side-branches (each scales difficulty × loot) ────────────
+  // ── the planar gate: dungeon side-branches (each scales difficulty × loot) ────────────
   private placePortals(): void {
-    if (this.currentChain || this.acting.depth < 2 || this.acting.depth >= MAX_DEPTH) return; // XCM branches off the relay descent (d2 .. foot of the relay), not Gehennom
+    if (this.currentChain || this.acting.depth < 2 || this.acting.depth >= MAX_DEPTH) return; // the planar gate branches off the dungeon descent (d2 .. foot of the dungeon), not Gehennom
     const n = ROT.RNG.getUniform() < 0.7 ? (ROT.RNG.getUniform() < 0.3 ? 2 : 1) : 0;
     for (let i = 0; i < n; i++) {
       const centers = this.level.roomCenters.filter(
@@ -1110,17 +1110,17 @@ export class Game {
     }
   }
 
-  /** XCM call: hop to a parachain branch (its multipliers shape spawns + loot). */
+  /** the planar gate call: hop to a dungeon branch (its multipliers shape spawns + loot). */
   enterChain(chain: ChainDef): void {
     this.nextFloorShared = this.departingTogether(this.acting);
     this.currentChain = chain;
-    const restored = this.beginLevel(this.levelKey(), (chain.layout as LevelKind) ?? "normal"); // each parachain has a signature layout
+    const restored = this.beginLevel(this.levelKey(), (chain.layout as LevelKind) ?? "normal"); // each dungeon has a signature layout
     this.acting.x = this.level.start.x;
     this.acting.y = this.level.start.y;
     if (restored) {
       this.restoreEnter();
     } else {
-      this.placeUpStair(); // the way back to the relay
+      this.placeUpStair(); // the way back to the dungeon
       this.enterLevel();
       const goodies = ITEMS.filter((i) => i.kind === "ring" || i.kind === "wand");
       const cacheN = Math.max(0, Math.round(2 * chain.loot));
@@ -1139,7 +1139,7 @@ export class Game {
     const from = this.currentChain?.name ?? "the branch";
     this.currentChain = null;
     const restored = this.beginLevel(this.levelKey(), "normal");
-    this.acting.x = this.level.stairs.x; // back on the relay, at its down-stair
+    this.acting.x = this.level.stairs.x; // back on the dungeon, at its down-stair
     this.acting.y = this.level.stairs.y;
     if (restored) {
       this.restoreEnter();
@@ -1148,7 +1148,7 @@ export class Game {
       this.enterLevel();
       this.saveActive();
     }
-    this.log.add(`XCM ← you return from ${from} to the relay at depth ${this.acting.depth}.`, "sys");
+    this.log.add(`you return from ${from} to the dungeon at depth ${this.acting.depth}.`, "sys");
     this.draw();
   }
 
@@ -1199,7 +1199,7 @@ export class Game {
     this.draw();
   }
 
-  /** Climb up within the active branch; at its top, step back out onto the host relay depth. */
+  /** Climb up within the active branch; at its top, step back out onto the host dungeon depth. */
   private ascendBranch(): void {
     const def = this.branch!;
     if (this.branchFloor > 1) {
@@ -1208,7 +1208,7 @@ export class Game {
       this.draw();
       return;
     }
-    // top floor → leave the branch, back onto the host relay level at the branch-stair
+    // top floor → leave the branch, back onto the host dungeon level at the branch-stair
     this.currentChain = null;
     this.branchFloor = 0;
     this.acting.depth = def.entryDepth; // a branch always roots at its entryDepth on the main descent
@@ -1223,7 +1223,7 @@ export class Game {
       this.enterLevel();
       this.saveActive();
     }
-    this.log.add(`You climb out of ${def.name}, back onto the relay at depth ${this.acting.depth}.`, "sys");
+    this.log.add(`You climb out of ${def.name}, back onto the dungeon at depth ${this.acting.depth}.`, "sys");
     this.draw();
   }
 
@@ -1243,7 +1243,7 @@ export class Game {
       this.placeParty(); this.rebuildSchedule(); // a hand-built floor is fully populated by buildSokobanFloor — no procedural spawn
       this.saveActive();
     } else {
-      this.placeUpStair(); // the way back up toward the relay
+      this.placeUpStair(); // the way back up toward the dungeon
       this.enterLevel();
       if (floor >= def.floors) this.placeBranchPrize(def); // the End — guaranteed prize, no stair deeper
       this.saveActive();
@@ -1280,7 +1280,7 @@ export class Game {
   // ── the archetype Quest (Phase 13c) ──
   /** Open the homeland portal once, on the quest depth, until the Quest is done. */
   private placeQuestPortal(): void {
-    if (this.questDone || this.inQuest || this.currentChain) return; // only on the main relay descent
+    if (this.questDone || this.inQuest || this.currentChain) return; // only on the main dungeon descent
     const q = questFor(this.acting.archetype);
     if (this.acting.depth !== q.portalDepth) return;
     const centers = this.level.roomCenters.filter((c) => this.level.tileAt(c.x, c.y) === "floor" && !this.level.portalAt(c.x, c.y) && !(c.x === this.acting.x && c.y === this.acting.y));
@@ -1296,7 +1296,7 @@ export class Game {
     const me = this.acting;
     const q = questFor(me.archetype);
     if (this.questDone) {
-      // the homeland portal persists on the relay level now — spend it once the Quest is fulfilled
+      // the homeland portal persists on the dungeon level now — spend it once the Quest is fulfilled
       this.level.tiles[me.y][me.x] = "floor";
       const pi = this.level.portals.findIndex((p) => p.x === me.x && p.y === me.y);
       if (pi >= 0) this.level.portals.splice(pi, 1);
@@ -1340,7 +1340,7 @@ export class Game {
       this.enterLevel();
       this.saveActive();
     }
-    this.log.add(`You return from your Quest to the relay at depth ${this.acting.depth}.`, "sys");
+    this.log.add(`You return from your Quest to the dungeon at depth ${this.acting.depth}.`, "sys");
     this.draw();
   }
 
@@ -1354,7 +1354,7 @@ export class Game {
     const me = this.acting; // co-op: only the climbing adventurer moves
     const newDepth = me.depth - 1;
     if (newDepth < 1) {
-      // at the surface: the JAM drags you UPWARD into the Planes; without it, the world ends here
+      // at the surface: the Amulet of Yendor drags you UPWARD into the Planes; without it, the world ends here
       if (holder) this.enterPlane(1);
       return;
     }
@@ -1369,16 +1369,16 @@ export class Game {
       this.enterLevel();
       this.saveActive();
     }
-    // with the JAM at the surface, a stair beyond the world opens upward into the Planes
+    // with the Amulet of Yendor at the surface, a stair beyond the world opens upward into the Planes
     if (newDepth === 1 && holder) this.level.tiles[me.y][me.x] = "stairsUp";
     this.log.add(`You climb to depth ${newDepth} — ${realmName(newDepth)}.`, "sys");
-    if (newDepth === 1 && holder) this.log.add("The surface is near — but the JAM hauls you UPWARD, past the world itself. Climb (<) into the Planes.", "good");
+    if (newDepth === 1 && holder) this.log.add("The surface is near — but the Amulet of Yendor hauls you UPWARD, past the world itself. Climb (<) into the Planes.", "good");
     this.draw();
   }
 
   /** Enter the n-th Plane of the ascent (1..PLANES.length). The last is the Genesis Plane. */
   private enterPlane(n: number): void {
-    if (n > PLANES.length) return; // already atop the Genesis Plane — offer the JAM, don't climb
+    if (n > PLANES.length) return; // already atop the Genesis Plane — offer the Amulet of Yendor, don't climb
     this.nextFloorShared = this.departingTogether(this.acting);
     this.saveActive(); // persist the dungeon/plane level being left (no descent back, but keep its slot live)
     this.activeKey = `plane:${n}`; // the live floor is now this plane — so per-actor setActive finds it
@@ -1412,7 +1412,7 @@ export class Game {
         const guard = this.adjacentFree(spot.x, spot.y);
         if (guard) { const hp = new Monster(this, HIGH_PRIEST, guard.x, guard.y); this.monsters.push(hp); }
       }
-      this.log.add("Three altars stand upon the Genesis Plane, each warded by an Astral High Minister (@). Offer the JAM on the one that shares your ethos.", "bad");
+      this.log.add("Three altars stand upon the Genesis Plane, each warded by an Astral High Minister (@). Offer the Amulet of Yendor on the one that shares your ethos.", "bad");
     } else {
       const s = this.level.stairs;
       this.level.tiles[s.y][s.x] = "stairsUp"; // climb higher
@@ -1430,24 +1430,24 @@ export class Game {
     // A dungeon altar announces its alignment as you step on — a cross-aligned one can be converted by sacrifice.
     if (this.level.tileAt(p.x, p.y) === "altar") {
       const ae = this.altarEthosAt(p.x, p.y, p);
-      this.log.add(`A Gavin altar aligned to ${ethosName(ae)}.${ae === p.ethos ? " Your own — offer here (O)." : " Not your alignment — sacrifice to try to convert it (O)."}`, ae === p.ethos ? "good" : "dim");
+      this.log.add(`A Marduk altar aligned to ${ethosName(ae)}.${ae === p.ethos ? " Your own — offer here (O)." : " Not your alignment — sacrifice to try to convert it (O)."}`, ae === p.ethos ? "good" : "dim");
     }
   }
 
-  // ── the Censor's hunt (Phase 12d) ──
-  /** Once the JAM is taken, THE CENSOR keeps resurrecting to chase it. Called each player turn. */
+  // ── the Warden's hunt (Phase 12d) ──
+  /** Once the Amulet of Yendor is taken, THE WARDEN keeps resurrecting to chase it. Called each player turn. */
   censorHuntTick(): void {
     if (this.over) return;
     const holder = this.allPlayers().find((q) => q.alive && q.hasJam);
     if (!holder && !this.jamStolen) return;
-    if (holder) this.setActive(holder.floorKey); // the hunt always rises on the JAM-bearer's floor
+    if (holder) this.setActive(holder.floorKey); // the hunt always rises on the Amulet of Yendor-bearer's floor
     if (this.monsters.some((m) => m.alive && m.isHunter)) return; // a hunter already stalks this level
     if (this.censorTimer > 0) { this.censorTimer--; return; }
     this.summonCensor();
     this.censorTimer = 45 + ROT.RNG.getUniformInt(0, 30); // a lull before the next rising
   }
 
-  /** Raise a resurrected Censor a few tiles from a player. */
+  /** Raise a resurrected Warden a few tiles from a player. */
   private summonCensor(): void {
     const target = this.livingPlayers().find((q) => q.hasJam) ?? this.livingPlayers()[0];
     if (!target) return;
@@ -1459,22 +1459,22 @@ export class Game {
     }
     spot = spot ?? this.adjacentFree(target.x, target.y);
     if (!spot) return;
-    const m = new Monster(this, CENSOR, spot.x, spot.y);
+    const m = new Monster(this, WARDEN, spot.x, spot.y);
     m.isHunter = true;
     this.monsters.push(m);
     this.scheduler.add(m, true);
-    this.log.add("The air curdles and tears — THE CENSOR rises again. It will not let the JAM leave.", "bad", "both");
+    this.log.add("The air curdles and tears — THE WARDEN rises again. It will not let the Amulet of Yendor leave.", "bad", "both");
     this.draw();
   }
 
-  /** The hunting Censor snatches the JAM and level-blinks away — reclaim it by slaying it. */
-  censorSteal(censor: Monster, holder: Player): void {
+  /** The hunting Warden snatches the Amulet of Yendor and level-blinks away — reclaim it by slaying it. */
+  censorSteal(warden: Monster, holder: Player): void {
     holder.hasJam = false;
     this.jamStolen = true;
-    this.log.add("THE CENSOR's hand closes on the JAM — it BLINKS away with your prize! Hunt it down.", "bad", "both");
+    this.log.add("THE WARDEN's hand closes on the Amulet of Yendor — it BLINKS away with your prize! Hunt it down.", "bad", "both");
     for (let i = 0; i < 60; i++) {
       const c = this.level.randomFloor();
-      if (this.level.tileAt(c.x, c.y) === "floor" && !this.monsterAt(c.x, c.y) && !this.playerAt(c.x, c.y) && Math.max(Math.abs(c.x - holder.x), Math.abs(c.y - holder.y)) >= 6) { censor.x = c.x; censor.y = c.y; break; }
+      if (this.level.tileAt(c.x, c.y) === "floor" && !this.monsterAt(c.x, c.y) && !this.playerAt(c.x, c.y) && Math.max(Math.abs(c.x - holder.x), Math.abs(c.y - holder.y)) >= 6) { warden.x = c.x; warden.y = c.y; break; }
     }
     this.draw();
   }
@@ -1500,23 +1500,23 @@ export class Game {
     if (this.plane > 0) return this.plane === PLANES.length ? "genesis" : "planes";
     if (this.inQuest || this.currentChain) return "elsewhere";
     const d = this.localPlayer.depth;
-    if (this.level?.kind === "bigroom") return "mempool";
+    if (this.level?.kind === "bigroom") return "greathall";
     if (d >= GEHENNOM_BOTTOM) return "sanctum";
     if (d > MAX_DEPTH) return "gehennom";
-    if (d === MAX_DEPTH) return "relay";
+    if (d === MAX_DEPTH) return "dungeon";
     if (d >= 9) return "wildlands";
-    if (d >= 5) return "parachain";
+    if (d >= 5) return "deeps";
     return "legacy";
   }
 
-  /** 0..1 danger for the music tension layer: adjacency, bosses, and the Censor hunt. */
+  /** 0..1 danger for the music tension layer: adjacency, bosses, and the Warden hunt. */
   private dangerLevel(): number {
     let danger = 0;
     const near = (m: Monster) => this.playersHere().some((p) => Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) <= 1); // this floor's adventurers
     for (const m of this.monsters) {
       if (!m.alive || m.peaceful) continue;
       if (near(m)) danger = Math.max(danger, 0.55);
-      if ((m.def.boss || m.isHunter || m.def === MOLOCH || m.def === CENSOR) && this.level.isVisible(m.x, m.y)) danger = Math.max(danger, 0.9);
+      if ((m.def.boss || m.isHunter || m.def === MOLOCH || m.def === WARDEN) && this.level.isVisible(m.x, m.y)) danger = Math.max(danger, 0.9);
     }
     if (this.jamStolen) danger = Math.max(danger, 0.5);
     return danger;
@@ -1527,7 +1527,7 @@ export class Game {
   private musicContext(): MusicContext {
     const p = this.localPlayer; // each client's music tracks its OWN adventurer
     const vis = (m: Monster) => this.level.isVisible(m.x, m.y);
-    const isBoss = (m: Monster) => m.def.boss || m.isHunter || m.def === MOLOCH || m.def === CENSOR;
+    const isBoss = (m: Monster) => m.def.boss || m.isHunter || m.def === MOLOCH || m.def === WARDEN;
     // peril: low HP, afflictions, being hunted — folded into `danger` so the tension cues react to it
     let peril = 0;
     if (p.hp < p.maxHp * 0.4) peril = Math.max(peril, 1 - p.hp / (p.maxHp * 0.4));
@@ -1577,22 +1577,22 @@ export class Game {
 
   /** Which level layout a depth uses — the descent rotates through layout zones for variety. */
   private levelKindFor(depth: number): LevelKind {
-    if (depth === MEMPOOL_DEPTH) return "bigroom";                  // the Mempool (d13)
+    if (depth === MEMPOOL_DEPTH) return "bigroom";                  // the Great Hall (d13)
     if (depth === GEHENNOM_BOTTOM) return "concentric";             // Moloch's ringed arena (d48)
     if (depth > MAX_DEPTH && depth < GEHENNOM_BOTTOM) return depth === 36 ? "fortress" : "maze"; // the Council Fort mid-Gehennom (d36), else mazes
-    switch (depth) {                                                // the relay descent (d1–25)
+    switch (depth) {                                                // the dungeon descent (d1–25)
       case 4: case 17: return "grid";        // rollup metropolises
       case 6: case 10: case 21: return "cave"; // organic caverns (the Mines branch off d5)
-      case 8: case 19: case 23: return "labyrinth"; // winding labyrinths (the Kusama deeps)
-      case 15: return "swamp";               // the Liquidity Pools — open water + islands
-      default: return "normal";              // the rest, incl. d25 (foot of the relay)
+      case 8: case 19: case 23: return "labyrinth"; // winding labyrinths (the the Wilds deeps)
+      case 15: return "swamp";               // the the Sunken Pools — open water + islands
+      default: return "normal";              // the rest, incl. d25 (foot of the dungeon)
     }
   }
 
   private placeJamAndBoss(): void {
     const s = this.level.stairs;
     this.level.tiles[s.y][s.x] = "floor"; // the bottom — no stairs deeper
-    this.level.items.push({ x: s.x, y: s.y, type: JAM });
+    this.level.items.push({ x: s.x, y: s.y, type: Amulet });
     const offs = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]];
     for (const [dx, dy] of offs) {
       const x = s.x + dx, y = s.y + dy;
@@ -1603,7 +1603,7 @@ export class Game {
     }
   }
 
-  /** Depth 8 before the Invocation: the down-stairs are replaced by the vibrating square, the Censor on guard. */
+  /** Depth 8 before the Invocation: the down-stairs are replaced by the vibrating square, the Warden on guard. */
   private placeVibratingSquare(): void {
     const s = this.level.stairs;
     this.level.tiles[s.y][s.x] = "vibrating";
@@ -1611,7 +1611,7 @@ export class Game {
     for (const [dx, dy] of offs) {
       const x = s.x + dx, y = s.y + dy;
       if (this.level.isPassable(x, y) && !this.monsterAt(x, y) && !(x === this.player.x && y === this.player.y)) {
-        this.monsters.push(new Monster(this, CENSOR, x, y));
+        this.monsters.push(new Monster(this, WARDEN, x, y));
         break;
       }
     }
@@ -1631,7 +1631,7 @@ export class Game {
 
   /** `#invoke` (I) — perform the Invocation at the vibrating square to open Gehennom. */
   invoke(p: Player): boolean {
-    if (this.level.tileAt(p.x, p.y) !== "vibrating") { this.log.add("The ground here is silent. Seek the vibrating square (≈) at the foot of the relay.", "dim"); return false; }
+    if (this.level.tileAt(p.x, p.y) !== "vibrating") { this.log.add("The ground here is silent. Seek the vibrating square (≈) at the foot of the dungeon.", "dim"); return false; }
     if (this.gehennomOpen) { this.log.add("The gate already yawns open below.", "dim"); return false; }
     const need = ["bell", "candelabrum", "graybook"];
     const have = (id: string) => p.inventory.items.some((it) => it.type.id === id);
@@ -1641,7 +1641,7 @@ export class Game {
     this.level.tiles[p.y][p.x] = "stairsDown";
     this.log.add("You ring the Bell of Finality — one note, and it never decays.", "sys");
     this.log.add("You light the Genesis Candelabrum — seven flames of the first block flare.", "sys");
-    this.log.add("You read aloud from the Gray Paper. The grammar of consensus unwrites itself.", "sys");
+    this.log.add("You read aloud from the Gray Paper. The grammar of accord unwrites itself.", "sys");
     this.log.add("✦ The vibrating square shatters into a stair spiralling down. GEHENNOM — the Dark Forest — is open. (> to descend)", "good");
     this.recomputeFOV(); this.draw();
     return true;
@@ -1743,12 +1743,12 @@ export class Game {
     }
   }
 
-  /** A shrine: an altar tended by a peaceful Gavin priest (a Gavin shrine). */
+  /** A shrine: an altar tended by a peaceful Marduk priest (a Marduk shrine). */
   private makeTemple(center: { x: number; y: number }, open: { x: number; y: number }[]): void {
     this.level.tiles[center.y][center.x] = "altar";
     const guard = open.find((p) => !(p.x === center.x && p.y === center.y)) ?? open[0];
     if (guard) { const m = new Monster(this, PRIEST, guard.x, guard.y); m.peaceful = true; this.monsters.push(m); }
-    this.log.add("A hush settles over this floor — a shrine to Gavin, its altar (_) tended by a priest. (P to pray, O to offer)", "good");
+    this.log.add("A hush settles over this floor — a shrine to Marduk, its altar (_) tended by a priest. (P to pray, O to offer)", "good");
   }
 
   /** A morgue: rotting corpses of dead chains, stalked by wraiths and the deep undead. */
@@ -1804,7 +1804,7 @@ export class Game {
     if (n) this.log.add("A cold, mineral stink seeps through the wall — a nest of freezers, coiled among their own petrifying corpses.", "bad");
   }
 
-  /** An anthole: a warren packed with breeding vermin (sybil rats) — ignore the cluster and you're swarmed. */
+  /** An anthole: a warren packed with breeding vermin (phantom rats) — ignore the cluster and you're swarmed. */
   private makeAnthole(open: { x: number; y: number }[]): void {
     const ant = MONSTERS.find((m) => m.name === "a sewer rat") ?? this.pickMonster(this.player.depth);
     let n = 0;
@@ -1825,7 +1825,7 @@ export class Game {
     if (n) this.log.add("A frantic buzzing leaks through the wall — a hive of bots, dripping with healing royal jelly.", "bad");
   }
 
-  /** A leprechaun hall: airdrop farmers hoarding heaped gold (grab it before they swipe it). */
+  /** A leprechaun hall: coin-hoarder hoarding heaped gold (grab it before they swipe it). */
   private makeLeprechaunHall(open: { x: number; y: number }[]): void {
     const lep = MONSTERS.find((m) => m.stealsGold) ?? this.pickMonster(this.player.depth);
     let n = 0;
@@ -1834,7 +1834,7 @@ export class Game {
       if (r < 0.45) { this.monsters.push(new Monster(this, lep, p.x, p.y)); n++; }
       else if (r < 0.78 && !this.level.itemAt(p.x, p.y)) this.level.items.push({ x: p.x, y: p.y, type: GOLD, coins: ROT.RNG.getUniformInt(20, 60) });
     }
-    if (n) this.log.add("Coins glint and tiny feet scatter — a leprechaun hall of airdrop farmers, hoarding gold.", "good");
+    if (n) this.log.add("Coins glint and tiny feet scatter — a leprechaun hall of coin-hoarder, hoarding gold.", "good");
   }
 
   /** A swamp: brackish bog pools (impassable water) churning with eels and serpents, a prize in the muck. */
@@ -1850,7 +1850,7 @@ export class Game {
       else if (r < 0.62 && !this.level.itemAt(p.x, p.y)) this.level.items.push({ x: p.x, y: p.y, type: pickItemType(this.player.depth), buc: rollBuc() });
     }
     if (beasts) this.log.add("A dank, brackish reek wells through the wall — a drowned swamp, its bog pools (}) churning with eels and serpents.", "bad");
-    // A consensus bridge across a bog pool, worked by a lever beside it (dbridge.c).
+    // A drawbridge across a bog pool, worked by a lever beside it (dbridge.c).
     const pool = open.find((p) => this.level.tileAt(p.x, p.y) === "water");
     if (pool) {
       const leverSpot = open.find((q) => this.level.tileAt(q.x, q.y) === "floor" && Math.max(Math.abs(q.x - pool.x), Math.abs(q.y - pool.y)) <= 2 && !this.level.itemAt(q.x, q.y));
@@ -1858,12 +1858,12 @@ export class Game {
         this.level.tiles[pool.y][pool.x] = "drawbridge";
         this.level.tiles[leverSpot.y][leverSpot.x] = "lever";
         this.level.drawbridges.push({ x: pool.x, y: pool.y });
-        this.log.add("A consensus bridge (=) spans the muck, a lever (|) beside it. (walk into the lever to raise or lower it)", "sys");
+        this.log.add("A drawbridge (=) spans the muck, a lever (|) beside it. (walk into the lever to raise or lower it)", "sys");
       }
     }
   }
 
-  /** Walk into a lever: raise/lower every consensus bridge on the floor. A raising span crushes whoever stands on it. */
+  /** Walk into a lever: raise/lower every drawbridge on the floor. A raising span crushes whoever stands on it. */
   pullLever(p: Player): boolean {
     if (this.level.drawbridges.length === 0) { this.log.add("You throw the lever, but it works nothing here.", "dim"); return true; }
     let raised = 0, lowered = 0;
@@ -1878,12 +1878,12 @@ export class Game {
       } else if (t === "drawbridgeUp") { this.level.tiles[b.y][b.x] = "drawbridge"; lowered++; }
     }
     this.recomputeFOV();
-    this.log.add(raised ? `The consensus bridge groans upward — the span is raised.` : `The consensus bridge settles down — the span is lowered.`, "sys");
+    this.log.add(raised ? `The drawbridge groans upward — the span is raised.` : `The drawbridge settles down — the span is lowered.`, "sys");
     this.draw();
     return true;
   }
 
-  /** A zoo: a room packed with monsters guarding scattered loot (an airdrop trap room). */
+  /** A zoo: a room packed with monsters guarding scattered loot (an coin trap room). */
   private makeZoo(open: { x: number; y: number }[]): void {
     let beasts = 0;
     for (const p of open) {
@@ -1973,7 +1973,7 @@ export class Game {
     if (ally) { this.attack(p, ally); return true; }
     const foe = this.monsterAt(nx, ny);
     if (foe) {
-      if (foe.def.keeper && foe.peaceful) { foe.peaceful = false; foe.fg = "#ff5030"; this.log.add("You kick the Marketmaker — \"Assault!\" It turns lethal.", "bad"); }
+      if (foe.def.keeper && foe.peaceful) { foe.peaceful = false; foe.fg = "#ff5030"; this.log.add("You kick the Shopkeeper — \"Assault!\" It turns lethal.", "bad"); }
       const dmg = Math.max(1, ROT.RNG.getUniformInt(1, 3) + abilityMod(p.str));
       foe.hp -= dmg;
       this.log.add(`${this.sub(p)} ${this.verbS(p, "kick")} ${foe.name} for ${dmg}.`, "good");
@@ -2013,7 +2013,7 @@ export class Game {
     if (r < 0.10 && worthy && !w.relic) {
       w.relic = true; w.buc = "blessed"; w.bucKnown = true; w.enchant = Math.max(3, (w.enchant ?? 0) + 1);
       p.applyWeapon();
-      this.log.add(`✦ The faucet erupts in light — a lawful current floods your ${name}! It is now Polkadot's Edge, +${w.enchant} blessed.`, "good");
+      this.log.add(`✦ The faucet erupts in light — a lawful current floods your ${name}! It is now Excalibur, +${w.enchant} blessed.`, "good");
     } else if (r < 0.32) { w.buc = "blessed"; w.bucKnown = true; this.log.add(`A clear glow washes your ${name} — it feels blessed.`, "good"); }
     else if (r < 0.46) { w.erosion = w.proofed ? 0 : Math.min(3, (w.erosion ?? 0) + 1); this.log.add(`The water is corrosive — your ${name} ${w.proofed ? "shrugs it off" : "corrodes"}.`, w.proofed ? "dim" : "bad"); }
     else if (r < 0.60) { const spot = this.adjacentFree(p.x, p.y); if (spot) { const m = new Monster(this, MONSTERS[0], spot.x, spot.y); this.monsters.push(m); this.scheduler.add(m, true); } this.log.add("A faucet bot sloshes out at the disturbance!", "bad"); }
@@ -2038,7 +2038,7 @@ export class Game {
       target.buc = "cursed"; target.bucKnown = true;
       this.log.add(`You dip ${tname} into the unholy water — a black flicker crawls over it. It is now cursed.`, "bad");
     } else {
-      this.log.add(`You dip ${tname} into the testnet water. It gets wet. Nothing more.`, "dim");
+      this.log.add(`You dip ${tname} into the  water. It gets wet. Nothing more.`, "dim");
     }
     return true;
   }
@@ -2068,14 +2068,14 @@ export class Game {
     return true; // committing to the stance costs the turn
   }
 
-  /** `#ride` (M) — mount or dismount the nominator steed (adjacent or underfoot). */
+  /** `#ride` (M) — mount or dismount the hound steed (adjacent or underfoot). */
   toggleRide(p: Player): boolean {
     const steed = this.pet;
-    if (p.riding) { p.riding = false; this.log.add(`${this.sub(p)} ${this.verbS(p, "dismount")} the nominator.`, "dim"); return true; }
-    if (!steed || !steed.alive) { this.log.add("You have no steed to ride. (a tamed nominator)", "dim"); return false; }
+    if (p.riding) { p.riding = false; this.log.add(`${this.sub(p)} ${this.verbS(p, "dismount")} the hound.`, "dim"); return true; }
+    if (!steed || !steed.alive) { this.log.add("You have no steed to ride. (a tamed hound)", "dim"); return false; }
     if (Math.max(Math.abs(steed.x - p.x), Math.abs(steed.y - p.y)) > 1) { this.log.add("Your steed is too far — step beside it first.", "dim"); return false; }
     p.riding = true; steed.x = p.x; steed.y = p.y;
-    this.log.add(`${this.sub(p)} ${this.verbS(p, "mount")} the nominator — you ride as one, swift and sure.`, "good");
+    this.log.add(`${this.sub(p)} ${this.verbS(p, "mount")} the hound — you ride as one, swift and sure.`, "good");
     return true;
   }
 
@@ -2111,7 +2111,7 @@ export class Game {
   }
 
   private trapName(k: TrapKind): string {
-    return ({ gas: "gas-fee trap", slash: "slashing trap", reorg: "reorg trap", fork: "fork trap", trapdoor: "trapdoor",
+    return ({ gas: "gas trap", slash: "slashing trap", reorg: "reorg trap", fork: "fork trap", trapdoor: "trapdoor",
       web: "honeypot web", dart: "front-running dart trap", antimagic: "anti-magic field", statue: "statue trap",
       fire: "fire trap", rust: "rust trap", bear: "bear trap", landmine: "land mine", rockfall: "falling-rock trap", magic: "magic trap",
       squeak: "squeaky board", spikepit: "spiked pit", boulder: "rolling-boulder trap", leveltp: "level-teleport trap" } as Record<TrapKind, string>)[k];
@@ -2163,7 +2163,7 @@ export class Game {
     return true;
   }
 
-  /** The Marketmaker appraises + buys every gem you carry: real ones for their value, glass for a pittance.
+  /** The Shopkeeper appraises + buys every gem you carry: real ones for their value, glass for a pittance.
    *  Returns the appraisal line (and pays gold), or null if you carry no gems. */
   private sellGems(p: Player): string | null {
     const gems = p.inventory.items.filter((it) => it.type.kind === "gem");
@@ -2180,7 +2180,7 @@ export class Game {
     const parts: string[] = [];
     if (real.length) parts.push(`${real.join(", ")} — genuine`);
     if (glass) parts.push(`${glass} worthless ${glass > 1 ? "shards" : "shard"} of glass`);
-    return `The Marketmaker appraises your stones (${parts.join("; ")}) and slides ${gold} gold across. (${p.gold} total)`;
+    return `The Shopkeeper appraises your stones (${parts.join("; ")}) and slides ${gold} gold across. (${p.gold} total)`;
   }
 
   /** The Oracle's consultation: pay gold for guidance. A major (rich purse) buys a real hint; a minor
@@ -2199,7 +2199,7 @@ export class Game {
     return `The Oracle eyes your thin purse. "Return with coin, seeker." Then, unbidden: "${ROT.RNG.getItem(ORACLE_RUMORS)!}"`;
   }
 
-  /** A shop service: the Marketmaker appraises (identifies) one unknown item in your pack for a fee. */
+  /** A shop service: the Shopkeeper appraises (identifies) one unknown item in your pack for a fee. */
   private shopIdentify(p: Player): string | null {
     const target = p.inventory.items.find((it) => !this.ident.isKnown(it.type) || !it.bucKnown);
     if (!target) return null;
@@ -2207,11 +2207,11 @@ export class Game {
     if (p.gold < fee) return `"An appraisal's ${fee} gold, anon — and your purse won't cover it. Come back with coin."`;
     p.gold -= fee; this.breakConduct(p, "bankless");
     this.ident.learn(target.type); target.bucKnown = true;
-    return `The Marketmaker turns ${this.ident.name(target.type)} over: "That's ${target.buc ? target.buc + " " : ""}${target.type.name}. ${fee} gold — pleasure doing business." (${p.gold} left)`;
+    return `The Shopkeeper turns ${this.ident.name(target.type)} over: "That's ${target.buc ? target.buc + " " : ""}${target.type.name}. ${fee} gold — pleasure doing business." (${p.gold} left)`;
   }
 
   /** `#chat` a temple priest: a gold donation buys divine protection (a permanent evasion bonus) + favor.
-   *  A full offering (≈400×epoch) grants +2; a partial one +1; a stingy coin is rebuffed. Capped by epoch. */
+   *  A full offering (≈400×level) grants +2; a partial one +1; a stingy coin is rebuffed. Capped by level. */
   private priestDonate(p: Player): string {
     const full = 400 * p.level;
     if (p.gold < 50) return "The priest surveys your empty purse. \"Alms feed the temple, seeker — return with coin.\"";
@@ -2243,16 +2243,16 @@ export class Game {
     } else if (d.boss) {
       line = ROT.RNG.getItem([
         `${cap(m.name)} regards you coldly: \"You are an unconfirmed transaction. I am finality.\"`,
-        `${cap(m.name)} sneers: \"Turn back, validator. The JAM is not for the likes of you.\"`,
+        `${cap(m.name)} sneers: \"Turn back, sentinel. The Amulet of Yendor is not for the likes of you.\"`,
       ])!;
     } else if (d.priest) {
       line = m.peaceful ? this.priestDonate(this.acting) : "The priest, blood on the altar, thunders: \"You will be judged, defiler!\"";
     } else if (d.name.includes("oracle")) {
       line = "The oracle intones: " + ROT.RNG.getItem([
-        "\"Seek the vibrating square where consensus trembles.\"",
+        "\"Seek the vibrating square where accord trembles.\"",
         "\"Three relics gate the Genesis: the Sigil, the Seal, and the Spec.\"",
         "\"A blessed audit proofs your armour against the rust of forks.\"",
-        "\"The Censor fears only a finalized block — and a sharp blade.\"",
+        "\"The Warden fears only a finalized block — and a sharp blade.\"",
       ])!;
     } else if (m.peaceful) {
       line = ROT.RNG.getItem([
@@ -2260,13 +2260,13 @@ export class Game {
         `${cap(m.name)} murmurs, \"We nominate the same cause, friend.\"`,
       ])!;
     } else if (d.cowardly) {
-      line = `${cap(m.name)} whimpers, \"I'm just exit liquidity, please — don't!\"`;
+      line = `${cap(m.name)} whimpers, \"I'm just exit , please — don't!\"`;
     } else if (d.steals) {
       line = `${cap(m.name)} grins, eyeing your pack. \"Nice keys. Be a shame if they got... rugged.\"`;
     } else {
       line = ROT.RNG.getItem([
         `${cap(m.name)} snarls and pays you no heed.`,
-        `${cap(m.name)} hisses something in raw bytecode.`,
+        `${cap(m.name)} hisses something in raw the old tongue.`,
         `${cap(m.name)} bares its teeth — no words, only malice.`,
       ])!;
     }
@@ -2280,20 +2280,20 @@ export class Game {
       "#": "a wall (or, just maybe, a hidden door — search it)",
       "·": "ordinary floor", ".": "ordinary floor",
       "'": "an open doorway",
-      "+": "a closed door — or a spellbook (a runtime to study)",
-      ">": "a staircase down toward the JAM (a copper > is a branch-stair into the Mines)", "<": "a staircase up",
-      "_": "an altar — offer a corpse (O) here for favor", "Ω": "an XCM portal to a parachain realm",
-      "{": "a testnet faucet — q to quaff it", "\\": "the Sudo Throne — s to sit on it",
+      "+": "a closed door — or a spellbook (a tome to study)",
+      ">": "a staircase down toward the Amulet of Yendor (a copper > is a branch-stair into the Mines)", "<": "a staircase up",
+      "_": "an altar — offer a corpse (O) here for favor", "Ω": "an the planar gate portal to a dungeon realm",
+      "{": "a fountain — q to quaff it", "\\": "the throne — s to sit on it",
       "≈": "the vibrating square — perform the Invocation (I) here with the three relics",
-      "}": "open water — impassable; cross by a causeway or an XCM jump",
+      "}": "open water — impassable; cross by a causeway or an the planar gate jump",
       "0": "a boulder — walk into it to shove it", "§": "a warding engraving",
       ")": "a weapon", "[": "a piece of armor", "(": "a tool, or a chest",
       "!": "a potion", "?": "a scroll", "=": "a ring", "/": "a wand",
       "\"": "an amulet — W to wear it, T to take it off",
-      "%": "food — or a corpse you can eat (e)", "*": "the JAM, a luckstone, or a gem",
+      "%": "food — or a corpse you can eat (e)", "*": "the Amulet of Yendor, a luckstone, or a gem",
       "$": "a pile of gold — step on it to scoop it up",
     };
-    const mons = [...MONSTERS, SHOPKEEPER, PRIEST, COUNCIL_GUARD, ORACLE, HONEYPOT, CENSOR, MOLOCH, ...Object.values(MINIBOSSES), ...BRANCHES.flatMap((b) => (b.bossDef ? [b.bossDef] : []))].find((m) => m.ch === key);
+    const mons = [...MONSTERS, SHOPKEEPER, PRIEST, COUNCIL_GUARD, ORACLE, HONEYPOT, WARDEN, MOLOCH, ...Object.values(MINIBOSSES), ...BRANCHES.flatMap((b) => (b.bossDef ? [b.bossDef] : []))].find((m) => m.ch === key);
     const parts: string[] = [];
     if (mons) parts.push(mons.name);
     if (feat[key]) parts.push(feat[key]);
@@ -2361,20 +2361,20 @@ export class Game {
     const names: Partial<Record<TileType, string>> = {
       wall: "a wall", floor: "bare floor", door: "an open doorway", doorClosed: "a closed door",
       doorLocked: "a locked door", doorHidden: "a wall", stairsDown: "a staircase down",
-      stairsUp: "a staircase up", altar: "an altar", portal: "an XCM portal", faucet: "a faucet",
-      throne: "the Sudo Throne", vibrating: "the vibrating square — invoke (I) the ritual here",
-      water: "open water — too deep to wade; find a causeway or jump (XCM)",
-      branchDown: "a branch-stair into the Storage Caverns — > to descend",
+      stairsUp: "a staircase up", altar: "an altar", portal: "an the planar gate portal", faucet: "a faucet",
+      throne: "the throne", vibrating: "the vibrating square — invoke (I) the ritual here",
+      water: "open water — too deep to wade; find a causeway or jump (the planar gate)",
+      branchDown: "a branch-stair into the Gnomish Mines — > to descend",
       pit: "a chasm — impassable; shove a boulder into it to bridge across",
-      drawbridge: "a consensus bridge, lowered — walk across",
-      drawbridgeUp: "a consensus bridge, raised — impassable; throw its lever to lower it",
+      drawbridge: "a drawbridge, lowered — walk across",
+      drawbridgeUp: "a drawbridge, raised — impassable; throw its lever to lower it",
       lever: "a lever — walk into it to raise or lower the bridge",
       sink: "a burn sink",
     };
     this.log.add(`You see ${names[t!] ?? "nothing notable"}.`, "dim");
   }
 
-  /** Kick a locked door — Stake-weight (STR) decides if it bursts; sometimes you stub your foot. */
+  /** Kick a locked door — Brawn (STR) decides if it bursts; sometimes you stub your foot. */
   kickDoor(p: Player, nx: number, ny: number): boolean {
     const chance = Math.max(0.15, 0.3 + abilityMod(p.str) * 0.08);
     if (ROT.RNG.getUniform() < chance) {
@@ -2390,13 +2390,13 @@ export class Game {
     return true;
   }
 
-  /** Quaff from a testnet faucet underfoot — a random boon or bane. */
+  /** Quaff from a fountain underfoot — a random boon or bane. */
   quaffFaucet(p: Player): boolean {
     const r = ROT.RNG.getUniform();
-    if (r < 0.30) { const h = ROT.RNG.getUniformInt(4, 10); p.hp = Math.min(p.maxHp, p.hp + h); this.log.add(`Cool testnet water — refreshing. (+${h} HP)`, "good"); }
+    if (r < 0.30) { const h = ROT.RNG.getUniformInt(4, 10); p.hp = Math.min(p.maxHp, p.hp + h); this.log.add(`Cool  water — refreshing. (+${h} HP)`, "good"); }
     else if (r < 0.50) { const spot = this.adjacentFree(p.x, p.y); if (spot) { const m = new Monster(this, MONSTERS[0], spot.x, spot.y); this.monsters.push(m); this.scheduler.add(m, true); } this.log.add("A faucet bot sloshes out of the pipes!", "bad"); }
     else if (r < 0.65) { this.log.add("The water is tainted!", "bad"); this.applyStatus(p, "poison"); }
-    else if (r < 0.80) { if (!this.level.itemAt(p.x, p.y)) { this.level.items.push({ x: p.x, y: p.y, type: itemById("hodlstone")!, buc: rollBuc() }); this.log.add("You fish a HODL stone from the basin!", "good"); } else this.log.add("The water tastes of nothing.", "dim"); }
+    else if (r < 0.80) { if (!this.level.itemAt(p.x, p.y)) { this.level.items.push({ x: p.x, y: p.y, type: itemById("hodlstone")!, buc: rollBuc() }); this.log.add("You fish a luckstone from the basin!", "good"); } else this.log.add("The water tastes of nothing.", "dim"); }
     else if (r < 0.90) { this.level.tiles[p.y][p.x] = "floor"; this.log.add("The faucet sputters and runs dry.", "dim"); }
     else this.log.add("You sip. Nothing happens.", "dim");
     if (p.hp <= 0) this.killPlayer(p);
@@ -2430,12 +2430,12 @@ export class Game {
     return true;
   }
 
-  /** Sit the Sudo Throne underfoot — raw privilege, for better or worse. */
+  /** Sit the throne underfoot — raw privilege, for better or worse. */
   sitThrone(p: Player): boolean {
     this.music.sfx("throne");
     this.breakConduct(p, "atheist"); // claiming a throne ends Self-custodian
     const r = ROT.RNG.getUniform();
-    if (r < 0.25) { p.hp = p.maxHp; p.luck = Math.min(13, p.luck + 1); this.log.add(`${this.sub(p)} ${this.verbS(p, "sit")} the Sudo Throne — power flows. (full HP, Fortune up)`, "good"); }
+    if (r < 0.25) { p.hp = p.maxHp; p.luck = Math.min(13, p.luck + 1); this.log.add(`${this.sub(p)} ${this.verbS(p, "sit")} the throne — power flows. (full HP, Fortune up)`, "good"); }
     else if (r < 0.40) { const eq = [p.weapon, ...p.wornArmor, p.ring].filter((x): x is Item => !!x && x.buc !== "cursed"); if (eq.length) { const it = ROT.RNG.getItem(eq)!; it.buc = "cursed"; it.bucKnown = true; p.recomputeAC(); p.applyWeapon(); this.log.add(`A surge of raw sudo — your ${this.ident.name(it.type)} is cursed!`, "bad"); } else this.log.add("A jolt of sudo finds no purchase.", "dim"); }
     else if (r < 0.55) { let pos = this.level.randomFloor(), t = 0; while (t < 40 && (this.monsterAt(pos.x, pos.y) || this.level.tileAt(pos.x, pos.y) === "stairsDown")) { pos = this.level.randomFloor(); t++; } p.x = pos.x; p.y = pos.y; this.recomputeFOV(); this.log.add("The throne flings you across the level!", "bad"); }
     else if (r < 0.70) { for (const it of p.inventory.items) this.ident.learn(it.type); this.log.add("Privileged insight — your pack is identified.", "sys"); }
@@ -2458,16 +2458,16 @@ export class Game {
     if (p.lycanthrope) { p.lycanthrope = null; if (p.polyForm) this.revertPoly(p, true); this.log.add("The wildness is purged — you are wholly yourself again.", "good"); }
     if (p.stoning > 0 || p.illness > 0) { p.stoning = 0; p.illness = 0; this.log.add("The petrifying chill / the bad block lifts.", "good"); }
     if (p.blind > 0) { p.blind = 0; this.recomputeFOV(); }
-    if (p.luck < 0) { p.luck = 0; this.log.add("Gavin steadies your fortune.", "good"); }
-    this.log.add("Gavin, the Architect, hears you. You are made whole.", "good");
-    // Gavin lifts the curses binding your worn gear.
+    if (p.luck < 0) { p.luck = 0; this.log.add("Marduk steadies your fortune.", "good"); }
+    this.log.add("Marduk, the Architect, hears you. You are made whole.", "good");
+    // Marduk lifts the curses binding your worn gear.
     const bound = [p.weapon, ...p.wornArmor, p.ring].filter((it): it is Item => !!it && it.buc === "cursed");
     if (bound.length) {
       for (const it of bound) { it.buc = "uncursed"; it.bucKnown = true; }
       p.applyWeapon(); p.recomputeAC();
       this.log.add("Welds loosen — the curses on your gear are lifted.", "good");
     }
-    // Gavin also burnishes away rust and corrosion from your worn gear.
+    // Marduk also burnishes away rust and corrosion from your worn gear.
     let repaired = 0;
     for (const it of [p.weapon, ...p.wornArmor].filter((x): x is Item => !!x)) if (it.erosion) { it.erosion = 0; repaired++; }
     if (repaired) { p.recomputeAC(); p.applyWeapon(); this.log.add("Rust and corrosion flake away — your gear is restored.", "good"); }
@@ -2480,9 +2480,9 @@ export class Game {
     this.draw();
   }
 
-  /** Praying before the cooldown lapses — Gavin's displeasure: smite, curse, or sour your luck. */
+  /** Praying before the cooldown lapses — Marduk's displeasure: smite, curse, or sour your luck. */
   private wrath(p: Player): void {
-    this.log.add(`${this.sub(p)} ${this.verbS(p, "pray")} too soon — Gavin is wroth!`, "bad");
+    this.log.add(`${this.sub(p)} ${this.verbS(p, "pray")} too soon — Marduk is wroth!`, "bad");
     p.favor = Math.max(0, p.favor - 2);
     const r = ROT.RNG.getUniform();
     if (r < 0.5) {
@@ -2500,14 +2500,14 @@ export class Game {
     this.draw();
   }
 
-  /** When favored, Gavin may induct you into the Technical Fellowship — a rank, a gift, Fortune, and a boon. */
+  /** When favored, Marduk may induct you into the Technical Fellowship — a rank, a gift, Fortune, and a boon. */
   private maybeCrown(p: Player): void {
     if (p.crowned || p.favor < 8 || ROT.RNG.getUniform() > 0.5) return;
     p.crowned = true;
     // Fellowship ranks, flavored by ethos.
     const rank: Record<string, string> = { Order: "Architect", Balance: "Fellow", Chaos: "Adept" };
     p.title = rank[p.ethos] ?? "Fellow";
-    this.log.add(`✦ Gavin inducts ${p.name === "you" ? "you" : p.name} into the Technical Fellowship — rise, ${p.title}! ✦`, "sys");
+    this.log.add(`✦ Marduk inducts ${p.name === "you" ? "you" : p.name} into the Technical Fellowship — rise, ${p.title}! ✦`, "sys");
     p.luck = Math.min(13, p.luck + 3);
     p.intrinsics.add("poisonResist");
     if (!this.level.itemAt(p.x, p.y)) {
@@ -2517,7 +2517,7 @@ export class Game {
     }
   }
 
-  /** Offer a corpse (on or beside a Gavin altar) — burn it for the Architect's favor: Fortune, and rarely a gift. */
+  /** Offer a corpse (on or beside a Marduk altar) — burn it for the Architect's favor: Fortune, and rarely a gift. */
   /** A dungeon altar's alignment — lazily rolled the first time it matters (mostly co-aligned; sometimes not). */
   private altarEthosAt(x: number, y: number, p: Player): Ethos {
     const key = `${this.activeKey}@${x},${y}`;
@@ -2532,8 +2532,8 @@ export class Game {
   private setAltarEthos(x: number, y: number, e: Ethos): void { this.altarEthos.set(`${this.activeKey}@${x},${y}`, e); }
 
   offerCorpse(p: Player): boolean {
-    if (this.level.tileAt(p.x, p.y) !== "altar") { this.log.add("You can only make an offering at a Gavin altar (_).", "dim"); return false; }
-    // The Genesis Plane: offer the JAM on your aligned altar of pure intent — the true ascension.
+    if (this.level.tileAt(p.x, p.y) !== "altar") { this.log.add("You can only make an offering at a Marduk altar (_).", "dim"); return false; }
+    // The Genesis Plane: offer the Amulet of Yendor on your aligned altar of pure intent — the true ascension.
     if (this.plane === PLANES.length && p.hasJam) {
       const altar = this.genesisAltars.find((g) => g.x === p.x && g.y === p.y);
       if (altar && altar.ethos === p.ethos) {
@@ -2565,7 +2565,7 @@ export class Game {
     this.level.items = this.level.items.filter((i) => i !== fi);
     if (rotten) {
       p.luck = Math.max(-13, p.luck - 1);
-      this.log.add(`You burn the rotten ${name} on the altar — Gavin is unimpressed. (Fortune dips)`, "bad");
+      this.log.add(`You burn the rotten ${name} on the altar — Marduk is unimpressed. (Fortune dips)`, "bad");
       return true;
     }
     // Cross-aligned altar: sacrificing here is a bid to CONVERT it to your ethos — or anger its patron.
@@ -2586,13 +2586,13 @@ export class Game {
     }
     p.luck = Math.min(13, p.luck + 1);
     p.favor += 2;
-    this.log.add(`You burn the ${name} on the altar as an offering. Gavin's favor warms you. (Fortune rises)`, "good");
+    this.log.add(`You burn the ${name} on the altar as an offering. Marduk's favor warms you. (Fortune rises)`, "good");
     this.maybeCrown(p);
     const r = ROT.RNG.getUniform();
     if (r < 0.06 && !this.level.itemAt(p.x, p.y)) {
       const prize = ROT.RNG.getItem(this.gearPool(this.acting.depth))!;
       this.level.items.push({ x: p.x, y: p.y, type: prize, enchant: ROT.RNG.getUniformInt(1, 2), buc: "blessed", bucKnown: true });
-      this.log.add(`✦ Gavin bestows a gift upon the altar — a blessed ${prize.name}!`, "sys");
+      this.log.add(`✦ Marduk bestows a gift upon the altar — a blessed ${prize.name}!`, "sys");
     } else if (r < 0.22) {
       p.hp = Math.min(p.maxHp, p.hp + ROT.RNG.getUniformInt(4, 10));
       this.log.add("A wave of finality mends you.", "good");
@@ -2636,9 +2636,9 @@ export class Game {
     this.engine.lock(); // halt the scheduler — otherwise it spins on the (promise-less) monsters
     const w = winner ?? this.player;
     if (this.coop) {
-      this.log.add(`✦ ${cap(w.name)} carries the JAM into the light — the party ASCENDS together. You win! ✦`, "good");
+      this.log.add(`✦ ${cap(w.name)} carries the Amulet of Yendor into the light — the party ASCENDS together. You win! ✦`, "good");
     } else {
-      this.log.add("✦ You climb into the light, the JAM blazing in your grasp. ✦", "good");
+      this.log.add("✦ You climb into the light, the Amulet of Yendor blazing in your grasp. ✦", "good");
       this.log.add("ASCENSION! The Dungeon has met its master. You have won, Seeker.", "sys");
     }
     this.conductReport(w);
@@ -2743,7 +2743,7 @@ export class Game {
     // Striking a peaceful shopkeeper provokes it — now it fights to the death.
     if (d instanceof Monster && d.def.keeper && d.peaceful) {
       d.peaceful = false; d.fg = "#ff5030";
-      this.log.add("The Marketmaker roars \"Bad debt!\" and turns lethal.", "bad", who);
+      this.log.add("The Shopkeeper roars \"Bad debt!\" and turns lethal.", "bad", who);
     }
     // Striking a peaceful priest desecrates the shrine — it abandons restraint.
     if (d instanceof Monster && d.def.priest && d.peaceful) {
@@ -2782,7 +2782,7 @@ export class Game {
     if (a instanceof Player) { const e = this.level.engravingAt(a.x, a.y); if (e) e.life -= 3; }
     const [lo, hi] = a.attackDmg;
     let dmg = ROT.RNG.getUniformInt(lo, hi);
-    if (a instanceof Player) dmg = Math.max(1, dmg + abilityMod(a.str) + this.skillDmgBonus(a) + a.ringDmg); // Stake-weight + trained skill + a ring of damage drive the blow
+    if (a instanceof Player) dmg = Math.max(1, dmg + abilityMod(a.str) + this.skillDmgBonus(a) + a.ringDmg); // Brawn + trained skill + a ring of damage drive the blow
     d.hp -= dmg;
     if (a instanceof Player && d instanceof Monster) this.noteSkillHit(a); // a landed blow trains the weapon's skill
     // A rust/corrosion striker (rust monster, slime) may eat away a worn piece on a hit — a per-hit
@@ -2877,14 +2877,14 @@ export class Game {
     return roll + acc >= 10 + eva;
   }
 
-  /** Effective Fortune: base luck + a carried HODL stone (blessed +2 luckstone / cursed −2 loadstone). */
+  /** Effective Fortune: base luck + a carried luckstone (blessed +2 luckstone / cursed −2 loadstone). */
   luckOf(p: Player): number {
     let l = p.luck;
     for (const it of p.inventory.items) if (it.type.id === "hodlstone") l += it.buc === "blessed" ? 2 : it.buc === "cursed" ? -2 : 0;
     return Math.max(-13, Math.min(13, l));
   }
 
-  /** Luck timeout: base Fortune drifts one step toward the mean every ~250 turns — unless a HODL stone
+  /** Luck timeout: base Fortune drifts one step toward the mean every ~250 turns — unless a luckstone
    *  (luckstone) in your pack anchors it. So a lucky/unlucky streak fades if you don't hold the stone. */
   tickLuck(p: Player): void {
     if (p.luck === 0 || this.turn % 250 !== 0) return;
@@ -3174,7 +3174,7 @@ export class Game {
     this.downed.add(p);
     this.scheduler.remove(p);
     if (this.livingPlayers().length === 0) { this.gameOver(); return; }
-    this.log.add(`${cap(p.name)} falls (a dim red @)! The other can press on — or reach the body and step onto it to revive them, at the cost of an epoch.`, "bad", "both");
+    this.log.add(`${cap(p.name)} falls (a dim red @)! The other can press on — or reach the body and step onto it to revive them, at the cost of an level.`, "bad", "both");
     this.draw();
   }
 
@@ -3250,7 +3250,7 @@ export class Game {
     return it;
   }
 
-  /** An airdrop farmer grabs a fistful of the player's gold. Returns the amount taken. */
+  /** An coin-hoarder grabs a fistful of the player's gold. Returns the amount taken. */
   stealGold(target: Player): number {
     const take = Math.min(target.gold, ROT.RNG.getUniformInt(8, 25) + Math.floor(target.gold / 3));
     target.gold -= take;
@@ -3261,7 +3261,7 @@ export class Game {
   giveItem(type: ItemType, opts?: { enchant?: number; relic?: boolean; buc?: Buc; bucKnown?: boolean }): Item {
     const it = this.acting.inventory.add(type);
     if (type.kind === "wand") it.charges = type.id === "wand_wish" ? ROT.RNG.getUniformInt(1, 2) : ROT.RNG.getUniformInt(3, 6); // wishes are precious
-    if (type.id === "marker") it.charges = ROT.RNG.getUniformInt(2, 4); // a contract deployer's gas
+    if (type.id === "marker") it.charges = ROT.RNG.getUniformInt(2, 4); // a rune-scribe's kit's gas
     if (type.id === "trickbag") it.charges = ROT.RNG.getUniformInt(5, 12); // a faucet bag's stored monsters
     if (type.id === "camera") it.charges = ROT.RNG.getUniformInt(3, 6); // a snapshot camera's film
     if (type.id === "grease") it.charges = ROT.RNG.getUniformInt(3, 6); // a can of lubricant's uses
@@ -3284,7 +3284,7 @@ export class Game {
     for (let step = 0; step < 8; step++) {
       x += dx; y += dy;
       if (!this.level.isPassable(x, y)) break; // hit a wall — stops short
-      // Toss food to a nominator — it catches the morsel mid-air and grows devoted.
+      // Toss food to a hound — it catches the morsel mid-air and grows devoted.
       const pet = this.petAt(x, y);
       if (pet && t.kind === "food") {
         pet.feed(t.nutrition ?? 120, 2 + (item.buc === "blessed" ? 1 : 0));
@@ -3514,36 +3514,36 @@ export class Game {
 
   // ── spellcasting (Phase 8a) ──────────────────────────────────────────────────
   private recomputeEnergy(p: Player): void { p.maxEnergy = 5 + p.level * 2 + Math.max(0, abilityMod(p.int)) * 3; }
-  /** Throughput (INT) + epoch drive spell success; costlier spells are harder. */
+  /** Throughput (INT) + level drive spell success; costlier spells are harder. */
   private castChance(p: Player, cost: number): number {
     return Math.max(0.25, Math.min(0.97, 0.5 + abilityMod(p.int) * 0.07 + p.level * 0.02 - cost * 0.01));
   }
 
-  /** Study a runtime (spellbook) to learn its extrinsic — INT-gated, retryable. */
+  /** Study a tome (spellbook) to learn its extrinsic — INT-gated, retryable. */
   studySpellbook(book: Item): boolean {
     const sid = book.type.teaches;
     const s = sid ? spellById(sid) : undefined;
     if (!sid || !s) { this.log.add("There's nothing to study here.", "dim"); return false; }
     const p = this.acting;
-    this.breakConduct(p, "illiterate"); // studying a runtime ends Illiterate
+    this.breakConduct(p, "illiterate"); // studying a tome ends Illiterate
     if (p.spells.has(sid)) { this.log.add(`You already grok ${s.name}.`, "dim"); return true; }
     const chance = Math.max(0.2, Math.min(0.95, 0.35 + abilityMod(p.int) * 0.08 + p.level * 0.03));
     if (ROT.RNG.getUniform() < chance) {
       p.spells.add(sid);
       this.log.add(`${this.sub(p)} ${this.verbS(p, "grok")} ${s.name}. (Z to cast)`, "good");
     } else {
-      // A hard or cursed runtime can destabilise and explode as you parse it — a backfire that singes
-      // you (and may corrupt the book). INT/epoch guard against it; a cursed runtime is far more volatile.
+      // A hard or cursed tome can destabilise and explode as you parse it — a backfire that singes
+      // you (and may corrupt the book). INT/level guard against it; a cursed tome is far more volatile.
       const backfire = book.buc === "cursed" ? 0.6 : Math.max(0.08, 0.3 - abilityMod(p.int) * 0.05 - p.level * 0.02);
       if (ROT.RNG.getUniform() < backfire) {
         const d = ROT.RNG.getUniformInt(3, 8) + (s.cost ?? 0);
         p.hp -= d;
         p.confused = Math.max(p.confused, ROT.RNG.getUniformInt(2, 5));
-        this.log.add(`The runtime destabilises and explodes as you parse it — ${d} damage, and your head reels!`, "bad");
+        this.log.add(`The tome destabilises and explodes as you parse it — ${d} damage, and your head reels!`, "bad");
         if (book.buc !== "blessed" && ROT.RNG.getUniform() < 0.5) { p.inventory.remove(book); this.log.add(`${cap(this.ident.name(book.type))} is corrupted beyond repair.`, "dim"); }
         if (p.hp <= 0) { this.killPlayer(p); return true; }
       } else {
-        this.log.add(`The runtime's logic eludes ${p.name === "you" ? "you" : p.name} — study fails. Try again.`, "bad");
+        this.log.add(`The tome's logic eludes ${p.name === "you" ? "you" : p.name} — study fails. Try again.`, "bad");
       }
     }
     return true; // studying spends the turn either way
@@ -3572,7 +3572,7 @@ export class Game {
       case "heal": { const h = ROT.RNG.getUniformInt(8, 16) + Math.max(0, abilityMod(p.int)); p.hp = Math.min(p.maxHp, p.hp + h); this.log.add(`${this.sub(p)} ${this.verbS(p, "mend")} ${h} HP.`, "good"); break; }
       case "map": { this.level.revealAll(); this.log.add("A light client reveals the whole level.", "sys"); break; }
       case "sense": { p.senseTurns = Math.max(p.senseTurns, 12); this.log.add(`${this.sub(p)} ${this.verbS(p, "sense")} the minds around ${p.name === "you" ? "you" : "them"}.`, "sys"); break; }
-      case "tele": { let pos = this.level.randomFloor(), t = 0; while (t < 40 && (this.monsterAt(pos.x, pos.y) || this.level.tileAt(pos.x, pos.y) === "stairsDown")) { pos = this.level.randomFloor(); t++; } p.x = pos.x; p.y = pos.y; this.recomputeFOV(); this.log.add(`${this.sub(p)} XCM-${this.verbS(p, "jump")} across the level.`, "sys"); break; }
+      case "tele": { let pos = this.level.randomFloor(), t = 0; while (t < 40 && (this.monsterAt(pos.x, pos.y) || this.level.tileAt(pos.x, pos.y) === "stairsDown")) { pos = this.level.randomFloor(); t++; } p.x = pos.x; p.y = pos.y; this.recomputeFOV(); this.log.add(`${this.sub(p)} ${this.verbS(p, "jump")} across the level.`, "sys"); break; }
       case "haste": { p.hasteTurns = Math.max(p.hasteTurns, 20); this.scheduler.remove(p); this.scheduler.add(p, true); this.log.add(`${this.sub(p)} ${this.verbS(p, "overclock")}! (haste)`, "good"); break; }
       case "fireball": {
         this.castRay(p.x, p.y, dx, dy, 8, (e) => {
@@ -3778,14 +3778,14 @@ export class Game {
     return true;
   }
 
-  /** `a` a drum of consensus (instrument) — a martial roll; nearby foes waver and recoil. Reusable. */
+  /** `a` a drum of accord (instrument) — a martial roll; nearby foes waver and recoil. Reusable. */
   applyDrum(p: Player): boolean {
     let n = 0;
     for (const m of this.monsters) {
       if (!m.alive || m.peaceful || m.def.boss || m.def.fearless) continue;
       if (Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) <= 6) { m.frightened = Math.max(m.frightened, 5); n++; }
     }
-    this.log.add(n ? `You beat the drum of consensus — a rolling thunder rolls out; ${n} foe${n > 1 ? "s" : ""} waver.` : "You beat the drum of consensus. It echoes through empty halls.", n ? "good" : "dim");
+    this.log.add(n ? `You beat the drum of accord — a rolling thunder rolls out; ${n} foe${n > 1 ? "s" : ""} waver.` : "You beat the drum of accord. It echoes through empty halls.", n ? "good" : "dim");
     return true;
   }
 
@@ -3806,14 +3806,14 @@ export class Game {
     let moved = 0;
     pack.forEach((pet, i) => { if (spots[i]) { pet.x = spots[i].x; pet.y = spots[i].y; pet.floorKey = this.activeKey; moved++; } });
     this.recomputeFOV();
-    this.log.add(moved ? `A shrill note — your ${moved > 1 ? "retinue blinks" : "nominator blinks"} to your side.` : "You sound the recall beacon, but there's no room beside you.", moved ? "good" : "dim");
+    this.log.add(moved ? `A shrill note — your ${moved > 1 ? "retinue blinks" : "hound blinks"} to your side.` : "You sound the recall beacon, but there's no room beside you.", moved ? "good" : "dim");
     return true;
   }
 
   /** `a` a delegation cord (leash) — clip/unclip your retinue so it keeps to your side. */
   applyLeash(): boolean {
     const pack = this.livingPets();
-    if (!pack.length) { this.log.add("You've no nominator to leash.", "dim"); return false; }
+    if (!pack.length) { this.log.add("You've no hound to leash.", "dim"); return false; }
     const on = !pack[0].leashed; // toggle the whole retinue to the lead's new state
     for (const pet of pack) pet.leashed = on;
     this.log.add(on ? "You clip the delegation cord — your retinue will keep to your side now." : "You unclip the delegation cord.", "good");
@@ -3837,7 +3837,7 @@ export class Game {
     return null;
   }
 
-  // ── the nominator's belly, devotion & fetch (Pet depth) ────────────────────
+  // ── the hound's belly, devotion & fetch (Pet depth) ────────────────────
   /** A morsel the pet may eat where it stands (food scrap or a fresh, non-petrifying corpse). */
   petEdibleAt(x: number, y: number): FloorItem | null {
     const it = this.level.itemAt(x, y);
@@ -3874,7 +3874,7 @@ export class Game {
     }
   }
 
-  /** Starved past the last of its loyalty, the nominator turns feral and rounds on you. */
+  /** Starved past the last of its loyalty, the hound turns feral and rounds on you. */
   petGoesFeral(pet: Pet): void {
     if (pet.carrying) { pet.carrying.x = pet.x; pet.carrying.y = pet.y; if (!this.level.itemAt(pet.x, pet.y)) this.level.items.push(pet.carrying); pet.carrying = null; }
     const feralDef: MonsterDef = pet.def ?? { name: "a feral hound", ch: "d", fg: "#a06848", hp: pet.maxHp, dmg: pet.attackDmg, ai: "chase", minDepth: 1, weight: 0, cowardly: true };
@@ -3887,7 +3887,7 @@ export class Game {
     this.log.add(`Starved and forsaken, ${pet.name} turns feral and slinks into the dark.`, "bad", this.player);
   }
 
-  /** A tamed wild beast pads to your side as your new nominator (fills an empty pet slot). */
+  /** A tamed wild beast pads to your side as your new hound (fills an empty pet slot). */
   promoteToPet(m: Monster): void {
     const pet = new Pet(this, m.x, m.y);
     pet.adopt(m.def);
@@ -3897,7 +3897,7 @@ export class Game {
     this.pets.push(pet); // joins the retinue (the taming caller enforces the cap)
     this.scheduler.add(pet, true);
     m.hp = 0; this.monsters = this.monsters.filter((z) => z !== m); this.scheduler.remove(m);
-    this.log.add(`${cap(monName(m.def))} delegates to you — it pads to your side as your nominator.`, "good", this.player);
+    this.log.add(`${cap(monName(m.def))} delegates to you — it pads to your side as your hound.`, "good", this.player);
   }
 
   /** A loose, mundane trinket the pet may fetch — never shop wares, gold, corpses, relics, or the amulet. */
@@ -4095,7 +4095,7 @@ export class Game {
     return false;
   }
 
-  /** Show the contract-deployer (magic marker) scroll menu. */
+  /** Show the rune-deployer (magic marker) scroll menu. */
   promptWrite(): void {
     const menu = WRITABLE_SCROLLS.map((id, i) => `(${i + 1}) ${itemById(id)?.name ?? id}`).join("  ");
     this.log.add(`Deploy which scroll? ${menu}  (Esc to cancel)`, "sys");
@@ -4153,7 +4153,7 @@ export class Game {
     return true;
   }
 
-  // ── #loot: the multisig vault (bag of holding) ──
+  // ── #loot: the bag of holding (bag of holding) ──
   /** An item can't be stashed while it's equipped (worn/wielded/on-hand/welded) or unpaid (no hiding the bill). */
   private lootLocked(p: Player, it: Item): boolean {
     return !!it.unpaid || p.isWelded(it) || it === p.weapon || it === p.ring || it === p.amulet || p.wornArmor.includes(it);
@@ -4161,7 +4161,7 @@ export class Game {
 
   lootMenu(vault: Item): void {
     if (!vault.contents) vault.contents = [];
-    this.log.add(`— Multisig vault (${vault.contents.length}/${VAULT_CAP} held) —  press (i) to stash in · (o) to take out · (Esc) to close`, "sys");
+    this.log.add(`— Bag of holding (${vault.contents.length}/${VAULT_CAP} held) —  press (i) to stash in · (o) to take out · (Esc) to close`, "sys");
   }
 
   lootStashPrompt(vault: Item): void {
@@ -4208,10 +4208,10 @@ export class Game {
     return true;
   }
 
-  /** Write (deploy) a scroll with a contract deployer, spending a charge. */
+  /** Write (deploy) a scroll with a rune-scribe's kit, spending a charge. */
   writeScroll(marker: Item, idx: number): boolean {
     if (idx < 0 || idx >= WRITABLE_SCROLLS.length) { this.log.add("No such scroll on the menu.", "dim"); return false; }
-    if ((marker.charges ?? 0) <= 0) { this.log.add("The contract deployer is out of gas.", "dim"); return false; }
+    if ((marker.charges ?? 0) <= 0) { this.log.add("The rune-scribe's kit is out of gas.", "dim"); return false; }
     const p = this.acting;
     this.breakConduct(p, "illiterate"); // writing a scroll ends Illiterate
     if (p.inventory.full) { this.log.add("Your pack is full.", "bad"); return false; }
@@ -4234,7 +4234,7 @@ export class Game {
     if (fi.type.id === "jam") {
       who.hasJam = true;
       this.level.items = this.level.items.filter((i) => i !== fi);
-      this.log.add(`${who.name === "you" ? "You seize" : who.name + " seizes"} the JAM! Now ASCEND — climb back to the surface (press <).`, "good");
+      this.log.add(`${who.name === "you" ? "You seize" : who.name + " seizes"} the Amulet of Yendor! Now ASCEND — climb back to the surface (press <).`, "good");
       return true;
     }
     if (who.inventory.full) { this.log.add("Your pack is full.", "bad"); return false; }
@@ -4339,7 +4339,7 @@ export class Game {
     return this.monsters.find((m) => m.alive && m.def.keeper);
   }
 
-  /** The shop bill-ledger: once you step beyond the shop carrying unpaid wares, the Marketmaker settles
+  /** The shop bill-ledger: once you step beyond the shop carrying unpaid wares, the Shopkeeper settles
    *  the bill — it auto-pays if you can afford it, else it's theft and the keeper turns lethal. */
   checkShopBill(p: Player): void {
     if (!this.level.shop) return;
@@ -4355,10 +4355,10 @@ export class Game {
       p.gold -= total;
       for (const it of owed) it.unpaid = undefined;
       this.breakConduct(p, "bankless");
-      this.log.add(`The Marketmaker settles your bill at the door — ${total} gold for ${owed.length} ware(s). (${p.gold} left)`, "good", p);
+      this.log.add(`The Shopkeeper settles your bill at the door — ${total} gold for ${owed.length} ware(s). (${p.gold} left)`, "good", p);
     } else {
       k.peaceful = false; k.fg = "#ff5030";
-      this.log.add(`You slip out owing ${total} gold you can't cover — the Marketmaker bellows "THIEF!" and gives chase.`, "bad", p);
+      this.log.add(`You slip out owing ${total} gold you can't cover — the Shopkeeper bellows "THIEF!" and gives chase.`, "bad", p);
     }
     this.draw();
   }
@@ -4377,7 +4377,7 @@ export class Game {
       fi.price = item.unpaid;
       this.log.add(`You set ${this.ident.name(item.type)} back on the shelf — off your bill.`, "sys");
     }
-    // Gavin's altar reveals an item's sanctity when you set it down upon it.
+    // Marduk's altar reveals an item's sanctity when you set it down upon it.
     if (this.level.tileAt(x, y) === "altar") {
       // A vial of water left on the altar is consecrated into holy water.
       if (item.type.id === "water" && item.buc !== "blessed") {
@@ -4452,7 +4452,7 @@ export class Game {
           } else { p.hp = Math.min(p.maxHp, p.hp + ROT.RNG.getUniformInt(3, 6)); this.log.add("You drink the holy water. A blessed calm settles over you.", "good"); }
         } else if (buc === "cursed") {
           p.hp -= ROT.RNG.getUniformInt(3, 6); this.log.add("You drink the unholy water — it sears going down!", "bad");
-        } else this.log.add("You drink the testnet water. Refreshing, and nothing more.", "dim");
+        } else this.log.add("You drink the  water. Refreshing, and nothing more.", "dim");
         break;
       }
       case "strength": {
@@ -4484,7 +4484,7 @@ export class Game {
       }
       case "gainlevel": {
         this.gainXp(p, Math.max(1, this.xpForLevel(p.level + 1) - p.xp), false);
-        this.log.add("Raw experience floods in — you rise an epoch!", "good"); break;
+        this.log.add("Raw experience floods in — you rise an level!", "good"); break;
       }
       case "enlighten": {
         this.log.add("A full-node sync floods your mind — you see yourself clearly.", "good");
@@ -4644,7 +4644,7 @@ export class Game {
       }
     }
     // The bazaar carries gold-priced stock.
-    // Post a Marketmaker to mind the stall — peaceful while you pay, lethal if you don't.
+    // Post a Shopkeeper to mind the stall — peaceful while you pay, lethal if you don't.
     const ring = [[2, 1], [1, 2], [-2, -1], [-1, -2], [2, -1], [-2, 1], [1, -2], [-1, 2], [2, 0], [-2, 0], [0, 2], [0, -2]];
     let keeper = false;
     for (const [dx, dy] of ring) {
@@ -4659,7 +4659,7 @@ export class Game {
     }
     this.log.add(
       keeper
-        ? "A bazaar glints on this floor — the Marketmaker ($) tends it. Buy on the spot (p), or pick wares onto your bill (,) and settle at the door. Leave owing more than you hold, and it turns lethal."
+        ? "A bazaar glints on this floor — the Shopkeeper ($) tends it. Buy on the spot (p), or pick wares onto your bill (,) and settle at the door. Leave owing more than you hold, and it turns lethal."
         : "A bazaar glints somewhere on this floor — provisions for gold (stand on a ware, press p).",
       "dim",
     );
@@ -4712,12 +4712,12 @@ export class Game {
     if (mi >= 0) this.monsters.splice(mi, 1);
     this.scheduler.remove(m);
     if (m.def.weight > 0 && !m.def.keeper && !m.def.priest) this.dropGold(m.x, m.y); // ordinary foes may scatter a few coins
-    // Slay the resurrected Censor while it holds the JAM and you wrest it back.
+    // Slay the resurrected Warden while it holds the Amulet of Yendor and you wrest it back.
     if (m.isHunter && this.jamStolen) {
       this.jamStolen = false;
       const recip = this.nearestPlayer(m.x, m.y);
       recip.hasJam = true;
-      this.log.add("You tear the JAM from the Censor's ribs — it is yours again. Climb on.", "good", recip);
+      this.log.add("You tear the Amulet of Yendor from the Warden's ribs — it is yours again. Climb on.", "good", recip);
     }
     // A slain thief disgorges whatever it stole — reclaim it where it fell.
     if (m.stolen && !this.level.itemAt(m.x, m.y)) {
@@ -4725,7 +4725,7 @@ export class Game {
       this.log.add(`${cap(m.name)} drops ${this.ident.name(m.stolen.type)} as it dies.`, "good");
       m.stolen = null;
     }
-    // A slain airdrop farmer disgorges the gold it grabbed.
+    // A slain coin-hoarder disgorges the gold it grabbed.
     if (m.stoleGold > 0) {
       const spot = this.level.itemAt(m.x, m.y) ? this.adjacentFreeFloor(m.x, m.y) : { x: m.x, y: m.y };
       if (spot) this.level.items.push({ x: spot.x, y: spot.y, type: GOLD, coins: m.stoleGold });
@@ -4829,12 +4829,12 @@ export class Game {
     return this.monsters.find((m) => m.alive && m.x === x && m.y === y);
   }
 
-  /** A sybil replicates into an adjacent free cell — bounded by a per-level sybil cap and
+  /** A phantom replicates into an adjacent free cell — bounded by a per-level phantom cap and
    *  the parent's split budget (the child inherits one fewer), so it can't runaway-swarm. */
   spawnSybilNear(parent: Monster): boolean {
     if (this.monsters.length >= 30) return false;
-    const sybils = this.monsters.reduce((n, m) => n + (m.alive && m.def.splits ? 1 : 0), 0);
-    if (sybils >= 8) return false; // hard cap on the swarm size
+    const phantom = this.monsters.reduce((n, m) => n + (m.alive && m.def.splits ? 1 : 0), 0);
+    if (phantom >= 8) return false; // hard cap on the swarm size
     const offs = ROT.RNG.shuffle([[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]] as [number, number][]);
     for (const [dx, dy] of offs) {
       const nx = parent.x + dx, ny = parent.y + dy;
@@ -4864,7 +4864,7 @@ export class Game {
   private spawnTraps(): void {
     const count = 2 + Math.floor(this.player.depth * 0.8);
     const pool = Game.TRAP_TABLE.filter((t) => t.minDepth <= this.player.depth).map((t) => ({ ...t }));
-    // trapdoors drop you a floor — only on the main relay descent, never where there's no floor below
+    // trapdoors drop you a floor — only on the main dungeon descent, never where there's no floor below
     if (!this.currentChain && !this.branch && this.player.depth < MAX_DEPTH) {
       pool.push({ kind: "trapdoor", weight: 2, minDepth: 1 });
       if (this.player.maxDepthReached >= 4) pool.push({ kind: "leveltp", weight: 1, minDepth: 4 });
@@ -4887,7 +4887,7 @@ export class Game {
     trap.revealed = true;
     const p = this.acting;
     switch (trap.kind) {
-      case "gas": { const d = ROT.RNG.getUniformInt(3, 7); p.hp -= d; this.log.add(`A gas-fee trap drains ${d} from you!`, "bad"); break; }
+      case "gas": { const d = ROT.RNG.getUniformInt(3, 7); p.hp -= d; this.log.add(`A gas trap drains ${d} from you!`, "bad"); break; }
       case "slash": { const d = ROT.RNG.getUniformInt(6, 12); p.hp -= d; this.log.add(`A slashing trap bites for ${d}!`, "bad"); break; }
       case "reorg": {
         let pos = this.level.randomFloor(), t = 0;
@@ -4935,7 +4935,7 @@ export class Game {
         return;
       }
       case "leveltp": {
-        if (this.branch || this.currentChain) { // no relay level-graph here — fall back to an in-level blink
+        if (this.branch || this.currentChain) { // no dungeon level-graph here — fall back to an in-level blink
           let pos = this.level.randomFloor(), t = 0; while (t < 40 && (this.monsterAt(pos.x, pos.y) || this.level.tileAt(pos.x, pos.y) === "stairsDown")) { pos = this.level.randomFloor(); t++; }
           p.x = pos.x; p.y = pos.y; this.recomputeFOV(); this.log.add("A level-teleport trap misfires — you're flung across the level!", "bad"); break;
         }
@@ -5116,7 +5116,7 @@ export class Game {
     if (this.debugPending) { this.debugPending = false; this.debugCommand(key); return true; }
     if (key === "`") {
       this.debugPending = true;
-      this.log.add(`[DEBUG] cmd? d/u down/up · 1-9 warp · 0 →d${MAX_DEPTH} square · m Mines · v Vault · x XCM · Q quest · g Gehennom · F Fort@16 · J JAM@${GEHENNOM_BOTTOM} · P Planes · r reveal · h heal · G god · k mob · K kit · T/t →stair`, "sys");
+      this.log.add(`[DEBUG] cmd? d/u down/up · 1-9 warp · 0 →d${MAX_DEPTH} square · m Mines · v Vault · x the planar gate · Q quest · g Gehennom · F Fort@16 · J Amulet@${GEHENNOM_BOTTOM} · P Planes · r reveal · h heal · G god · k mob · K kit · T/t →stair`, "sys");
       this.draw();
       return true;
     }
@@ -5134,12 +5134,12 @@ export class Game {
       case "v": { const b = branchById("vault"); if (b) this.enterBranch(b); else this.log.add("[DEBUG] no Vault branch defined.", "dim"); break; }
       case "t": { const b = branchById("tower"); if (b) this.enterBranch(b); else this.log.add("[DEBUG] no Tower branch defined.", "dim"); break; }
       case "w": { this.acting = p; this.giveItem(itemById("wand_wish")!, { buc: "blessed", bucKnown: true }); this.log.add("[DEBUG] a wand of wishing drops into your pack (z to wish).", "sys"); this.draw(); break; }
-      case "x": { const c = ROT.RNG.getItem(CHAINS)!; if (!this.level.portalAt(p.x, p.y)) this.level.portals.push({ x: p.x, y: p.y, chain: c }); this.level.tiles[p.y][p.x] = "portal"; this.recomputeFOV(); this.draw(); this.log.add(`[DEBUG] XCM portal to ${c.name} under you — press > to enter.`, "sys"); break; }
+      case "x": { const c = ROT.RNG.getItem(CHAINS)!; if (!this.level.portalAt(p.x, p.y)) this.level.portals.push({ x: p.x, y: p.y, chain: c }); this.level.tiles[p.y][p.x] = "portal"; this.recomputeFOV(); this.draw(); this.log.add(`[DEBUG] the planar gate portal to ${c.name} under you — press > to enter.`, "sys"); break; }
       case "Q": { if (!this.level.portalAt(p.x, p.y)) this.level.portals.push({ x: p.x, y: p.y, chain: CHAINS[0], quest: true }); this.level.tiles[p.y][p.x] = "portal"; this.recomputeFOV(); this.draw(); this.log.add("[DEBUG] quest portal under you — press > to enter.", "sys"); break; }
       case "g": this.gehennomOpen = true; this.debugWarp(MAX_DEPTH + 1); this.log.add(`[DEBUG] Gehennom opened, warped to depth ${MAX_DEPTH + 1}.`, "sys"); break;
       case "F": this.gehennomOpen = true; this.debugWarp(36); this.log.add("[DEBUG] warped to the Council Fort (d36).", "sys"); break;
-      case "J": this.gehennomOpen = true; this.debugWarp(GEHENNOM_BOTTOM); this.log.add("[DEBUG] warped to the JAM floor (Moloch).", "sys"); break;
-      case "P": this.player.hasJam = true; this.enterPlane(1); this.log.add("[DEBUG] → the Planes (JAM granted; < to climb).", "sys"); break;
+      case "J": this.gehennomOpen = true; this.debugWarp(GEHENNOM_BOTTOM); this.log.add("[DEBUG] warped to the Amulet of Yendor floor (Moloch).", "sys"); break;
+      case "P": this.player.hasJam = true; this.enterPlane(1); this.log.add("[DEBUG] → the Planes (Amulet granted; < to climb).", "sys"); break;
       case "r": this.level.revealAll(); this.recomputeFOV(); this.draw(); this.log.add("[DEBUG] level revealed.", "sys"); break;
       case "h": this.debugHeal(p); if (this.coPlayer) this.debugHeal(this.coPlayer); this.draw(); this.log.add("[DEBUG] fully healed.", "sys"); break;
       case "G": this.godMode = !this.godMode; this.log.add(`[DEBUG] god mode ${this.godMode ? "ON" : "off"}.`, "sys"); break;
@@ -5204,10 +5204,10 @@ export class Game {
       ["reveal", () => this.debugCommand("r")], ["heal", () => this.debugCommand("h")],
       ["god", () => this.debugCommand("G")], ["kit", () => this.debugCommand("K")], ["mob", () => this.debugCommand("k")],
       ["Mines", () => this.debugCommand("m")], ["Vault", () => this.debugCommand("v")],
-      ["XCM", () => this.debugCommand("x")], ["Quest", () => this.debugCommand("Q")], ["Planes", () => this.debugCommand("P")],
+      ["the planar gate", () => this.debugCommand("x")], ["Quest", () => this.debugCommand("Q")], ["Planes", () => this.debugCommand("P")],
       ["d3", () => this.debugWarp(3)], ["d6", () => this.debugWarp(6)], ["d9", () => this.debugWarp(9)],
       [`sqr d${MAX_DEPTH}`, () => this.debugWarp(MAX_DEPTH)], ["Gehnm", () => this.debugCommand("g")],
-      ["Fort16", () => this.debugCommand("F")], ["JAM", () => this.debugCommand("J")],
+      ["Fort16", () => this.debugCommand("F")], ["Amulet", () => this.debugCommand("J")],
     ];
     for (const [label, fn] of cmds) {
       const b = document.createElement("button");
@@ -5312,7 +5312,7 @@ export class Game {
       (ctx.plane > 0
         ? `%c{#ff60ff}${PLANES[ctx.plane - 1].name}`
         : `Depth %c{${COLORS.gold}}${p.depth}` +
-          (ctx.inQuest ? `%c{${COLORS.dim}} @%c{#e0c040}Quest` : ctx.chain ? `%c{${COLORS.dim}} @%c{${ctx.chain.color}}${ctx.chain.name}` : `%c{${COLORS.dim}} @%c{${COLORS.dim}}Relay`)) +
+          (ctx.inQuest ? `%c{${COLORS.dim}} @%c{#e0c040}Quest` : ctx.chain ? `%c{${COLORS.dim}} @%c{${ctx.chain.color}}${ctx.chain.name}` : `%c{${COLORS.dim}} @%c{${COLORS.dim}}Dungeon`)) +
       `%c{${COLORS.dim}}  AC %c{${COLORS.good}}${p.ac}` +
       (p.maxEnergy > 5 || p.spells.size ? `%c{${COLORS.dim}}  En %c{#7aa0e0}${p.energy}%c{${COLORS.dim}}/${p.maxEnergy}` : "") +
       (this.luckOf(p) !== 0 ? `%c{${COLORS.dim}}  Luck %c{${this.luckOf(p) > 0 ? COLORS.good : COLORS.bad}}${this.luckOf(p) > 0 ? "+" : ""}${this.luckOf(p)}` : "") +
@@ -5334,7 +5334,7 @@ export class Game {
       (p.lycanthrope ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Lycan` : "") +
       (p.intrinsics.has("fast") ? `%c{${COLORS.dim}}  %c{${COLORS.good}}Fast` : "") +
       (this.hasLight(p) ? `%c{${COLORS.dim}}  %c{${COLORS.gold}}Lit` : "") +
-      (p.hasJam ? `%c{${COLORS.dim}}  %c{${COLORS.gold}}✦JAM — ASCEND (<)` : this.jamStolen ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}JAM STOLEN — slay the Censor!` : `%c{${COLORS.dim}}  ${this.gehennomOpen ? `JAM: depth ${GEHENNOM_BOTTOM}` : `Invoke @ depth ${MAX_DEPTH}`}`)
+      (p.hasJam ? `%c{${COLORS.dim}}  %c{${COLORS.gold}}✦Amulet — ASCEND (<)` : this.jamStolen ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Amulet STOLEN — slay the Warden!` : `%c{${COLORS.dim}}  ${this.gehennomOpen ? `Amulet: depth ${GEHENNOM_BOTTOM}` : `Invoke @ depth ${MAX_DEPTH}`}`)
     );
   }
 
