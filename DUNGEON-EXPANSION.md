@@ -4,7 +4,7 @@
 > dungeon. Built over several sessions. Decisions locked with the maintainer below.
 >
 > **Status: Phases 14a–18 all shipped.** The descent runs d1–20 (vibrating square d12, Gehennom
-> d13–19, Moloch+JAM d20) across nine generators, with persistent levels, the Mines + Consensus
+> d13–19, Moloch+Amulet d20) across nine generators, with persistent levels, the Mines + Accord
 > Vault branches, per-Plane layouts, and a depth-scaled balance pass. Remaining work is the
 > follow-ups noted under each section (richer Sokoban, sealed vaults, swim, `radial`, mandatory
 > branch gating) and **playtest-driven balance tuning**.
@@ -18,19 +18,19 @@
 ## Layout generators
 **Shipped (Phase 14a):**
 - `normal` — rooms + corridors (rot-js Digger). *standard dungeon*
-- `bigroom` — one vast chamber. *the Mempool*
+- `bigroom` — one vast chamber. *the Great Hall*
 - `maze` — perfect maze (EllerMaze). *Gehennom*
 - `cave` — cellular-automata caverns, largest-region kept for connectivity. *the Mines*
 - `labyrinth` — a maze with rectangular chambers carved in.
 - `grid` — rooms in blocks joined by orthogonal streets. *a rollup metropolis*
 
 **Shipped (Phase 14b):**
-- `swamp` — open water studded with island rooms, chained by L-shaped causeways. *the Liquidity Pools*
-  - New **`water` tile** (`}`): light passes (you see the far shore) but it's **impassable** to walking — `isPassable` excludes it, `lightPasses` includes it. `reachableFrom` now uses `isPassable`, so water genuinely gates reachability and `finishLayout` only places the stair / spawns on island-connected floor. Cross by causeway or XCM jump.
+- `swamp` — open water studded with island rooms, chained by L-shaped causeways. *the the Sunken Pools*
+ - New **`water` tile** (`}`): light passes (you see the far shore) but it's **impassable** to walking — `isPassable` excludes it, `lightPasses` includes it. `reachableFrom` now uses `isPassable`, so water genuinely gates reachability and `finishLayout` only places the stair / spawns on island-connected floor. Cross by causeway or the planar gate jump.
 - **Special rooms** dropped into `normal` levels (`placeSpecialRoom`, depth ≥ 2, 35% chance, picks a non-start room via `roomCells` flood-fill):
-  - **temple** — an altar tended by a peaceful Gavin **priest** (new `priest` flag, peaceful until struck → provoked like a keeper). *a Gavin shrine.*
-  - **zoo** — the room packed with depth-appropriate monsters guarding scattered loot. *an airdrop trap room.*
-  - **vault** — a dense treasure room (the Treasury) heaped with wares + gear around a locked chest. *Reachable normally for now; true sealed-by-walls vaults (reached only by dig/teleport) deferred — they need a path-safety check so a vault can't wall off the down-stair.*
+ - **temple** — an altar tended by a peaceful Marduk **priest** (new `priest` flag, peaceful until struck → provoked like a keeper). *a Marduk shrine.*
+ - **zoo** — the room packed with depth-appropriate monsters guarding scattered loot. *a coin trap room.*
+ - **vault** — a dense treasure room (the Treasury) heaped with wares + gear around a locked chest. *Reachable normally for now; true sealed-by-walls vaults (reached only by dig/teleport) deferred — they need a path-safety check so a vault can't wall off the down-stair.*
 
 **Shipped (Phase 17):**
 - `fortress` — a walled keep ringed by a water moat, crossed by a single drawbridge (the only way in). *the Council Fort* (NetHack Castle). Zoned into Gehennom at **d16**.
@@ -46,53 +46,53 @@ All new generators share `finishLayout()`: pick a start, set the down-stair at t
 
 ## Where layouts go now (Phase 14a, pre-persistence)
 Zoned into the existing descent + parachains so variety lands immediately:
-- Main descent: d1–2 normal · **d3 grid** · **d4 & d6 cave** · d5 bigroom (Mempool) · **d7 labyrinth** · d8 vibrating square · d9–11 maze (Gehennom) · d12 sanctum.
-- Parachains: each `ChainDef.layout` — Kusama/Phala `maze`, Moonbeam/Astar `grid`, Interlay `cave`, Bifrost `labyrinth`, **Hydration `swamp`** (the Liquidity Pools — was `bigroom`), Acala `normal`.
+- Main descent: d1–2 normal · **d3 grid** · **d4 & d6 cave** · d5 bigroom (Great Hall) · **d7 labyrinth** · d8 vibrating square · d9–11 maze (Gehennom) · d12 sanctum.
+- Parachains: each `ChainDef.layout` — the Wilds/Phala `maze`, Moonbeam/Astar `grid`, Interlay `cave`, Bifrost `labyrinth`, **Hydration `swamp`** (the the Sunken Pools — was `bigroom`), Acala `normal`.
 
 ## Target dungeon graph (to design in Phase 16)
 A branch graph instead of a single spine:
-- **Dungeons of Doom** (main, d1→d12 to the vibrating square) — the standard→cave→grid→labyrinth→swamp→Mempool zones. ✅ (16c)
-- **The Mines** (branch off the upper dungeon) — caves, a themed "Mines' End" with a luckstone-grade prize. *Mandatory pass-through or strongly incentivised.* ✅ **shipped (16a)** as **the Storage Caverns** (`BranchDef`, entry d3, 3 cave floors, a blessed HODL stone + whale guardian at the End).
-- **The Consensus Vault** (Sokoban-equivalent) — a hand-built boulder-puzzle branch climbing *up*; clear it for a guaranteed artifact (bag of holding / amulet). *Mandatory prize-gate.* ✅ **shipped (16b)**: a `sokoban` branch (entry d4) with a new `pit` tile + a boulder-fills-pit mechanic; a 1-wide alternating boulder/pit tunnel that's **unbrickable by construction** (forward-push only), with a guaranteed blessed multisig vault (bag of holding) on the goal. The "climb up" is narrative — mechanically it's a down-branch reusing the 16a machinery.
+- **Dungeons of Doom** (main, d1→d12 to the vibrating square) — the standard→cave→grid→labyrinth→swamp→Great Hall zones. ✅ (16c)
+- **The Mines** (branch off the upper dungeon) — caves, a themed "Mines' End" with a luckstone-grade prize. *Mandatory pass-through or strongly incentivised.* ✅ **shipped (16a)** as **the Gnomish Mines** (`BranchDef`, entry d3, 3 cave floors, a blessed luckstone + whale guardian at the End).
+- **The Sokoban** (Sokoban-equivalent) — a hand-built boulder-puzzle branch climbing *up*; clear it for a guaranteed artifact (bag of holding / amulet). *Mandatory prize-gate.* ✅ **shipped (16b)**: a `sokoban` branch (entry d4) with a new `pit` tile + a boulder-fills-pit mechanic; a 1-wide alternating boulder/pit tunnel that's **unbrickable by construction** (forward-push only), with a guaranteed blessed bag of holding (bag of holding) on the goal. The "climb up" is narrative — mechanically it's a down-branch reusing the 16a machinery.
 - **The Quest** (per-archetype) — already shipped; fold into the graph as a gated branch (Phase 13c).
-- **Parachains** (XCM side-branches) — optional, each its own layout/palette/monster set.
+- **Parachains** (the planar gate side-branches) — optional, each its own layout/palette/monster set.
 - **The endgame ladder** — vibrating square (d12) → Gehennom (mazes, d13–19) → Moloch's Sanctum (d20) → the Planes → Genesis. ✅ (lengthened in 16c)
 
 ## Persistence architecture (Phase 15 — foundational) ✅ SHIPPED
-- `slots: Map<string, { level: Level; monsters: Monster[] }>` on `Game`, keyed by branch+depth via `levelKey()` (`"dungeon:7"`, `"kusama:1"`, `"quest"`).
+- `slots: Map<string, { level: Level; monsters: Monster[] }>` on `Game`, keyed by branch+depth via `levelKey()` (`"dungeon:7"`, `"wilds:1"`, `"quest"`).
 - A unified `beginLevel(key, kind)`: saves the level being left, switches to the keyed slot, and returns `true` if it already exists (restore — skip generation/spawn) or `false` (generate fresh, then `saveActive()`). `descend/ascend/enterChain/exitChain/enterQuest/exitQuest` all route through it; fresh-only setup (loot caches, the quest nemesis, special rooms) lives in the `!restored` branch.
 - `enterLevel` (fresh) populates then calls `placeParty` + `scheduleParty`; `restoreEnter` (revisit) re-places the party and rebuilds the schedule **without respawning**. Both share `scheduleParty` (clear → add player/partner/alive-monsters/pet → FOV → music).
 - Stored per level: everything already on `Level` (tiles, items, traps, engravings, boulders, portals, graves, explored mask, stairs) **+** its `monsters[]` (positions/HP/state). The Level's own arrays are reached through the stored ref, so reassigning `level.items` is safe; only `Game.monsters` is duplicated into the slot, so `kill()` now **splices in place** (was a `filter`-reassign) to keep the array identity — dead monsters stay dead on revisit.
 - Only the **active** level's actors are scheduled; stored levels freeze until revisited.
 - **Planes are excluded** — the ascent only ever climbs *up* (`ascend` on a plane → `enterPlane(n+1)`), so a plane is never revisited; they regenerate per entry (and keep `genesisAltars` simple). `enterPlane` still `saveActive()`s the dungeon level it leaves.
-- Edges handled: a monster frozen on the arrival stair nudges the player to a free neighbour; a **completed** Quest's homeland portal — which now persists on the relay level — goes inert (tile cleared) on re-touch instead of re-opening a dead quest.
+- Edges handled: a monster frozen on the arrival stair nudges the player to a free neighbour; a **completed** Quest's homeland portal — which now persists on the dungeon level — goes inert (tile cleared) on re-touch instead of re-opening a dead quest.
 - Co-op: host owns the level store; guests render frames (unchanged).
 - **Deferred:** plane persistence (incl. `genesisAltars`/guardian state) and serialising the store for save/resume across page reloads.
 
-## Polkadot flavor for new areas
-- Mines → "the Storage Caverns" (a storage/DA parachain). Swamp → "the Liquidity Pools." Grid → "the Rollup City." Fortress → "the Council Fort." Vault → "the Treasury." Temple → "a Gavin shrine." Zoo → "an airdrop trap room."
+## Yendor flavor for new areas
+- Mines → "the Gnomish Mines" (a storage/DA dungeon). Swamp → "the the Sunken Pools." Grid → "the Rollup City." Fortress → "the Council Fort." Vault → "the Treasury." Temple → "a Marduk shrine." Zoo → "a coin trap room."
 
 ## Phased rollout
-- **14a — generators (this session):** cave, labyrinth, grid + zoning + parachain layouts. ✅
-- **14b — swamp + special rooms:** the `water` tile + `swamp` generator (zoned onto the Hydration parachain) + first special rooms (temple, zoo, vault) dropped into `normal` floors. ✅
+- **14a — generators (this session):** cave, labyrinth, grid + zoning + dungeon layouts. ✅
+- **14b — swamp + special rooms:** the `water` tile + `swamp` generator (zoned onto the Hydration dungeon) + first special rooms (temple, zoo, vault) dropped into `normal` floors. ✅
 - **15 — persistence:** the level store + revisit-identical levels (dungeon + chains + quest; planes excluded). *Foundational; unblocks real branches.* ✅
-- **16 — branch graph:** multi-branch dungeon; build the Mines + the Consensus Vault (Sokoban) as mandatory branches; lengthen the main descent toward ~25–30. *(landing in increments)*
-  - **16a — the branch system + the Mines** (the Storage Caverns): a generalised sub-dungeon branch on top of the Phase 15 store — a copper branch-stair (`branchDown`) on its host depth, a floor-by-floor descend/ascend keyed `mines:<floor>` (effective depth scales spawns), and a guaranteed prize + guardian on the End floor. Branches reuse `currentChain` so the existing relic/portal/miniboss/vibrating suppressors apply; `levelKey`/`beginLevel` extend cleanly. ✅
-  - **16b — the Consensus Vault (Sokoban):** the `pit` tile + boulder-fills-pit mechanic (in both the walk-push and kick paths) + a hand-built, unbrickable puzzle floor (`SOKOBAN_FLOORS`) loaded via `Level.loadSokoban`, with a guaranteed bag-of-holding prize. Built as a `sokoban: true` BranchDef reusing 16a. ✅
-  - **16c — lengthen the main descent + fold in the branches:** the relay descent is now **d1–12** (vibrating square at MAX_DEPTH = 12), **Gehennom d13–19**, **Moloch + the JAM at d20** (GEHENNOM_BOTTOM). `levelKindFor` rotates all seven generators across the descent (normal · grid d3 · cave d4/d7 · labyrinth d6/d11 · Mempool/bigroom d8 · swamp d9 · grid d10); the three Invocation relics spread to d7/d9/d11; the Quest portal sits at d6; XCM parachain portals span d2–11; the Mines (d3) and Vault (d4) branch-stairs root the upper descent. Spawn count capped at 44 pending the Phase 18 balance pass. ✅
-  - *Follow-ups:* richer multi-room/2-D Sokoban layouts (the current puzzle is a deliberately-safe 1-wide tunnel); make the Mines/Vault truly mandatory (gate the critical path) rather than strongly-incentivised.
+- **16 — branch graph:** multi-branch dungeon; build the Mines + the Sokoban (Sokoban) as mandatory branches; lengthen the main descent toward ~25–30. *(landing in increments)*
+ - **16a — the branch system + the Mines** (the Gnomish Mines): a generalised sub-dungeon branch on top of the Phase 15 store — a copper branch-stair (`branchDown`) on its host depth, a floor-by-floor descend/ascend keyed `mines:<floor>` (effective depth scales spawns), and a guaranteed prize + guardian on the End floor. Branches reuse `currentChain` so the existing relic/portal/miniboss/vibrating suppressors apply; `levelKey`/`beginLevel` extend cleanly. ✅
+ - **16b — the Sokoban (Sokoban):** the `pit` tile + boulder-fills-pit mechanic (in both the walk-push and kick paths) + a hand-built, unbrickable puzzle floor (`SOKOBAN_FLOORS`) loaded via `Level.loadSokoban`, with a guaranteed bag-of-holding prize. Built as a `sokoban: true` BranchDef reusing 16a. ✅
+ - **16c — lengthen the main descent + fold in the branches:** the dungeon descent is now **d1–12** (vibrating square at MAX_DEPTH = 12), **Gehennom d13–19**, **Moloch + the Amulet of Yendor at d20** (GEHENNOM_BOTTOM). `levelKindFor` rotates all seven generators across the descent (normal · grid d3 · cave d4/d7 · labyrinth d6/d11 · Great Hall/bigroom d8 · swamp d9 · grid d10); the three Invocation relics spread to d7/d9/d11; the Quest portal sits at d6; the planar gate dungeon portals span d2–11; the Mines (d3) and Vault (d4) branch-stairs root the upper descent. Spawn count capped at 44 pending the Phase 18 balance pass. ✅
+ - *Follow-ups:* richer multi-room/2-D Sokoban layouts (the current puzzle is a deliberately-safe 1-wide tunnel); make the Mines/Vault truly mandatory (gate the critical path) rather than strongly-incentivised.
 
 ## Dev tooling (remove before release)
 A **god/debug mode** lives behind a single `const DEBUG = true` in `game.ts` (fenced blocks marked `DEBUG`).
-- **Keyboard:** backtick (`` ` ``) then a key: `d/u` descend/ascend · `1-9` warp · `0` →d12 vibrating square · `m` Mines · `v` Vault · `x` XCM portal · `Q` quest portal · `g` Gehennom · `F` Council Fort (d16) · `J` JAM/Moloch (d20) · `P` the Planes · `r` reveal · `h` heal · `G` godmode · `k` spawn mob · `K` debug kit · `T/t` to down/up-stair.
+- **Keyboard:** backtick (`` ` ``) then a key: `d/u` descend/ascend · `1-9` warp · `0` →d12 vibrating square · `m` Mines · `v` Vault · `x` the planar gate portal · `Q` quest portal · `g` Gehennom · `F` Council Fort (d16) · `J` Amulet/Moloch (d20) · `P` the Planes · `r` reveal · `h` heal · `G` godmode · `k` spawn mob · `K` debug kit · `T/t` to down/up-stair.
 - **Mobile/touch:** a floating **🐞** button (top-left, injected by `installMobileDebug`) opens a tap grid mirroring the above — no keyboard needed.
 
 To strip for release: set `DEBUG = false`, or delete the flag + the `DEBUG`-fenced blocks (the constructor `installMobileDebug` call, the onKey hook, the debug methods incl. `installMobileDebug`, the `downPlayer` guard) + the `debugPending`/`godMode` fields.
 - **17 — fortress + concentric + per-Plane layouts:** `fortress` (Council Fort, moat+drawbridge, d16) and `concentric` (Moloch's arena d20 + Genesis Plane) generators; the Planes each get a distinct layout (`PLANE_KINDS`); Gehennom gains the fort as a landmark amid the mazes. ✅
 - **18 — balance pass for the d1–20 run:** ✅
-  - **Depth-scaled monsters:** ordinary monsters (`weight > 0`) scale HP **+6%/depth** and damage **+4%/depth** at construction — fixes the difficulty plateau (the bestiary's `minDepth` topped out ~10, so deep floors were trivial). Since a kill awards the foe's `maxHp`, **XP scales with it automatically**, keeping levelling paced. Uniques/bosses/keepers/priests keep their hand-tuned stats.
-  - **Level cap 20 → 30** so HP keeps pace with the scaled threat over the longer descent (energy already scaled with level).
-  - **Fewer-but-tougher swarms:** spawn-count coefficient 1.5 → 1.2 and cap 44 → 40, since each monster is now beefier — deep floors press by accumulation, not grind.
-  - **3 deep-Gehennom monsters** (cartel enforcer d13, darkpool kraken d15, sovereign daemon d17) so the back half has fresh terrors.
-  - Hunger (more floors ⇒ more rations found) and the Censor cadence (self-scales with the longer JAM-carry climb) were left as-is.
-  - Curve modelled across d1–20: a single hit stays ~10–29% of player HP (no one-shots), monster HP grows smoothly (no runaway values), player HP (~29→176) tracks the scaled threat. **First pass — wants playtest validation; tune from feel.**
+ - **Depth-scaled monsters:** ordinary monsters (`weight > 0`) scale HP **+6%/depth** and damage **+4%/depth** at construction — fixes the difficulty plateau (the bestiary's `minDepth` topped out ~10, so deep floors were trivial). Since a kill awards the foe's `maxHp`, **XP scales with it automatically**, keeping levelling paced. Uniques/bosses/keepers/priests keep their hand-tuned stats.
+ - **Level cap 20 → 30** so HP keeps pace with the scaled threat over the longer descent (energy already scaled with level).
+ - **Fewer-but-tougher swarms:** spawn-count coefficient 1.5 → 1.2 and cap 44 → 40, since each monster is now beefier — deep floors press by accumulation, not grind.
+ - **3 deep-Gehennom monsters** (cartel enforcer d13, darkpool kraken d15, sovereign daemon d17) so the back half has fresh terrors.
+ - Hunger (more floors ⇒ more rations found) and the Warden cadence (self-scales with the longer Amulet-carry climb) were left as-is.
+ - Curve modelled across d1–20: a single hit stays ~10–29% of player HP (no one-shots), monster HP grows smoothly (no runaway values), player HP (~29→176) tracks the scaled threat. **First pass — wants playtest validation; tune from feel.**
