@@ -2412,6 +2412,10 @@ export class Game {
       if (m.def.throws) tags.push("thrower");
       if (m.worn > 0) tags.push("armored");
       if (m.def.diseases) tags.push("sickening");
+      if (m.def.acidic) tags.push("acidic");
+      if (m.def.slows) tags.push("slowing");
+      if (m.def.blinds) tags.push("blinding");
+      if (m.def.curses) tags.push("cursing");
       if (m.def.seduces) tags.push("seductive");
       if (m.sleepTurns > 0) tags.push("asleep");
       if (m.cancelled) tags.push("nullified");
@@ -2875,11 +2879,18 @@ export class Game {
     if (a instanceof Player) dmg = Math.max(1, dmg + abilityMod(a.str) + this.skillDmgBonus(a) + a.ringDmg); // Stake-weight + trained skill + a ring of damage drive the blow
     d.hp -= dmg;
     if (a instanceof Player && d instanceof Monster) this.noteSkillHit(a); // a landed blow trains the weapon's skill
-    // A rust/corrosion striker (rust bug) eats away a random worn piece on a hit.
-    if (a instanceof Monster && !a.cancelled && a.def.corrodes && d instanceof Player) this.corrodeArmor(d);
+    // A rust/corrosion striker (rust monster, slime) may eat away a worn piece on a hit — a per-hit
+    // chance now (true = 0.35, or a per-monster probability), not the old guaranteed erosion.
+    if (a instanceof Monster && !a.cancelled && a.def.corrodes && d instanceof Player
+        && ROT.RNG.getUniform() < (typeof a.def.corrodes === "number" ? a.def.corrodes : 0.35)) this.corrodeGear(d);
     if (a instanceof Player && d instanceof Monster) {
       this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg}.`, "good", who);
       if (a.weapon === null && d.hp > 0 && !d.def.boss) this.martialFollowUp(a, d, who); // an unarmed blow can daze or throw a foe, by martial skill
+      // An acid creature's hide bites back at a metal blade — reckless swinging rusts your weapon (unhanded sidesteps it).
+      if (d.def.acidic && a.weapon && this.corrodibleWeapon(a.weapon) && ROT.RNG.getUniform() < 0.3) {
+        this.log.add(`${cap(d.name)}'s acid hide eats at your ${this.ident.name(a.weapon.type)}!`, "bad", who);
+        this.erodeItem(a, a.weapon);
+      }
     }
     else if (a instanceof Monster && d instanceof Player) {
       this.log.add(`${cap(a.name)} hits ${d.name} for ${dmg}.`, "bad", who);
@@ -2905,6 +2916,18 @@ export class Game {
       if (!a.cancelled && a.def.diseases && d.hp > 0 && d.illness === 0 && ROT.RNG.getUniform() < 0.3) {
         d.illness = ROT.RNG.getUniformInt(10, 16);
         this.log.add(`${cap(a.name)} infects ${d.name} — you sicken! (cure it before it's fatal)`, "bad", who);
+      }
+      if (!a.cancelled && a.def.slows && d.hp > 0 && d.slowTurns <= 0 && ROT.RNG.getUniform() < 0.35) {
+        d.slowTurns = ROT.RNG.getUniformInt(6, 11);
+        this.log.add(`${cap(a.name)} clogs your every move — you slow to a crawl. (congestion)`, "bad", who);
+      }
+      if (!a.cancelled && a.def.blinds && d.hp > 0 && d.blind <= 0 && ROT.RNG.getUniform() < 0.3) {
+        d.blind = ROT.RNG.getUniformInt(4, 8); this.recomputeFOV();
+        this.log.add(`${cap(a.name)} bursts in a searing flash — you're dazzled blind!`, "bad", who);
+      }
+      if (!a.cancelled && a.def.curses && d.hp > 0 && ROT.RNG.getUniform() < 0.18) {
+        const pool = d.inventory.items.filter((it) => it.buc !== "cursed");
+        if (pool.length) { const it = ROT.RNG.getItem(pool)!; it.buc = "cursed"; it.bucKnown = false; this.log.add(`${cap(a.name)}'s touch sows doubt — something in your pack curdles. (FUD)`, "bad", who); }
       }
     }
     else if (a instanceof Player && d instanceof Player) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg} — friendly fire!`, "bad", who);
@@ -3017,15 +3040,23 @@ export class Game {
     }
   }
 
-  /** Erode a random unproofed worn piece (rust/corrosion), reducing its evasion. */
-  private corrodeArmor(p: Player): void {
-    const targets = p.wornArmor.filter((it) => !it.proofed && (it.erosion ?? 0) < 3);
-    if (targets.length === 0) return;
-    const it = ROT.RNG.getItem(targets)!;
+  /** A metal weapon that rust/acid can bite — excludes the wood-and-leather ones (whip, quarterstaff). */
+  private corrodibleWeapon(it: Item): boolean { return it.type.kind === "weapon" && !it.proofed && !it.relic && !["whip", "quarterstaff"].includes(it.type.id); }
+
+  /** Erode one piece of gear a step (rust/corrosion): armor loses evasion, a weapon loses bite. */
+  private erodeItem(p: Player, it: Item): void {
+    if (it.proofed || (it.erosion ?? 0) >= 3) return;
     it.erosion = (it.erosion ?? 0) + 1;
-    p.recomputeAC();
+    if (it === p.weapon) p.applyWeapon(); else p.recomputeAC();
     const tag = ["", "rusty", "corroded", "badly corroded"][it.erosion];
     this.log.add(`${p.name === "you" ? "Your" : p.name + "'s"} ${this.ident.name(it.type)} corrodes — now ${tag}.`, "bad");
+  }
+
+  /** A rust attacker's touch erodes a random unproofed worn piece — or the wielded metal weapon. */
+  private corrodeGear(p: Player): void {
+    const pool = p.wornArmor.filter((it) => !it.proofed && (it.erosion ?? 0) < 3);
+    if (p.weapon && this.corrodibleWeapon(p.weapon) && (p.weapon.erosion ?? 0) < 3) pool.push(p.weapon);
+    if (pool.length) this.erodeItem(p, ROT.RNG.getItem(pool)!);
   }
 
   /** Subject + verb agreement so the shared co-op log reads right ("You strike" / "Guest strikes"). */
@@ -3529,7 +3560,7 @@ export class Game {
         hit.cancelled = true;
         this.log.add(`${cap(hit.name)} is nullified — its powers fail.`, "good");
       } else if (item.type.id === "wand_probe") {
-        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.stealsGold && "gold thief", hit.def.stealsLuck && "Fortune leech", hit.def.drains && "life-draining", hit.def.engulfs && "engulfing", hit.def.silences && "silencing", hit.def.drainsStat && "mind-draining", hit.def.infects && "infectious", hit.def.muse && "self-mending", hit.def.zaps && "caster", hit.def.throws && "thrower", hit.def.diseases && "sickening", hit.def.seduces && "seductive", hit.def.paralyzes && "paralyzing gaze", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.cancelled && "nullified", hit.worn > 0 && "armored"].filter(Boolean).join(", ");
+        const tr = [hit.def.inflict && `inflicts ${hit.def.inflict}`, hit.def.ranged && "ranged", hit.def.steals && "thief", hit.def.stealsGold && "gold thief", hit.def.stealsLuck && "Fortune leech", hit.def.drains && "life-draining", hit.def.engulfs && "engulfing", hit.def.silences && "silencing", hit.def.drainsStat && "mind-draining", hit.def.infects && "infectious", hit.def.muse && "self-mending", hit.def.zaps && "caster", hit.def.throws && "thrower", hit.def.diseases && "sickening", hit.def.seduces && "seductive", hit.def.paralyzes && "paralyzing gaze", hit.def.splits && "splits", hit.def.corrodes && "corrodes", hit.def.acidic && "acidic", hit.def.slows && "slowing", hit.def.blinds && "blinding", hit.def.curses && "cursing", hit.cancelled && "nullified", hit.worn > 0 && "armored"].filter(Boolean).join(", ");
         this.log.add(`State-read ${hit.name}: ${hit.hp}/${hit.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       }
     }
@@ -4096,7 +4127,7 @@ export class Game {
     if (item.type.id === "scope") {
       const m = this.monsterAt(p.x + dx, p.y + dy);
       if (!m) { this.log.add("You press the state reader to empty air.", "dim"); return false; }
-      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.stealsGold && "gold thief", m.def.stealsLuck && "Fortune leech", m.def.drains && "life-draining", m.def.engulfs && "engulfing", m.def.silences && "silencing", m.def.drainsStat && "mind-draining", m.def.infects && "infectious", m.def.muse && "self-mending", m.def.zaps && "caster", m.def.throws && "thrower", m.def.diseases && "sickening", m.def.seduces && "seductive", m.def.paralyzes && "paralyzing gaze", m.def.splits && "splits", m.def.corrodes && "corrodes", m.cancelled && "nullified", m.worn > 0 && "armored", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
+      const tr = [m.def.inflict && `inflicts ${m.def.inflict}`, m.def.ranged && "ranged", m.def.steals && "thief", m.def.stealsGold && "gold thief", m.def.stealsLuck && "Fortune leech", m.def.drains && "life-draining", m.def.engulfs && "engulfing", m.def.silences && "silencing", m.def.drainsStat && "mind-draining", m.def.infects && "infectious", m.def.muse && "self-mending", m.def.zaps && "caster", m.def.throws && "thrower", m.def.diseases && "sickening", m.def.seduces && "seductive", m.def.paralyzes && "paralyzing gaze", m.def.splits && "splits", m.def.corrodes && "corrodes", m.def.acidic && "acidic", m.def.slows && "slowing", m.def.blinds && "blinding", m.def.curses && "cursing", m.cancelled && "nullified", m.worn > 0 && "armored", m.sleepTurns > 0 && "asleep"].filter(Boolean).join(", ");
       this.log.add(`State-read ${m.name}: ${m.hp}/${m.maxHp} HP${tr ? " · " + tr : ""}.`, "sys");
       return true;
     }
@@ -5053,7 +5084,7 @@ export class Game {
       }
       case "rust": {
         this.log.add("A rust trap sprays corrosive brine over you!", "bad");
-        this.corrodeArmor(p); break; // corrodes a random unproofed worn piece (no-op if none/proofed)
+        this.corrodeGear(p); break; // corrodes a random unproofed worn piece or your metal weapon (no-op if none)
       }
       case "bear": {
         const d = ROT.RNG.getUniformInt(1, 4); p.hp -= d;
@@ -5427,6 +5458,7 @@ export class Game {
       (hunger ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}${hunger}` : "") +
       (p.encumbrance().level ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}${p.encumbrance().level}` : "") +
       (p.paralyzed > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Para${p.paralyzed}` : "") +
+      (p.slowTurns > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Slow${p.slowTurns}` : "") +
       (p.engulfedBy ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Swallowed` : "") +
       (p.webbed > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Webbed${p.webbed}` : "") +
       (p.poison > 0 ? `%c{${COLORS.dim}}  %c{${COLORS.bad}}Psn` : "") +

@@ -122,12 +122,13 @@ export class Player extends Entity {
   spells = new Set<string>(); // known spell ids
   senseTurns = 0;             // sense minds — monsters revealed
   hasteTurns = 0;             // overclock — temporary speed
+  slowTurns = 0;              // congestion — a clogged stride; drags your speed while it lasts
   private energyTimer = 0;
 
   /** Recompute attack damage from the wielded weapon (or fists) + enchant bonus. */
   applyWeapon(): void {
     if (this.weapon) {
-      const b = this.weaponBonus + (this.weapon.enchant ?? 0) + bucDelta(this.weapon.buc); // scroll enchant + relic enchant + sanctity
+      const b = this.weaponBonus + (this.weapon.enchant ?? 0) + bucDelta(this.weapon.buc) - (this.weapon.erosion ?? 0); // scroll enchant + relic enchant + sanctity − rust/corrosion
       this.attackDmg = [this.weapon.type.dmg![0] + b, this.weapon.type.dmg![1] + b];
     } else this.attackDmg = [1, 3];
   }
@@ -245,7 +246,8 @@ export class Player extends Entity {
     if (this.polyForm) return Math.max(20, this.polyForm.speed ?? 100) + haste + ride; // move as your fork
     const base = this.intrinsics.has("fast") ? 130 : 100; // intrinsic speed from a fork-daemon corpse
     const light = this.unhanded() ? 15 : 0; // empty-handed and unburdened by steel — a quicker step (sheathe and run)
-    return Math.max(20, base + haste + ride + light - this.encumbrance().speed); // a heavy pack drags your stride
+    const slow = this.slowTurns > 0 ? 40 : 0; // congestion clogs your stride
+    return Math.max(20, base + haste + ride + light - slow - this.encumbrance().speed); // a heavy pack drags your stride
   }
 
   /** Carry capacity from Stake-weight (STR) + Resilience (CON) — how much your pack can bear before it drags. */
@@ -354,6 +356,7 @@ export class Player extends Entity {
     if (this.autoSearch) this.game.autoSearchAround(this); // ring of searching — reveal adjacent hidden things
     if (this.senseTurns > 0) this.senseTurns--;
     if (this.hasteTurns > 0 && --this.hasteTurns === 0) this.game.log.add(`${this.name === "you" ? "You slow" : this.name + " slows"} back to normal.`, "dim");
+    if (this.slowTurns > 0 && --this.slowTurns === 0) this.game.log.add(`${this.name === "you" ? "The congestion clears — your stride returns" : this.name + "'s stride returns"}.`, "good");
     // Natural regeneration (faster with a ring of regeneration; not while starving/poisoned).
     if (this.hp < this.maxHp && this.nutrition > 0 && this.poison === 0 && ++this.regenTimer >= (this.regenFast ? 5 : 14)) {
       this.regenTimer = 0; this.hp++;
