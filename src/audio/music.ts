@@ -14,8 +14,11 @@
 // minor-2nd swells), Moloch's Sanctum is the most oppressive (a slow doom-toll, a dissonant tritone
 // drone, frequent low swells). The Planes float free — no drums/low-end, just ascending harp
 // arpeggios + bright high chimes in vast reverb. The groove runs on ONE continuous bar clock:
-// explore↔idle sections swap only on a bar line, bridged by the zone's own tune-specific FILL (a
-// drum roll + a bass/lead turnaround, the `FILLS` table), so the grid never resets mid-bar and
+// explore↔idle sections swap only on a bar line, bridged by the zone's own tune-specific FILL (the
+// `FILLS` table). The five bright zones (upper/reaches/deeps/great hall/elsewhere) get a Geddy Lee-style
+// busy melodic bass run + a Neil Peart tom roll across that final beat; the dark depths + Planes keep
+// theme-appropriate fills (deep tom falls / ethereal rises). Everything stays locked to the bar tempo, so
+// the grid never resets mid-bar and
 // returns don't clutter. Combat stays reactive — it cuts in fast on a snare pickup while the tension
 // layer rises; when it clears, the groove resumes at the next downbeat. Everything still crossfades.
 // And the bed
@@ -231,14 +234,20 @@ const IDLE: Record<string, IdleGroove[]> = {
 // beat toward the coming downbeat; `crash` lands an impact on it; `deep` renders it dark (dread zones).
 interface Fill {
   snare?: number[]; kick?: number[]; hatBuild?: boolean; turn?: number[]; lead?: number[]; crash?: boolean; deep?: boolean;
+  bassRun?: number[]; // a busy melodic bass fill (scale degrees walked across the final beat) — Geddy Lee flavour
+  bright?: boolean;   // render the bass run bright & present (pick attack, high register) — the Rush zones
+  tomRoll?: number[]; // a Neil Peart tom fill: tom "sizes" 0 (high rack) .. 1 (low floor) across the beat
 }
+// The five bright zones (upper/reaches/deeps/great hall/elsewhere) get a Geddy Lee-inspired bass run +
+// a Peart tom roll — busy, melodic, register-popping, but locked to the bar's tempo so it flows with the
+// groove. The dark depths + the Planes keep their theme-appropriate fills (deep tom falls / ethereal rises).
 const FILLS: Record<string, Fill> = {
-  legacy:    { snare: [2, 3], hatBuild: true, turn: [5, 7], crash: true },
-  deeps: { snare: [1, 2, 3], lead: [7, 9, 12], turn: [7, 5], crash: true },   // bright turnaround
-  wildlands:    { snare: [0, 1, 2, 3], kick: [0], turn: [6, 3], crash: true },        // busy 16th roll, dark walk
-  greathall:   { snare: [0, 2, 3], kick: [0, 2], hatBuild: true, turn: [10, 7], crash: true }, // driving
-  elsewhere: { snare: [1, 3], lead: [8, 4, 0], turn: [4, 0], crash: true },
-  dungeon:     { snare: [2, 3], kick: [0], turn: [7, 0], deep: true },               // deep, slow
+  legacy:    { snare: [2, 3], hatBuild: true, bassRun: [0, 7, 10, 12, 10, 7, 5, 3], bright: true, tomRoll: [0, 0.35, 0.7, 1], crash: true }, // upper — a climbing pick run
+  deeps:     { snare: [1, 2, 3], bassRun: [0, 7, 5, 12, 10, 7, 3, 0], bright: true, tomRoll: [0, 0.4, 0.7, 1], crash: true },                // deeps — a syncopated descent
+  wildlands: { snare: [0, 2, 3], bassRun: [0, 3, 7, 10, 12, 15, 12, 10], bright: true, tomRoll: [0.2, 0.5, 0.8, 1], crash: true },           // reaches — a reaching run past the octave
+  greathall: { snare: [0, 2, 3], kick: [0, 2], hatBuild: true, bassRun: [0, 12, 7, 12, 10, 15, 12, 7], bright: true, tomRoll: [0.1, 0.4, 0.7, 1, 0.6, 0.3], crash: true }, // great hall — driving octave leaps + a big roll
+  elsewhere: { snare: [1, 3], bassRun: [0, 3, 5, 7, 10, 7, 5, 3], bright: true, tomRoll: [0, 0.5, 1], crash: true },                          // elsewhere — a smooth melodic run
+  dungeon:   { snare: [2, 3], kick: [0], turn: [7, 0], deep: true },               // deep, slow
   gehennom:  { snare: [0, 2], kick: [0], turn: [1, 6], deep: true, crash: true },  // grinding tom fall
   sanctum:   { kick: [0], turn: [6, 1, 0], deep: true },                            // doom-walk, no snare
   planes:    { lead: [7, 12, 16], crash: true },                                    // ethereal rise, no drums
@@ -1184,6 +1193,49 @@ export class MusicEngine {
     if (f.hatBuild) for (let i = 0; i < 8; i++) this.noiseHit(beatStart + i * step * 0.5, 0.03, bus, 0.04 + i * 0.008, "highpass", 8000, 0.7);
     if (f.turn) { const n = Math.max(1, f.turn.length); f.turn.forEach((deg, i) => { let bf = semi(t.root, deg); while (bf < 41) bf *= 2; this.bassNote(bf, beatStart + i * step * (4 / n), step * 1.6, bus, 0.22); }); }
     if (f.lead && this.active) { const n = Math.max(1, f.lead.length); f.lead.forEach((deg, i) => this.note(semi(t.root, deg) * 2, beatStart + i * step * (4 / n), step * 1.4, this.active!.bus, "triangle", 0.05, 3200)); }
+    if (f.bassRun) this.renderBassRun(t, beatStart, step, f.bassRun, !!f.bright, bus);
+    if (f.tomRoll) this.renderTomRoll(beatStart, step, f.tomRoll, bus);
+  }
+
+  /** A Geddy Lee-style bass fill: a busy melodic run of scale degrees spread evenly across the outgoing
+   *  bar's final beat (so it stays locked to the tempo). Bright zones get a snappy pick attack and let the
+   *  high degrees ride up out of the bass register — the signature reaching, register-hopping run. */
+  private renderBassRun(t: TrackDef, beatStart: number, step: number, run: number[], bright: boolean, bus: GainNode): void {
+    const n = Math.max(1, run.length);
+    const sub = (step * 4) / n; // evenly across the one-beat fill window
+    run.forEach((deg, i) => {
+      let bf = semi(t.root, deg);
+      while (bf < 41) bf *= 2; // floor into the bass; higher degrees ride above it, so the run climbs
+      const when = beatStart + i * sub, dur = sub * 1.15;
+      if (bright) this.pickBass(bf, when, dur, bus, 0.2);
+      else this.bassNote(bf, when, dur, bus, 0.2);
+    });
+  }
+
+  /** A snappy, present pick-style bass (Geddy Lee) — a sawtooth through a brighter lowpass with a fast
+   *  attack + a faint pick click, so a run reads as articulate notes rather than a low rumble. */
+  private pickBass(freq: number, when: number, dur: number, bus: GainNode, peak: number): void {
+    const ctx = this.ctx!;
+    const osc = ctx.createOscillator(); osc.type = "sawtooth"; osc.frequency.value = freq;
+    const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = Math.min(2400, freq * 6 + 500); f.Q.value = 5;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(peak, when + 0.005); // a fast pick attack
+    g.gain.exponentialRampToValueAtTime(0.0008, when + dur);
+    g.gain.linearRampToValueAtTime(0, when + dur + 0.02);
+    osc.connect(f).connect(g).connect(bus);
+    osc.start(when); osc.stop(when + dur + 0.03);
+    this.noiseHit(when, 0.012, bus, peak * 0.3, "highpass", 3200, 0.6); // the pick click
+  }
+
+  /** A Neil Peart tom fill: each entry is a tom "size" 0 (high rack) .. 1 (low floor), played evenly
+   *  across the beat — a melodic roll around the kit that flows into the coming downbeat. */
+  private renderTomRoll(beatStart: number, step: number, toms: number[], bus: GainNode): void {
+    const n = Math.max(1, toms.length);
+    const sub = (step * 4) / n;
+    toms.forEach((size, i) => {
+      const freq = 620 - Math.max(0, Math.min(1, size)) * 400; // high rack (620Hz) → low floor (220Hz)
+      this.noiseHit(beatStart + i * sub, 0.12, bus, 0.11, "bandpass", freq, 0.9);
+    });
   }
 
   /** A bright cymbal (or dark boom in the dread zones) welcoming the new section's downbeat. */
