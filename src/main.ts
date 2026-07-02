@@ -3,7 +3,7 @@ import { initLobby } from "./net/lobby";
 import { loadCounts } from "./net/counter";
 import { readSave } from "./save";
 import { ARCHETYPES, archetypeName, archetypeBlurb, RACES, raceName, raceBlurb, introStory } from "./data";
-import { setFlavor, getFlavor, fp } from "./flavor";
+import { fp } from "./flavor";
 
 const screen = document.getElementById("screen");
 const logEl = document.getElementById("log");
@@ -87,14 +87,6 @@ if (screen && logEl) {
   };
   document.querySelectorAll('input[name="mode"]').forEach((el) => el.addEventListener("change", syncMode));
 
-  // Name-flavor radios: reflavor the world before the run (banner, story, class/eco labels).
-  const syncFlavor = () => {
-    const f = (document.querySelector('input[name="flavor"]:checked') as HTMLInputElement | null)?.value === "polkadot" ? "polkadot" : "fantasy";
-    setFlavor(f);
-    localStorage.setItem("ascend.flavor", f); // persist the naming choice across sessions
-    renderSubtitle(); fillSelects(); playStory(true);
-  };
-  document.querySelectorAll('input[name="flavor"]').forEach((el) => el.addEventListener("change", syncFlavor));
 
   // Begin Descent (solo): lock in the picks and drop into the dungeon. newGame() hides the splash.
   beginBtn?.addEventListener("click", () => {
@@ -181,22 +173,15 @@ if (screen && logEl) {
   const storedFont = parseInt(LSget("ascend.opt.font", "18"), 10) || 18;
   const storedContrast = LSget("ascend.opt.contrast", "0") === "1";
   const storedMotion = LSget("ascend.opt.motion", "0") === "1";
-  const storedFlavor = LSget("ascend.flavor", "fantasy") === "polkadot" ? "polkadot" : "fantasy";
   // apply at boot
   game.applyFontSize(storedFont);
   document.body.classList.toggle("opt-contrast", storedContrast);
   document.body.classList.toggle("opt-reduce-motion", storedMotion);
-  if (storedFlavor === "polkadot") {
-    setFlavor("polkadot");
-    const r = document.querySelector('input[name="flavor"][value="polkadot"]') as HTMLInputElement | null;
-    if (r) r.checked = true;
-    renderSubtitle(); fillSelects();
-  }
   playStory(storedMotion); // reduce-motion → show the intro at once instead of crawling
 
   const optModal = document.getElementById("options-modal");
   if (optModal) {
-    const openO = () => { syncFlavSeg(getFlavor()); optModal.classList.add("open"); };
+    const openO = () => optModal.classList.add("open");
     const closeO = () => optModal.classList.remove("open");
     document.getElementById("options-btn")?.addEventListener("click", openO);
     document.getElementById("options-close")?.addEventListener("click", closeO);
@@ -211,16 +196,6 @@ if (screen && logEl) {
     syncFont(storedFont);
     fontSeg?.querySelectorAll<HTMLButtonElement>("button").forEach((b) => b.addEventListener("click", () => { const px = parseInt(b.dataset.px!, 10); localStorage.setItem("ascend.opt.font", String(px)); game.applyFontSize(px); syncFont(px); }));
 
-    const flavSeg = document.getElementById("opt-flavor");
-    const syncFlavSegImpl = (f: string) => flavSeg?.querySelectorAll<HTMLButtonElement>("button").forEach((b) => b.classList.toggle("on", b.dataset.flavor === f));
-    function syncFlavSeg(f: string) { syncFlavSegImpl(f); }
-    syncFlavSeg(storedFlavor);
-    flavSeg?.querySelectorAll<HTMLButtonElement>("button").forEach((b) => b.addEventListener("click", () => {
-      const f = b.dataset.flavor!;
-      const r = document.querySelector(`input[name="flavor"][value="${f}"]`) as HTMLInputElement | null;
-      if (r) { r.checked = true; syncFlavor(); }
-      syncFlavSeg(f);
-    }));
 
     const con = document.getElementById("opt-contrast") as HTMLInputElement | null;
     if (con) { con.checked = storedContrast; con.addEventListener("change", () => { document.body.classList.toggle("opt-contrast", con.checked); localStorage.setItem("ascend.opt.contrast", con.checked ? "1" : "0"); }); }

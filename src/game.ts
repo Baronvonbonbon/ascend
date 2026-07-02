@@ -12,7 +12,7 @@ import {
   abilityMod, archetypeById, raceById, raceName, ATTRS, ATTR_LABEL, attrFlavor, spellById, Ethos,
   monName, questHomeland, archetypeName, ethosName, spellName, chainName, branchEnd, branchEntryFlavor,
 } from "./data";
-import { fp, skin, toggleFlavor } from "./flavor";
+import { fp, skin } from "./flavor";
 import { Idents, Appearances, ITEMS, JAM, CORPSE, CHEST, GOLD, WRITABLE_SCROLLS, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
 import { connectWallet, Wallet } from "./chain/wallet";
 import { walletBalancePas, buyDirect } from "./chain/bank";
@@ -137,7 +137,6 @@ export class Game {
   private busy = false; // a wallet transaction is in flight — input is frozen
   private debugPending = false; // DEBUG: a backtick was pressed; the next key is a debug command
   private godMode = false;      // DEBUG: negate player death
-  private konami: string[] = []; // recent keys, watched for the Konami code (flavor toggle)
 
   // ── co-op (host-authoritative over WebRTC) ──
   acting!: Player;              // the player whose input is currently being processed
@@ -5208,32 +5207,6 @@ export class Game {
   }
   // ═══ end DEBUG block ═══════════════════════════════════════════════════════
 
-  private static readonly KONAMI = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "b", "a"];
-  /** Track recent keys; on the full Konami code, toggle flavor. Returns true only on completion (consumes the key). */
-  private konamiCheck(key: string): boolean {
-    this.konami.push(key);
-    if (this.konami.length > Game.KONAMI.length) this.konami.shift();
-    if (this.konami.length === Game.KONAMI.length && Game.KONAMI.every((k, i) => k === this.konami[i])) {
-      this.konami = [];
-      this.toggleFlavorMode();
-      return true;
-    }
-    return false;
-  }
-
-  /** Flip the whole game between the fantasy skin and the Polkadot skin, live. */
-  private toggleFlavorMode(): void {
-    const f = toggleFlavor();
-    for (const slot of this.slots.values()) for (const m of slot.monsters) m.name = monName(m.def);
-    for (const m of this.monsters) m.name = monName(m.def);
-    for (const pet of this.pets) if (!pet.def) pet.name = fp("your hound", "your nominator"); // adopted beasts keep their species name
-    this.log.add(f === "fantasy"
-      ? "✦ The chains fade — a classic dungeon of fantasy reveals itself."
-      : "✦ The veil lifts — the Polkadot truth shows through.", "good");
-    this.recomputeFOV();
-    this.draw();
-  }
-
   private onKey(e: KeyboardEvent): void {
     if (!this.player) return; // no run yet — the start splash is up; ignore game keys
     if (e.ctrlKey || e.metaKey || e.altKey) return; // let browser shortcuts (refresh, copy, devtools) through
@@ -5256,7 +5229,6 @@ export class Game {
       this.renderQueue();
       e.preventDefault(); return;
     }
-    if (this.konamiCheck(e.key)) { e.preventDefault(); return; } // cosmetic skin toggle — fully local, never fed/broadcast
     if (DEBUG && this.netRole === "solo" && this.debugIntercept(e.key)) { e.preventDefault(); return; } // debug: solo only (warps would desync co-op)
     this.localPlayer.feed(e.key); // queue locally; each action is broadcast as it executes (lockstep)
     this.renderQueue();
