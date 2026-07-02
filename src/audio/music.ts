@@ -261,11 +261,19 @@ export interface MusicContext {
   fountain: boolean;    // standing by a fountain → drips (foley)
   altar: boolean;     // standing by an altar → a soft chime (foley)
   beast?: string;     // category of the nearest hostile in view → an occasional creature cue (foley)
+  room?: string;      // the special room the adventurer stands in → a room-flavoured ambient bed (foley)
 }
 /** Foley one-shots the game triggers on actions/features. */
 export type Sfx =
   | "step" | "step-water" | "step-bridge" | "door" | "kick" | "boulder" | "sink" | "throne" | "stairs-down" | "stairs-up"
-  | "pickup" | "coin" | "drop" | "quaff" | "read" | "zap" | "eat" | "equip" | "forge";
+  | "pickup" | "coin" | "drop" | "quaff" | "read" | "zap" | "eat" | "equip" | "forge"
+  // combat — by effect type (uhitm/mhitu): connect, whiff, being struck, a foe crumbling
+  | "hit" | "miss" | "hurt" | "death"
+  // special-attack flavours (the on-hit inflictions + the elemental rays)
+  | "fx-poison" | "fx-fire" | "fx-cold" | "fx-shock" | "fx-drain" | "fx-petrify" | "fx-acid"
+  // objects & rituals — distinct cues per class/tool/effect
+  | "spell" | "pray" | "heal" | "levelup" | "curse" | "teleport" | "gem"
+  | "dig" | "horn" | "camera" | "mirror" | "whistle" | "drum" | "bell" | "wear-magic" | "explode" | "web";
 
 export class MusicEngine {
   private ctx: AudioContext | null = null;
@@ -847,6 +855,36 @@ export class MusicEngine {
     osc.start(when); osc.stop(when + 0.22);
   }
 
+  /** A disembodied ghost voice — a wordless whisper (a sawtooth driven through two vowel-formant
+   *  bandpass filters, with a slow vibrato swell) layered over a faint detuned choir pad. Routed
+   *  through the SFX bus so it picks up the hall reverb — it drifts in from nowhere. */
+  private ghostVoice(when: number, deep: boolean): void {
+    if (!this.ctx) return;
+    const ctx = this.ctx, bus = this.sfxBus, r = this.active?.def.root ?? 110;
+    const f0 = r * (deep ? 0.5 : 0.75) * (Math.random() < 0.5 ? 1 : 1.5); // a low, breathy pitch
+    const dur = 1.6 + Math.random() * 1.3;
+    const vowels: [number, number][] = [[320, 800], [500, 1000], [700, 1150]]; // "ooh" / "uh" / "aah"
+    const [F1, F2] = vowels[Math.floor(Math.random() * vowels.length)];
+    // the voice source + vibrato
+    const src = ctx.createOscillator(); src.type = "sawtooth"; src.frequency.value = f0;
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 4 + Math.random() * 2;
+    const lg = ctx.createGain(); lg.gain.value = f0 * 0.02; lfo.connect(lg).connect(src.frequency);
+    // two formant bandpass filters summed → a vowel timbre
+    const merge = ctx.createGain();
+    for (const [F, q] of [[F1, 6], [F2, 9]] as [number, number][]) {
+      const b = ctx.createBiquadFilter(); b.type = "bandpass"; b.frequency.value = F; b.Q.value = q;
+      src.connect(b).connect(merge);
+    }
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(deep ? 0.06 : 0.045, when + dur * 0.45); // a slow swell in
+    g.gain.linearRampToValueAtTime(0.0001, when + dur);                     // and fade to nothing
+    merge.connect(g).connect(bus);
+    src.start(when); src.stop(when + dur + 0.1); lfo.start(when); lfo.stop(when + dur + 0.1);
+    // the layered choir pad — a couple of detuned sines a chord apart, under the whisper
+    const chord = [0, 3, 7][Math.floor(Math.random() * 3)];
+    for (const c of [chord, chord + 7]) this.note(semi(f0 * 2, c), when, dur, bus, "sine", 0.02, 1600);
+  }
+
   // ── foley SFX ────────────────────────────────────────────────────────────────
   /** A one-shot oscillator with a frequency sweep + short envelope (helper for foley timbres). */
   private tone(f0: number, f1: number, dur: number, type: Wave, peak: number, when: number, bus: GainNode, cutoff = 6000): void {
@@ -883,6 +921,36 @@ export class MusicEngine {
       case "eat":         for (let i = 0; i < 3; i++) this.noiseHit(now + i * 0.11, 0.06, bus, 0.05, "bandpass", 800 + Math.random() * 400, 3); break; // crunch
       case "equip":       this.noiseHit(now, 0.08, bus, 0.06, "highpass", 5200, 0.5); this.note(semi(r, 7) * 2, now, 0.16, bus, "triangle", 0.04, 3000); break; // metallic shing
       case "forge":       this.noiseHit(now, 0.05, bus, 0.13, "bandpass", 1400, 4); this.noiseHit(now + 0.14, 0.05, bus, 0.1, "bandpass", 1900, 4); this.note(semi(r, 19) * 2, now + 0.14, 0.55, bus, "triangle", 0.05, 4200); break; // anvil clang + ring
+      // ── combat foley (uhitm/mhitu) — subtle, sits under the tension layer ──
+      case "hit":         this.noiseHit(now, 0.07, bus, 0.1, "lowpass", 440, 1); this.note(120, now, 0.06, bus, "triangle", 0.05, 500); break; // a fleshy thud
+      case "miss":        this.noiseHit(now, 0.13, bus, 0.045, "bandpass", 1700, 0.5); this.noiseHit(now + 0.04, 0.09, bus, 0.03, "highpass", 3400, 0.5); break; // a whiff of air
+      case "hurt":        this.kick(now, bus, 0.24); this.tone(180, 120, 0.18, "sawtooth", 0.045, now, bus, 500); break; // a heavy graceless jolt + grunt
+      case "death":       this.tone(semi(r, 0), semi(r, -12), 0.4, "sawtooth", 0.05, now, bus, 800); this.noiseHit(now, 0.3, bus, 0.06, "lowpass", 480, 0.7); break; // a downward crumble
+      case "fx-poison":   for (let i = 0; i < 4; i++) this.note(160 + Math.random() * 90, now + i * 0.05, 0.13, bus, "sine", 0.03, 600); this.noiseHit(now, 0.3, bus, 0.03, "bandpass", 900, 1); break; // a toxic bubbling sizzle
+      case "fx-fire":     this.tone(360, 1700, 0.32, "sawtooth", 0.045, now, bus, 4000); this.noiseHit(now, 0.36, bus, 0.07, "highpass", 2400, 0.4); break; // a roaring whoosh
+      case "fx-cold":     for (const s of [12, 16, 19]) this.note(semi(r, s) * 4, now + (s % 3) * 0.02, 0.5, bus, "triangle", 0.028, 6500); this.noiseHit(now, 0.05, bus, 0.05, "highpass", 8000, 0.6); break; // a brittle crystalline shatter
+      case "fx-shock":    for (let i = 0; i < 6; i++) this.noiseHit(now + i * 0.018, 0.02, bus, 0.05, "highpass", 6800 + Math.random() * 1500, 1); this.note(semi(r, 24) * 2, now, 0.12, bus, "square", 0.03, 6000); break; // a crackling arc
+      case "fx-drain":    this.tone(semi(r, 7) * 2, semi(r, -3), 0.75, "sine", 0.05, now, bus, 1400); this.ghostVoice(now, false); break; // a wail of leaving vitality
+      case "fx-petrify":  this.noiseHit(now, 0.05, bus, 0.11, "bandpass", 900, 3); this.noiseHit(now + 0.06, 0.28, bus, 0.08, "lowpass", 200, 0.8); this.note(90, now + 0.06, 0.3, bus, "triangle", 0.04, 300); break; // a stony crack, then a dull setting
+      case "fx-acid":     this.noiseHit(now, 0.42, bus, 0.05, "highpass", 3600, 0.5); this.noiseHit(now, 0.28, bus, 0.04, "bandpass", 1400, 1.2); break; // a corrosive hiss
+      // ── objects, tools & rituals ──
+      case "spell":       for (let i = 0; i < 4; i++) this.note(semi(r, i * 4) * 2, now + i * 0.04, 0.3, bus, "triangle", 0.035, 3600); break; // a rising arcane shimmer
+      case "pray":        for (const c of [0, 7, 16]) this.note(semi(r, c) * 2, now, 1.5, bus, "sine", 0.028, 2400); break; // a soft divine chord
+      case "heal":        for (let i = 0; i < 3; i++) this.note(semi(r, [0, 4, 7][i]) * 2, now + i * 0.06, 0.42, bus, "sine", 0.04, 2600); break; // a warm restorative rise
+      case "levelup":     [0, 4, 7, 12].forEach((s, i) => this.note(semi(r, s) * 2, now + i * 0.07, 0.26, bus, "square", 0.04, 4200)); break; // a bright ascending arpeggio
+      case "curse":       [0, -1, -5].forEach((s, i) => this.note(semi(r, s), now + i * 0.08, 0.5, bus, "sawtooth", 0.04, 700)); break; // a dark descending knell
+      case "teleport":    this.tone(300, 2400, 0.12, "sine", 0.05, now, bus, 5000); this.tone(2400, 500, 0.12, "sine", 0.04, now + 0.12, bus, 4000); break; // a warp up-then-down
+      case "gem":         [19, 24].forEach((s, i) => this.note(semi(r, s) * 4, now + i * 0.05, 0.42, bus, "triangle", 0.04, 6500)); break; // a crystalline chime
+      case "dig":         for (let i = 0; i < 3; i++) this.noiseHit(now + i * 0.09, 0.07, bus, 0.07, "bandpass", 480 + i * 120, 2); break; // a grinding scrape + crumble
+      case "horn":        this.note(semi(r, 19) * 2, now, 0.9, bus, "sine", 0.05, 4200); this.note(semi(r, 26) * 2, now + 0.03, 0.7, bus, "sine", 0.028, 5200); break; // a pure clarion chime
+      case "camera":      this.noiseHit(now, 0.04, bus, 0.1, "highpass", 8500, 0.4); this.note(semi(r, 24) * 2, now, 0.1, bus, "triangle", 0.045, 7000); break; // a bright flash-pop
+      case "mirror":      this.note(semi(r, 12) * 2, now, 0.5, bus, "triangle", 0.03, 5000, 14); this.note(semi(r, 12) * 2, now + 0.02, 0.5, bus, "triangle", 0.028, 5000, -14); break; // a detuned shimmer
+      case "whistle":     this.tone(1600, 2300, 0.3, "sine", 0.05, now, bus, 5200); break; // a shrill recall note
+      case "drum":        for (let i = 0; i < 4; i++) this.kick(now + i * 0.08, bus, 0.18, true); break; // a martial roll
+      case "bell":        this.note(semi(r, 0), now, 2.4, bus, "sine", 0.06, 2200); this.note(semi(r, 7), now + 0.02, 1.8, bus, "sine", 0.03, 2600); break; // a deep resonant toll (Bell of Opening)
+      case "wear-magic":  this.note(semi(r, 7) * 2, now, 0.42, bus, "sine", 0.033, 3000); this.note(semi(r, 14) * 2, now + 0.05, 0.42, bus, "triangle", 0.028, 3600); break; // a soft magical don
+      case "explode":     this.kick(now, bus, 0.4, true); this.noiseHit(now, 0.42, bus, 0.14, "lowpass", 600, 0.6); this.noiseHit(now, 0.2, bus, 0.08, "highpass", 3000, 0.4); break; // a detonation
+      case "web":         this.note(140, now, 0.1, bus, "triangle", 0.05, 500); this.noiseHit(now + 0.02, 0.08, bus, 0.04, "bandpass", 2200, 2); break; // a sticky snare snap
     }
   }
 
@@ -896,12 +964,34 @@ export class MusicEngine {
   }
   private ambientOne(): void {
     const now = this.ctx!.currentTime, bus = this.sfxBus, r = this.active?.def.root ?? 110;
+    // A special room the adventurer stands in colours the bed over the base area ambience.
+    if (this.c.room && this.roomAmbient(now, this.c.room)) return;
     switch (this.area) {
-      case "wildlands": case "dungeon": this.drip(now); break;                                                       // cavern drips
-      case "greathall": case "legacy": this.noiseHit(now, 0.4, bus, 0.028, "bandpass", 220, 2); break;            // low machinery hum
-      case "gehennom": case "sanctum": this.noiseHit(now, 0.9, bus, 0.05, "lowpass", 150, 1); if (Math.random() < 0.3) this.tone(semi(r, 1), semi(r, 1) * 0.98, 1.4, "sawtooth", 0.03, now, bus, 500); break; // hell rumble + distant groan
+      case "legacy": this.drip(now); if (Math.random() < 0.25) for (let i = 0; i < 3; i++) this.noiseHit(now + i * 0.05, 0.02, bus, 0.02, "highpass", 6000, 2); break; // shallow drips + a distant scurry
+      case "deeps": this.drip(now); if (Math.random() < 0.35) this.tone(semi(r, 0) * 0.5, semi(r, -1) * 0.5, 1.6, "sine", 0.02, now, bus, 300); break; // drips + a deep cave groan
+      case "wildlands": this.drip(now); if (Math.random() < 0.4) this.tone(semi(r, 19) * 2, semi(r, 22) * 2, 1.6, "sine", 0.016, now, bus, 4200); break; // drips + a hollow wind
+      case "dungeon": this.noiseHit(now, 1.1, bus, 0.04, "lowpass", 130, 1); if (Math.random() < 0.3) this.drip(now); break; // the foot of the dungeon — a deep resonant hush
+      case "greathall": this.noiseHit(now, 0.4, bus, 0.028, "bandpass", 220, 2); break;                             // low machinery hum
+      case "gehennom": case "sanctum": this.noiseHit(now, 0.9, bus, 0.05, "lowpass", 150, 1); if (Math.random() < 0.35) { if (Math.random() < 0.5) this.ghostVoice(now, true); else this.tone(semi(r, 1), semi(r, 1) * 0.98, 1.4, "sawtooth", 0.03, now, bus, 500); } break; // hell rumble + a damned voice / groan
       case "planes": case "genesis": this.tone(semi(r, 19) * 2, semi(r, 24) * 2, 1.8, "sine", 0.022, now, bus, 5000); break; // ethereal wind
+      case "elsewhere": if (Math.random() < 0.5) this.drip(now); else this.tone(semi(r, 12) * 2, semi(r, 14) * 2, 1.4, "triangle", 0.016, now, bus, 4000); break; // a branch shimmer
       default: if (Math.random() < 0.4) this.drip(now); break;
+    }
+  }
+
+  /** Per-special-room ambience (mkroom.c flavour) — a subtle bed over the area's own. Returns true if it handled the tick. */
+  private roomAmbient(now: number, room: string): boolean {
+    const bus = this.sfxBus, r = this.active?.def.root ?? 110;
+    switch (room) {
+      case "temple": for (const c of [0, 7, 12]) this.note(semi(r, c) * 2, now, 2.2, bus, "sine", 0.022, 2200); return true; // a soft choral hush
+      case "morgue": this.ghostVoice(now, Math.random() < 0.5); return true;                                        // the restless dead — disembodied voices
+      case "beehive": this.tone(semi(r, 2) * 2, semi(r, 2) * 2 * 1.01, 1.8, "sawtooth", 0.03, now, bus, 700); return true; // a swarming buzz-drone
+      case "swamp": for (let i = 0; i < 3; i++) { const f = 180 + Math.random() * 120; this.tone(f, f * 0.5, 0.18, "sine", 0.04, now + i * 0.12, bus, 500); } return true; // brackish bubbling plops
+      case "zoo": case "anthole": case "cocknest": this.noiseHit(now, 0.4, bus, 0.04, "bandpass", 600 + Math.random() * 400, 1.2); if (Math.random() < 0.4) this.tone(semi(r, 0), semi(r, -1), 0.5, "sawtooth", 0.025, now, bus, 800); return true; // a restless menagerie
+      case "oracle": this.tone(semi(r, 19) * 2, semi(r, 24) * 2, 2.2, "sine", 0.02, now, bus, 5200); return true;   // an ethereal, prophetic shimmer
+      case "barracks": this.noiseHit(now, 0.06, bus, 0.05, "bandpass", 1600, 3); if (Math.random() < 0.5) this.noiseHit(now + 0.2, 0.05, bus, 0.04, "bandpass", 1200, 3); return true; // a distant clank of arms
+      case "vault": case "lephall": for (let i = 0; i < 3; i++) this.note(semi(r, [12, 16, 19][i]) * 2, now + i * 0.06, 0.3, bus, "triangle", 0.018, 5200); return true; // a faint chink of gold
+      default: return false;
     }
   }
 
@@ -918,11 +1008,18 @@ export class MusicEngine {
   private beastOne(cat: string): void {
     const now = this.ctx!.currentTime, bus = this.sfxBus, r = this.active?.def.root ?? 110;
     switch (cat) {
-      case "undead": this.tone(semi(r, 1), semi(r, 0), 1.2, "sine", 0.045, now, bus, 700); break;                          // a low moan
+      case "ghost":  this.ghostVoice(now, false); break;                                                                    // a disembodied voice drifts by
+      case "undead": if (Math.random() < 0.5) this.ghostVoice(now, false); else this.tone(semi(r, 1), semi(r, 0), 1.2, "sine", 0.045, now, bus, 700); break; // a moan, or a whispered voice
       case "bot":    for (let i = 0; i < 4; i++) this.noiseHit(now + i * 0.05, 0.02, bus, 0.03, "highpass", 6200, 2); break; // skitter / clicks
-      case "dragon": this.noiseHit(now, 0.6, bus, 0.06, "lowpass", 180, 1); this.tone(semi(r, 0), semi(r, -1), 0.7, "sawtooth", 0.04, now, bus, 500); break; // growl
+      case "dragon": this.noiseHit(now, 0.6, bus, 0.06, "lowpass", 180, 1); this.tone(semi(r, 0), semi(r, -1), 0.7, "sawtooth", 0.04, now, bus, 500); break; // a rumbling growl
       case "ooze":   this.noiseHit(now, 0.25, bus, 0.05, "bandpass", 600, 1.5); break;                                     // a wet squelch
-      case "demon":  this.noiseHit(now, 0.4, bus, 0.03, "highpass", 3000, 0.5); this.tone(semi(r, 6), semi(r, 6) * 1.02, 0.8, "sawtooth", 0.024, now, bus, 3000); break; // hiss / whisper
+      case "demon":  this.noiseHit(now, 0.4, bus, 0.03, "highpass", 3000, 0.5); this.tone(semi(r, 6), semi(r, 6) * 1.02, 0.8, "sawtooth", 0.024, now, bus, 3000); break; // a hiss / whisper
+      case "rodent": for (let i = 0; i < 3; i++) this.note(1400 + Math.random() * 800, now + i * 0.04, 0.04, bus, "square", 0.02, 6000); break; // a chittering squeak
+      case "insect": this.tone(semi(r, 2) * 3, semi(r, 2) * 3 * 1.01, 0.6, "sawtooth", 0.02, now, bus, 1400); break;       // a wing-buzz
+      case "serpent": this.noiseHit(now, 0.5, bus, 0.04, "highpass", 5000, 0.4); break;                                    // a slithering hiss
+      case "humanoid": this.tone(semi(r, 0) * 0.75, semi(r, -2) * 0.75, 0.45, "sawtooth", 0.035, now, bus, 700); break;    // a guttural grunt
+      case "were":   this.tone(semi(r, 7), semi(r, 14), 0.9, "sawtooth", 0.04, now, bus, 1200); this.tone(semi(r, 14), semi(r, 5), 0.6, "sawtooth", 0.03, now + 0.5, bus, 900); break; // a rising howl
+      case "psychic": this.note(semi(r, 6) * 2, now, 1.1, bus, "sine", 0.03, 2400, 20); this.noiseHit(now, 0.4, bus, 0.02, "bandpass", 1800, 3); break; // a wet psychic warble
       default:       this.noiseHit(now, 0.12, bus, 0.05, "bandpass", 700, 1.5); break;                                     // a growl / snarl
     }
   }

@@ -853,6 +853,7 @@ export class Player extends Entity {
           }
           if (this.ring) this.applyRing(this.ring, false);
           this.ring = item; this.applyRing(item, true);
+          this.game.music.sfx("wear-magic");
           this.game.log.add(`You put on ${ident.name(t)}.`, "good");
           if (item.buc === "cursed") { item.bucKnown = true; this.game.log.add(`The ${t.name} tightens around your finger. It's cursed!`, "bad"); }
           return this.endTurn();
@@ -865,6 +866,7 @@ export class Player extends Entity {
             return this.endTurn();
           }
           this.amulet = item;
+          this.game.music.sfx("wear-magic");
           this.game.log.add(`You hang ${ident.name(t)} around your neck.`, "good");
           if (item.buc === "cursed") { item.bucKnown = true; this.game.log.add(`The ${t.name} clasps shut around your neck. It's cursed!`, "bad"); }
           return this.endTurn();

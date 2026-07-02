@@ -32,6 +32,7 @@ export class Level {
   portals: Portal[] = []; // the planar gate portals to dungeon branches
   branchEntries: { x: number; y: number; branchId: string }[] = []; // branch-stairs into sub-dungeons (the Mines)
   roomCenters: { x: number; y: number }[] = [];
+  specialRoom: { kind: string; cells: Set<string> } | null = null; // a placed mkroom.c special room — drives its own ambient bed
   lightSources: { x: number; y: number }[] = []; // abstract torch/brazier points — the lit map radiates from these (recomputed as doors open)
   start = { x: 1, y: 1 };
   stairs = { x: 1, y: 1 };

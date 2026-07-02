@@ -479,6 +479,7 @@ export class Game {
       p.maxHp += gain; p.hp += gain;
       this.recomputeEnergy(p); p.energy = p.maxEnergy;
       this.log.add(`${this.sub(p)} ${this.verbS(p, "reach")} level ${p.level}! Max HP ${p.maxHp}, En ${p.maxEnergy}.`, "good");
+      if (p === this.localPlayer) this.music.sfx("levelup");
     }
   }
 
@@ -498,6 +499,7 @@ export class Game {
     p.xp = this.xpForLevel(p.level); // drop to the floor of the now-lower level
     this.recomputeEnergy(p); p.energy = Math.min(p.energy, p.maxEnergy);
     this.log.add(`${cap(byName)} drains an level — you slip to level ${p.level}! (max HP ${p.maxHp})`, "bad", p);
+    if (p === this.localPlayer) this.music.sfx("fx-drain");
     if (p.hp <= 0) this.killPlayer(p);
   }
 
@@ -511,6 +513,7 @@ export class Game {
     p[a]--; p.statDrain[a] = (p.statDrain[a] ?? 0) + 1;
     if (a === "int") { this.recomputeEnergy(p); p.energy = Math.min(p.energy, p.maxEnergy); }
     this.log.add(`${cap(byName)} drains your ${attrFlavor(a)} — ${ATTR_LABEL[a]} down to ${p[a]}!`, "bad", p);
+    if (p === this.localPlayer) this.music.sfx("fx-drain");
   }
 
   showCharSheet(): void {
@@ -1560,18 +1563,27 @@ export class Game {
       const d = Math.min(...here.map((q) => Math.max(Math.abs(m.x - q.x), Math.abs(m.y - q.y))));
       if (d < bd) { bd = d; beast = this.beastCategory(m); }
     }
-    return { threat, danger: Math.min(1, Math.max(this.dangerLevel(), peril)), bossNear, crowd, amuletNear, fountain: onFeat("fountain"), altar: onFeat("altar"), beast };
+    const sr = this.level.specialRoom;
+    const room = sr && sr.cells.has(`${p.x},${p.y}`) ? sr.kind : undefined; // the special room the local adventurer stands in
+    return { threat, danger: Math.min(1, Math.max(this.dangerLevel(), peril)), bossNear, crowd, amuletNear, fountain: onFeat("fountain"), altar: onFeat("altar"), beast, room };
   }
 
-  /** Coarse creature category for foley cues (undead moan, bot skitter, dragon growl, ooze squelch…). */
+  /** Coarse creature category for foley cues (ghost voices, undead moans, growls, skitters, hisses…). */
   private beastCategory(m: Monster): string {
     const d = m.def, ch = d.ch;
-    if (d.drains || d.silences || ch === "w" || ch === "W") return "undead";
+    if (d.startsInvisible) return "ghost";                       // a phase stalker — a disembodied voice
+    if (d.drainsStat || ch === "u") return "psychic";           // a mind flayer — a wet psychic warble
+    if (d.drains || d.silences || ch === "w" || ch === "W" || ch === "M" || ch === "Z") return "undead"; // wraiths, mummies, liches — moans & voices
     if (d.breath || ch === "D") return "dragon";
     if (d.corrodes) return "ooze";
+    if (d.infects || ch === "d") return "were";                 // a werewolf — a howl
+    if (ch === ";" || ch === "S") return "serpent";             // eels, serpents — a slithering hiss
+    if (d.breeds || ch === "a" || ch === "y" || ch === "v") return "insect"; // flies, drones, breeders — a wing-buzz
+    if (ch === "r" || ch === "g" || ch === "l") return "rodent"; // rats, gremlins, coin-hoarders — a chitter
     if (ch === "s" || ch === "x" || ch === "b" || ch === "f") return "bot";
     const area = this.currentAreaId();
-    if (ch === "&" || ch === "i" || area === "gehennom" || area === "sanctum") return "demon";
+    if (ch === "&" || ch === "i" || ch === "X" || ch === "P" || ch === "j" || area === "gehennom" || area === "sanctum") return "demon";
+    if (ch === "@" || ch === "k" || ch === "p" || ch === "H" || ch === "A" || ch === "O" || ch === "o" || ch === "h" || ch === "n") return "humanoid"; // @-folk, goblins, giants, casters
     return "beast";
   }
 
@@ -1639,6 +1651,7 @@ export class Game {
     if (missing.length) { this.log.add(`The square thrums, but the rite is incomplete. You still need: ${missing.join(", ")}.`, "bad"); return false; }
     this.gehennomOpen = true;
     this.level.tiles[p.y][p.x] = "stairsDown";
+    this.music.sfx("bell");
     this.log.add("You ring the Bell of Opening — one note, and it never decays.", "sys");
     this.log.add("You light the Candelabrum of Invocation — seven flames of the first block flare.", "sys");
     this.log.add("You read aloud from the Gray Paper. The grammar of accord unwrites itself.", "sys");
@@ -1728,6 +1741,7 @@ export class Game {
       const open = cells.filter((p) => this.level.tileAt(p.x, p.y) === "floor" && !this.monsterAt(p.x, p.y) && !this.level.itemAt(p.x, p.y) && !this.playerAt(p.x, p.y));
       if (cells.length < 6 || open.length < 4) continue;
       const kind = ROT.RNG.getItem(["temple", "zoo", "vault", "morgue", "oracle", "barracks", "beehive", "lephall", "swamp", "anthole", "cocknest"])!;
+      this.level.specialRoom = { kind, cells: new Set(cells.map((p) => `${p.x},${p.y}`)) }; // tag it so the music can bed the room's ambience
       if (kind === "temple") this.makeTemple(c, open);
       else if (kind === "zoo") this.makeZoo(open);
       else if (kind === "morgue") this.makeMorgue(open);
@@ -2154,6 +2168,7 @@ export class Game {
     const seen = new Set<string>();
     const gems = p.inventory.items.filter((it) => it.type.kind === "gem" && !this.ident.isKnown(it.type));
     if (!gems.length) { this.log.add("You have no unappraised gems.", "dim"); return false; }
+    this.music.sfx("gem");
     for (const g of gems) {
       if (seen.has(g.type.id)) continue; seen.add(g.type.id);
       this.ident.learn(g.type);
@@ -2450,6 +2465,7 @@ export class Game {
     const p = this.acting;
     if (p.prayerCooldown > 0) { this.wrath(p); return; } // praying too soon angers him
     p.prayerCooldown = 130;
+    if (p === this.localPlayer) this.music.sfx("pray");
     p.hp = p.maxHp;
     p.nutrition = Math.max(p.nutrition, 600);
     p.poison = 0; p.confused = 0; p.silenced = 0;
@@ -2764,6 +2780,7 @@ export class Game {
     if (!this.lands(a, d)) {
       if (a instanceof Player && d instanceof Monster) this.log.add(`${this.sub(a)} ${this.verbS(a, "miss")} ${d.name}.`, "dim", who);
       else if (a instanceof Monster && d instanceof Player) this.log.add(`${cap(a.name)} misses ${d.name}.`, "dim", who);
+      if (a === this.localPlayer || d === this.localPlayer) this.music.sfx("miss"); // a whiff you'd hear
       return;
     }
     // Bond perk (valor): a bonded, bold hound at your side throws itself into a blow meant for you.
@@ -2791,6 +2808,7 @@ export class Game {
         && ROT.RNG.getUniform() < (typeof a.def.corrodes === "number" ? a.def.corrodes : 0.35)) this.corrodeGear(d);
     if (a instanceof Player && d instanceof Monster) {
       this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg}.`, "good", who);
+      if (a === this.localPlayer) this.music.sfx("hit"); // your blow connects
       if (a.weapon === null && d.hp > 0 && !d.def.boss) this.martialFollowUp(a, d, who); // an unarmed blow can daze or throw a foe, by martial skill
       // An acid creature's hide bites back at a metal blade — reckless swinging rusts your weapon (unhanded sidesteps it).
       if (d.def.acidic && a.weapon && this.corrodibleWeapon(a.weapon) && ROT.RNG.getUniform() < 0.3) {
@@ -2800,6 +2818,7 @@ export class Game {
     }
     else if (a instanceof Monster && d instanceof Player) {
       this.log.add(`${cap(a.name)} hits ${d.name} for ${dmg}.`, "bad", who);
+      if (d === this.localPlayer) this.music.sfx("hurt"); // you take the blow
       if (!a.cancelled && a.def.inflict && d.hp > 0 && ROT.RNG.getUniform() < 0.3) this.applyStatus(d, a.def.inflict);
       if (!a.cancelled && a.def.stealsLuck && d.hp > 0 && d.luck > -13 && ROT.RNG.getUniform() < 0.5) {
         d.luck = Math.max(-13, d.luck - 1);
@@ -2833,7 +2852,7 @@ export class Game {
       }
       if (!a.cancelled && a.def.curses && d.hp > 0 && ROT.RNG.getUniform() < 0.18) {
         const pool = d.inventory.items.filter((it) => it.buc !== "cursed");
-        if (pool.length) { const it = ROT.RNG.getItem(pool)!; it.buc = "cursed"; it.bucKnown = false; this.log.add(`${cap(a.name)}'s touch sows doubt — something in your pack curdles. (FUD)`, "bad", who); }
+        if (pool.length) { const it = ROT.RNG.getItem(pool)!; it.buc = "cursed"; it.bucKnown = false; if (d === this.localPlayer) this.music.sfx("curse"); this.log.add(`${cap(a.name)}'s touch sows doubt — something in your pack curdles. (FUD)`, "bad", who); }
       }
     }
     else if (a instanceof Player && d instanceof Player) this.log.add(`${this.sub(a)} ${this.verbS(a, "strike")} ${d.name} for ${dmg} — friendly fire!`, "bad", who);
@@ -2842,6 +2861,7 @@ export class Game {
     if (d.hp <= 0) {
       if (a instanceof Player && d instanceof Monster) this.gainXp(a, d.maxHp); // XP = the foe's vitality
       if (a instanceof Pet) a.loyalty = Math.min(20, a.loyalty + 1); // a kill for you deepens its devotion
+      if (a === this.localPlayer && d instanceof Monster) this.music.sfx("death"); // a foe crumbles by your hand
       this.kill(d);
     }
     // #twoweapon: a lighter off-hand follow-up if the foe still stands.
@@ -2956,6 +2976,7 @@ export class Game {
     if (it === p.weapon) p.applyWeapon(); else p.recomputeAC();
     const tag = ["", "rusty", "corroded", "badly corroded"][it.erosion];
     this.log.add(`${p.name === "you" ? "Your" : p.name + "'s"} ${this.ident.name(it.type)} corrodes — now ${tag}.`, "bad");
+    if (p === this.localPlayer) this.music.sfx("fx-acid");
   }
 
   /** A rust attacker's touch erodes a random unproofed worn piece — or the wielded metal weapon. */
@@ -2973,6 +2994,7 @@ export class Game {
     if (kind === "poison" && (target.intrinsics.has("poisonResist") || target.ringPoisonRes)) { this.log.add(`${target.name === "you" ? "You resist" : target.name + " resists"} the toxin.`, "dim", target); return; }
     if (kind === "poison") { target.poison = Math.max(target.poison, 6); this.log.add(`${target.name === "you" ? "You are" : target.name + " is"} poisoned!`, "bad", target); }
     else { target.confused = Math.max(target.confused, 5); this.log.add(`${target.name === "you" ? "Your head spins" : target.name + "'s head spins"} — confused!`, "bad", target); }
+    if (target === this.localPlayer) this.music.sfx(kind === "poison" ? "fx-poison" : "spell");
   }
 
   /** A worn amulet of reflection rebounds rays/breath back at the source (works even cursed). */
@@ -3353,6 +3375,7 @@ export class Game {
       this.recomputeFOV();
     } else if (item.type.id === "wand_fire") {
       // A bouncing fire ray — it sears everything in its path, including you if it caroms back.
+      this.music.sfx("fx-fire");
       this.castRay(this.acting.x, this.acting.y, dx, dy, 9, (e) => {
         if (this.elementResisted(e, "fire")) return;
         const d = ROT.RNG.getUniformInt(6, 12); e.hp -= d;
@@ -3360,6 +3383,7 @@ export class Game {
         if (e.hp <= 0) { if (e instanceof Monster) this.gainXp(this.acting, e.maxHp); this.kill(e); }
       });
     } else if (item.type.id === "wand_cold") {
+      this.music.sfx("fx-cold");
       this.castRay(this.acting.x, this.acting.y, dx, dy, 9, (e) => {
         if (this.elementResisted(e, "cold")) return;
         const d = ROT.RNG.getUniformInt(5, 11); e.hp -= d;
@@ -3368,6 +3392,7 @@ export class Game {
         if (e.hp <= 0) { if (e instanceof Monster) this.gainXp(this.acting, e.maxHp); this.kill(e); }
       });
     } else if (item.type.id === "wand_lightning") {
+      this.music.sfx("fx-shock");
       this.castRay(this.acting.x, this.acting.y, dx, dy, 9, (e) => {
         if (this.elementResisted(e, "shock")) return;
         const d = ROT.RNG.getUniformInt(7, 13); e.hp -= d;
@@ -3539,6 +3564,7 @@ export class Game {
         const d = ROT.RNG.getUniformInt(3, 8) + (s.cost ?? 0);
         p.hp -= d;
         p.confused = Math.max(p.confused, ROT.RNG.getUniformInt(2, 5));
+        this.music.sfx("explode");
         this.log.add(`The tome destabilises and explodes as you parse it — ${d} damage, and your head reels!`, "bad");
         if (book.buc !== "blessed" && ROT.RNG.getUniform() < 0.5) { p.inventory.remove(book); this.log.add(`${cap(this.ident.name(book.type))} is corrupted beyond repair.`, "dim"); }
         if (p.hp <= 0) { this.killPlayer(p); return true; }
@@ -3561,6 +3587,8 @@ export class Game {
       this.log.add(`${this.sub(p)} ${this.verbS(p, "fumble")} ${s.name} — it fizzles.`, "dim");
       this.draw(); return true;
     }
+    // a cast cue, flavoured by the extrinsic's effect
+    this.music.sfx(id === "heal" || id === "cure" ? "heal" : id === "tele" ? "teleport" : id === "fireball" ? "fx-fire" : id === "cryo" ? "fx-cold" : id === "dig" ? "dig" : id === "uncurse" ? "wear-magic" : "spell");
     switch (id) {
       case "bolt": {
         let x = p.x, y = p.y; let hit: Monster | undefined;
@@ -3786,6 +3814,7 @@ export class Game {
       if (Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y)) <= 6) { m.frightened = Math.max(m.frightened, 5); n++; }
     }
     this.log.add(n ? `You beat the drum of accord — a rolling thunder rolls out; ${n} foe${n > 1 ? "s" : ""} waver.` : "You beat the drum of accord. It echoes through empty halls.", n ? "good" : "dim");
+    this.music.sfx("drum");
     return true;
   }
 
@@ -3807,6 +3836,7 @@ export class Game {
     pack.forEach((pet, i) => { if (spots[i]) { pet.x = spots[i].x; pet.y = spots[i].y; pet.floorKey = this.activeKey; moved++; } });
     this.recomputeFOV();
     this.log.add(moved ? `A shrill note — your ${moved > 1 ? "retinue blinks" : "hound blinks"} to your side.` : "You sound the recall beacon, but there's no room beside you.", moved ? "good" : "dim");
+    this.music.sfx("whistle");
     return true;
   }
 
@@ -3999,6 +4029,7 @@ export class Game {
     p.hp = Math.min(p.maxHp, p.hp + ROT.RNG.getUniformInt(2, 6));
     this.recomputeFOV();
     this.log.add(`${this.sub(p)} ${this.verbS(p, "sound")} the unicorn horn — afflictions clear.`, "good");
+    this.music.sfx("horn");
     return true;
   }
 
@@ -4027,7 +4058,7 @@ export class Game {
         if (this.level.tileAt(x, y) === "wall") { this.level.tiles[y][x] = "floor"; dug++; }
       }
       this.log.add(dug ? `${this.sub(p)} ${this.verbS(p, "hew")} through ${dug} wall${dug > 1 ? "s" : ""} with the excavator.` : "Nothing to dig there.", dug ? "good" : "dim");
-      if (dug) this.recomputeFOV();
+      if (dug) { this.recomputeFOV(); this.music.sfx("dig"); }
       return true; // a swing of the pick spends the turn either way
     }
     if (item.type.id === "scope") {
@@ -4040,6 +4071,7 @@ export class Game {
     if (item.type.id === "mirror") {
       const m = this.monsterAt(p.x + dx, p.y + dy);
       if (!m) { this.log.add("You peer into the mirror node — only your own reflection stares back.", "dim"); return false; }
+      this.music.sfx("mirror");
       if (m.blindTurns > 0) { this.log.add(`${cap(m.name)} can't see its reflection.`, "dim"); return true; }
       // A petrifier meets its own gaze — the classic cockatrice fate: it turns to stone.
       if (m.def.corpseEffect === "petrify" && !m.def.boss) {
@@ -4079,6 +4111,7 @@ export class Game {
     if (item.type.id === "camera") {
       if ((item.charges ?? 0) <= 0) { this.log.add("The snapshot camera is out of film.", "dim"); return false; }
       item.charges = (item.charges ?? 0) - 1;
+      this.music.sfx("camera");
       let hits = 0;
       this.castRay(p.x, p.y, dx, dy, 6, (e) => {
         if (e instanceof Monster) {
@@ -4294,6 +4327,7 @@ export class Game {
   private applyMeatEffect(p: Player, def: MonsterDef, rotten: boolean): void {
     if (def.corpseEffect === "petrify" && !p.intrinsics.has("petrifyResist")) {
       p.stoning = 5;
+      if (p === this.localPlayer) this.music.sfx("fx-petrify");
       this.log.add(`${this.sub(p)} ${this.verbS(p, "start")} to freeze solid — find a cure, fast! (pray, or a cleanse)`, "bad");
     } else if (def.corpseEffect === "poisonous") {
       if ((p.intrinsics.has("poisonResist") || p.ringPoisonRes)) this.log.add("Toxic — but you shrug it off.", "dim");
@@ -4888,6 +4922,13 @@ export class Game {
   triggerTrap(trap: Trap): void {
     trap.revealed = true;
     const p = this.acting;
+    // a trap-spring cue, flavoured by kind (only for the local adventurer's own mishaps)
+    if (p === this.localPlayer) {
+      const k = trap.kind;
+      this.music.sfx(k === "landmine" || k === "rockfall" ? "explode" : k === "web" || k === "bear" ? "web"
+        : k === "teleport" || k === "leveltp" ? "teleport" : k === "fire" ? "fx-fire" : k === "rust" ? "fx-acid"
+        : k === "polymorph" ? "spell" : k === "dart" ? "miss" : "hurt");
+    }
     switch (trap.kind) {
       case "gas": { const d = ROT.RNG.getUniformInt(3, 7); p.hp -= d; this.log.add(`A gas trap drains ${d} from you!`, "bad"); break; }
       case "slash": { const d = ROT.RNG.getUniformInt(6, 12); p.hp -= d; this.log.add(`A slashing trap bites for ${d}!`, "bad"); break; }
