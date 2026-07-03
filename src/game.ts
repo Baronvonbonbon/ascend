@@ -113,9 +113,15 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 // ═══════════════════════════════════════════════════════════════════════════
 const DEBUG = true;
 
+/** A single transient action-effect glyph. delay = frames before it appears; life = frames it lasts. */
+interface FxParticle { x: number; y: number; ch: string; fg: string; delay: number; life: number; }
+
 export class Game {
   readonly display: ROT.Display;
   readonly log: Log;
+  private rayPath: [number, number][] = [];   // the last castRay's bounced cells (cosmetic — drives ray FX)
+  private fxParticles: FxParticle[] = [];      // active action-effect glyphs (purely visual; never touch the sim)
+  private fxTimer: number | null = null;       // the FX animation ticker (rAF-throttled)
   level!: Level;
   player!: Player;
   appearances!: Appearances;        // the world's shared potion/scroll looks
@@ -2819,6 +2825,7 @@ export class Game {
       if (a instanceof Player && d instanceof Monster) this.log.add(`${this.sub(a)} ${this.verbS(a, "miss")} ${d.name}.`, "dim", who);
       else if (a instanceof Monster && d instanceof Player) this.log.add(`${cap(a.name)} misses ${d.name}.`, "dim", who);
       if (a === this.localPlayer || d === this.localPlayer) this.music.sfx("miss"); // a whiff you'd hear
+      this.fxMiss(d.x, d.y, Math.sign(d.x - a.x), Math.sign(d.y - a.y));
       return;
     }
     // Bond perk (valor): a bonded, bold hound at your side throws itself into a blow meant for you.
@@ -2839,6 +2846,7 @@ export class Game {
     let dmg = ROT.RNG.getUniformInt(lo, hi);
     if (a instanceof Player) dmg = Math.max(1, dmg + abilityMod(a.str) + this.skillDmgBonus(a) + a.ringDmg); // Brawn + trained skill + a ring of damage drive the blow
     d.hp -= dmg;
+    this.fxStrike(d.x, d.y); // a burst of sparks where the blow lands
     if (a instanceof Player && d instanceof Monster) this.noteSkillHit(a); // a landed blow trains the weapon's skill
     // A rust/corrosion striker (rust monster, slime) may eat away a worn piece on a hit — a per-hit
     // chance now (true = 0.35, or a per-monster probability), not the old guaranteed erosion.
@@ -3450,6 +3458,8 @@ export class Game {
     if (!item.charges || item.charges <= 0) { this.log.add("The wand is spent.", "dim"); return; }
     item.charges--;
     this.music.sfx("zap");
+    this.rayPath = []; // fresh — a castRay below will refill it; else fxBeam glides straight
+    const beamKind: Record<string, string> = { wand_fire: "fire", wand_cold: "cold", wand_lightning: "shock", wand_missile: "force", wand_bolt: "force", wand_light: "light", wand_death: "death", wand_dig: "dig", wand_open: "force" };
 
     if (item.type.id === "wand_dig") {
       let x = this.acting.x, y = this.acting.y, dug = 0;
@@ -3584,6 +3594,7 @@ export class Game {
       }
     }
 
+    if (beamKind[item.type.id]) this.fxBeam(this.acting.x, this.acting.y, dx, dy, beamKind[item.type.id]); // the visible beam/orb (uses the bounced ray path when there is one)
     if (item.charges <= 0) { this.acting.inventory.remove(item); this.log.add(`The ${item.type.name} crumbles to dust.`, "dim"); }
     this.draw();
   }
@@ -3606,6 +3617,7 @@ export class Game {
 
   private castRay(sx: number, sy: number, dx: number, dy: number, range: number, onHit: (e: Entity) => void): void {
     let x = sx, y = sy;
+    this.rayPath = []; // record the bounced path (cosmetic — drives the ray animation)
     for (let step = 0; step < range; step++) {
       let nx = x + dx, ny = y + dy;
       if (!this.level.isPassable(nx, ny)) {
@@ -3618,6 +3630,7 @@ export class Game {
         if (!this.level.isPassable(nx, ny)) break; // boxed in
       }
       x = nx; y = ny;
+      this.rayPath.push([x, y]);
       const bldr = this.level.boulderAt(x, y);
       if (bldr) { this.level.boulders = this.level.boulders.filter((z) => z !== bldr); this.log.add("A boulder shatters under the blast.", "dim"); break; } // the ray spends itself
       const m = this.monsterAt(x, y); if (m && m.alive) onHit(m);
@@ -3677,6 +3690,9 @@ export class Game {
     }
     // a cast cue, flavoured by the extrinsic's effect
     this.music.sfx(id === "heal" || id === "cure" ? "heal" : id === "tele" ? "teleport" : id === "fireball" ? "fx-fire" : id === "cryo" ? "fx-cold" : id === "dig" ? "dig" : id === "uncurse" ? "wear-magic" : "spell");
+    this.rayPath = []; // a castRay below refills it for the ray spells; else fxBeam glides straight
+    this.fxCast(p.x, p.y, s.school === "attack" ? "#e0b070" : s.school === "clerical" ? "#a0f0c0" : "#c0a0f0"); // a cast shimmer round the caster
+    const spellBeam: Record<string, string> = { fireball: "fire", cryo: "cold", bolt: "force", drainlife: "death", dig: "dig", knock: "force", light: "light", cure: "cure" };
     switch (id) {
       case "bolt": {
         let x = p.x, y = p.y; let hit: Monster | undefined;
@@ -3783,6 +3799,7 @@ export class Game {
         break;
       }
     }
+    if (spellBeam[id]) this.fxBeam(p.x, p.y, dx, dy, spellBeam[id]); // the visible spell beam/orb
     this.draw();
     return true;
   }
@@ -4151,6 +4168,7 @@ export class Game {
     if (recent) gain *= 0.3;
     pet.bond = Math.min(PET_MAX_BOND, pet.bond + Math.max(1, Math.round(gain)));
     pet.lastPlayTurn = this.turn;
+    this.fxPetPlay(pet.x, pet.y); // little hearts float up
     if (!recent) pet.loyalty = Math.min(PET_MAX_LOYAL, pet.loyalty + 1); // kindness also mildly reassures
     this.log.add(recent ? `${cap(pet.name)} has had its fill of fuss for now, but wags all the same.` : msg, "good", p);
     const after = pet.bondTier();
@@ -5540,6 +5558,115 @@ export class Game {
     return [skin(this.buildHud(this.player)), this.coPlayer ? skin(this.buildHud(this.coPlayer)) : ""];
   }
 
+  // ── action visual effects (ASCII glyph animations) ───────────────────────────
+  // Purely cosmetic playback of an already-resolved action. CRITICAL: FX must use Math.random(), NEVER
+  // ROT.RNG — consuming the sim RNG here would desync co-op. Effects only spawn for actions on the local
+  // player's own floor (so we don't animate an off-screen partner's turn).
+  private fxHere(): boolean { return this.acting.floorKey === this.localPlayer.floorKey; }
+
+  /** Queue particles and make sure the animation ticker is running. */
+  private spawnFx(ps: FxParticle[]): void {
+    if (!ps.length) return;
+    for (const p of ps) this.fxParticles.push(p);
+    if (this.fxTimer == null) this.fxTimer = window.setInterval(() => this.fxTick(), 33); // ~30fps
+  }
+
+  /** Advance every particle one frame; redraw base + overlay; stop when spent. */
+  private fxTick(): void {
+    let live = false;
+    for (const p of this.fxParticles) {
+      if (p.delay > 0) { p.delay--; live = true; continue; }
+      p.life--;
+      if (p.life > 0) live = true;
+    }
+    this.fxParticles = this.fxParticles.filter((p) => p.delay > 0 || p.life > 0);
+    this.renderWithFx();
+    if (!live || this.fxParticles.length === 0) {
+      if (this.fxTimer != null) { clearInterval(this.fxTimer); this.fxTimer = null; }
+      this.fxParticles = [];
+      if (this.player && !this.over) this.draw(); // settle back to the clean frame
+    }
+  }
+
+  /** Redraw the current view with the live FX particles overlaid (no sim/music side effects). */
+  private renderWithFx(): void {
+    if (!this.player) return;
+    const lp = this.localPlayer;
+    const view = lp.alive ? this.localViewer : (this.localViewer === 0 ? 1 : 0);
+    const cells = this.buildCells(view);
+    this.display.clear();
+    for (const [x, y, ch, fg] of cells) this.display.draw(x, y, ch, fg, COLORS.bg);
+    const visFx = (x: number, y: number) => view === 1 ? this.level.isVisibleCo(x, y) : this.level.isVisible(x, y);
+    for (const p of this.fxParticles) if (p.delay <= 0 && p.life > 0 && p.x >= 0 && p.y >= 0 && p.x < W && p.y < MAP_H && visFx(p.x, p.y)) this.display.draw(p.x, p.y, p.ch, p.fg, COLORS.bg);
+    const huds = this.buildHuds();
+    this.display.drawText(1, MAP_H + 1, huds[view] || huds[0]);
+  }
+
+  // a few tiny helpers (Math.random, NOT ROT.RNG — cosmetic only)
+  private rr(a: number, b: number): number { return a + Math.random() * (b - a); }
+  private pickFx<T>(a: T[]): T { return a[Math.floor(Math.random() * a.length)]; }
+
+  /** A landed blow: a bright burst + a scatter of sparks on the target. */
+  fxStrike(x: number, y: number): void {
+    if (!this.fxHere()) return;
+    const ps: FxParticle[] = [
+      { x, y, ch: "✷", fg: "#fff0c0", delay: 0, life: 1 },
+      { x, y, ch: "✳", fg: "#ffd060", delay: 1, life: 2 },
+    ];
+    for (let i = 0; i < 4; i++) ps.push({ x: x + Math.round(this.rr(-1, 1)), y: y + Math.round(this.rr(-1, 1)), ch: this.pickFx(["·", "˚", "*"]), fg: "#ffc040", delay: Math.floor(this.rr(0, 2)), life: Math.floor(this.rr(2, 4)) });
+    this.spawnFx(ps);
+  }
+
+  /** A whiffed swing: a faint arc in the swing direction. */
+  fxMiss(x: number, y: number, dx: number, dy: number): void {
+    if (!this.fxHere()) return;
+    this.spawnFx([
+      { x: x - dx, y: y - dy, ch: "˟", fg: "#8890a0", delay: 0, life: 2 },
+      { x, y, ch: this.pickFx(["·", "ˑ"]), fg: "#707888", delay: 1, life: 2 },
+    ]);
+  }
+
+  /** Fussing over the hound: little hearts/notes float up. */
+  fxPetPlay(x: number, y: number): void {
+    if (!this.fxHere()) return;
+    const ps: FxParticle[] = [];
+    for (let i = 0; i < 3; i++) ps.push({ x: x + Math.round(this.rr(-1, 1)), y: y - i, ch: this.pickFx(["♥", "♪", "✿"]), fg: this.pickFx(["#f090b0", "#f0c0d0"]), delay: i * 2, life: 3 });
+    this.spawnFx(ps);
+  }
+
+  /** A cast shimmer: a ring of sparkles around the caster. */
+  fxCast(x: number, y: number, fg = "#c0a0f0"): void {
+    if (!this.fxHere()) return;
+    const ring: [number, number][] = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]];
+    this.spawnFx(ring.map(([ox, oy], i) => ({ x: x + ox, y: y + oy, ch: this.pickFx(["✧", "·", "✦"]), fg, delay: i % 3, life: 2 })));
+  }
+
+  /** A directional zap/beam effect, flavoured by wand/spell type. Uses the last castRay path when present
+   *  (bouncing rays trace their real path); else it glides an orb `range` cells in the aimed direction. */
+  fxBeam(x: number, y: number, dx: number, dy: number, kind: string): void {
+    if (!this.fxHere()) return;
+    const style: Record<string, { head: string[]; trail: string[]; fg: string; tfg: string }> = {
+      fire:  { head: ["●", "*", "◉"], trail: ["▪", "·", "˚"], fg: "#ff8020", tfg: "#c04010" },
+      cold:  { head: ["❄", "*", "✦"], trail: ["·", "˟", "▪"], fg: "#a0e0ff", tfg: "#5090c0" },
+      shock: { head: ["¦", "/", "\\"], trail: ["·", "˙"], fg: "#fff080", tfg: "#c0b040" },
+      force: { head: ["•", "→", "●"], trail: ["·"], fg: "#c0e0f0", tfg: "#7090a0" },
+      light: { head: ["☼", "○", "◌"], trail: ["∙", "·"], fg: "#fff0a0", tfg: "#d0c060" },
+      death: { head: ["Ω", "☠", "✶"], trail: ["·", "▪"], fg: "#e040a0", tfg: "#802060" },
+      dig:   { head: ["▓", "▒", "░"], trail: ["·", "▪"], fg: "#c0a060", tfg: "#806030" },
+      cure:  { head: ["✚", "+", "✦"], trail: ["·"], fg: "#a0f0c0", tfg: "#60c090" },
+    };
+    const s = style[kind] ?? { head: ["*", "•"], trail: ["·"], fg: "#d0d0f0", tfg: "#8080a0" };
+    // path: the real bounced ray if we have one, else a straight glide in the aim direction
+    let path = this.rayPath;
+    if (!path.length) { path = []; let px = x, py = y; for (let i = 0; i < 8; i++) { px += dx; py += dy; if (!this.level.tileAt(px, py) || this.level.tileAt(px, py) === "wall") break; path.push([px, py]); } }
+    const ps: FxParticle[] = [];
+    path.forEach(([cx, cy], i) => {
+      ps.push({ x: cx, y: cy, ch: this.pickFx(s.head), fg: s.fg, delay: i, life: 2 });        // the travelling head
+      ps.push({ x: cx, y: cy, ch: this.pickFx(s.trail), fg: s.tfg, delay: i + 1, life: 2 });   // a fading trail behind it
+    });
+    this.spawnFx(ps);
+  }
+
   draw(): void {
     if (!this.player) return;
     const lp = this.localPlayer;
@@ -5554,6 +5681,8 @@ export class Game {
     const cells = this.buildCells(view);
     this.display.clear();
     for (const [x, y, ch, fg] of cells) this.display.draw(x, y, ch, fg, COLORS.bg);
+    const visFx = (x: number, y: number) => view === 1 ? this.level.isVisibleCo(x, y) : this.level.isVisible(x, y);
+    for (const p of this.fxParticles) if (p.delay <= 0 && p.life > 0 && p.x >= 0 && p.y >= 0 && p.x < W && p.y < MAP_H && visFx(p.x, p.y)) this.display.draw(p.x, p.y, p.ch, p.fg, COLORS.bg); // overlay any live action FX
     this.display.drawText(1, MAP_H + 1, huds[view] || huds[0]);
     if (this.activeKey !== resume) this.setActive(resume); // restore the acting floor
     this.renderQueue(); // keep the queued-action badge current as turns consume
