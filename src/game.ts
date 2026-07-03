@@ -119,6 +119,11 @@ interface FxParticle { x: number; y: number; ch: string; fg: string; delay: numb
 export class Game {
   readonly display: ROT.Display;
   readonly log: Log;
+  // EXPERIMENTAL co-op free-roam (off by default): when on, safe players are meant to act on their own
+  // real-time stream and only drop to lockstep when enemies close. The full deterministic model needs
+  // per-floor RNG isolation + per-floor engine stepping (a rearchitecture); this flag + the danger
+  // detector below are the safe foundation. NEVER enable in a live game without two-client testing.
+  readonly freeroam = localStorage.getItem("ascend.coop.freeroam") === "on";
   private rayPath: [number, number][] = [];   // the last castRay's bounced cells (cosmetic — drives ray FX)
   private fxParticles: FxParticle[] = [];      // active action-effect glyphs (purely visual; never touch the sim)
   private fxTimer: number | null = null;       // the FX animation ticker (rAF-throttled)
@@ -1601,6 +1606,24 @@ export class Game {
     const sr = this.level.specialRoom;
     const room = sr && sr.cells.has(`${p.x},${p.y}`) ? sr.kind : undefined; // the special room the local adventurer stands in
     return { threat, danger: Math.min(1, Math.max(this.dangerLevel(), peril)), bossNear, crowd, amuletNear, fountain: onFeat("fountain"), altar: onFeat("altar"), beast, room };
+  }
+
+  /** Is a hostile close enough to a given player to count as "in combat/danger"? Drives the free-roam↔
+   *  lockstep decision per player: a safe player may free-roam; one with a foe near (adjacent-ish or in
+   *  view within ~4 tiles) must stay on the strict deterministic turn clock. Checks the player's OWN floor. */
+  playerInDanger(p: Player, radius = 4): boolean {
+    if (!p.alive) return false;
+    const onFloor = p.floorKey;
+    const mons = onFloor === this.activeKey ? this.monsters : this.slots.get(onFloor)?.monsters ?? [];
+    const lvl = onFloor === this.activeKey ? this.level : this.slots.get(onFloor)?.level;
+    for (const m of mons) {
+      if (!m.alive || m.peaceful) continue;
+      const cheb = Math.max(Math.abs(m.x - p.x), Math.abs(m.y - p.y));
+      if (cheb <= 1) return true;                                   // anything adjacent = combat
+      if (cheb <= radius && (lvl?.isVisible(m.x, m.y) ?? true)) return true; // a visible foe closing in
+      if (m.isHunter) return true;                                  // the Warden hunt is always "hot"
+    }
+    return false;
   }
 
   /** Cold-blooded/heatless creatures give infravision nothing to see — the undead, constructs, slimes,
