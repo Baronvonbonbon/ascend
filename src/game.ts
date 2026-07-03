@@ -124,6 +124,8 @@ export class Game {
   // per-floor RNG isolation + per-floor engine stepping (a rearchitecture); this flag + the danger
   // detector below are the safe foundation. NEVER enable in a live game without two-client testing.
   readonly freeroam = localStorage.getItem("ascend.coop.freeroam") === "on";
+  private masterSeed = 0;                                        // the run's shared seed (co-op) — per-floor seeds derive from it
+  private floorRng = new Map<string, ReturnType<typeof ROT.RNG.getState>>(); // per-floor RNG streams (freeroam only)
   private rayPath: [number, number][] = [];   // the last castRay's bounced cells (cosmetic — drives ray FX)
   private fxParticles: FxParticle[] = [];      // active action-effect glyphs (purely visual; never touch the sim)
   private fxTimer: number | null = null;       // the FX animation ticker (rAF-throttled)
@@ -402,7 +404,8 @@ export class Game {
   /** Start a run. In co-op both peers pass the SAME seed so they generate an identical
    *  shared world deterministically (lockstep); omitted = a fresh random run (solo). */
   newGame(seed?: number): void {
-    if (seed !== undefined) ROT.RNG.setSeed(seed); // shared seed → identical dungeon, loot, appearances on both clients
+    if (seed !== undefined) { ROT.RNG.setSeed(seed); this.masterSeed = seed; } // shared seed → identical dungeon, loot, appearances on both clients
+    this.floorRng.clear(); // freeroam: fresh per-floor streams for the new run
     this.over = false;
     this.defeatedBosses.clear();
     this.gehennomOpen = false;
@@ -685,9 +688,11 @@ export class Game {
    *  then skips fresh generation/population. Saves the level being left first. */
   private beginLevel(key: string, kind: LevelKind): boolean {
     this.saveActive();
+    this.saveFloorRng(this.activeKey); // freeroam: park the floor we're leaving on its own RNG stream
     this.activeKey = key;
     const slot = this.slots.get(key);
-    if (slot) { this.level = slot.level; this.monsters = slot.monsters; return true; }
+    if (slot) { this.level = slot.level; this.monsters = slot.monsters; this.loadFloorRng(key); return true; }
+    this.loadFloorRng(key); // freeroam: seed the NEW floor's stream (deterministically) BEFORE it generates
     this.level = new Level(W, MAP_H, kind);
     this.monsters = [];
     return false;
@@ -696,6 +701,28 @@ export class Game {
   // ── Co-op independent floors (staged): each actor stands on its own floorKey, and
   //    setActive loads that floor's context before the actor takes its turn. While the party
   //    still shares a floor this is a no-op; it's the foundation for players splitting up. ──
+  // ── per-floor RNG isolation (EXPERIMENTAL, freeroam only) ──────────────────────
+  // Each floor runs its OWN deterministic RNG stream, so one floor's rolls never depend on another
+  // floor's activity/timing — the prerequisite for players advancing their floors independently. When
+  // freeroam is OFF these are no-ops, so the single-stream lockstep is byte-for-byte unchanged.
+  /** A per-floor seed derived deterministically from the run's shared seed + the floor key (FNV-1a-ish),
+   *  so both clients compute the same stream for every floor. */
+  private floorSeed(key: string): number {
+    let h = ((this.masterSeed >>> 0) ^ 0x9e3779b9) >>> 0;
+    for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 0x01000193) >>> 0;
+    return (h >>> 0) || 1;
+  }
+  /** Stash the RNG state of the floor we're leaving. */
+  private saveFloorRng(key: string): void { if (this.freeroam) this.floorRng.set(key, ROT.RNG.getState()); }
+  /** Make `key`'s RNG stream live — restore its saved state, or seed it fresh (deterministically) the
+   *  first time the floor is touched. */
+  private loadFloorRng(key: string): void {
+    if (!this.freeroam) return;
+    const st = this.floorRng.get(key);
+    if (st) ROT.RNG.setState(st);
+    else { ROT.RNG.setSeed(this.floorSeed(key)); this.floorRng.set(key, ROT.RNG.getState()); }
+  }
+
   /** Make `key`'s floor the live context (level + monsters + chain/branch/plane flags), saving
    *  whatever was active. Safe no-op when that floor is already loaded. */
   setActive(key: string): void {
@@ -703,9 +730,11 @@ export class Game {
     if (this.slots.has(this.activeKey)) this.slots.set(this.activeKey, { level: this.level, monsters: this.monsters });
     const slot = this.slots.get(key);
     if (!slot) return; // not generated yet — a transition is mid-build and owns the context
+    this.saveFloorRng(this.activeKey); // freeroam: park the floor we're leaving on its own RNG stream
     this.activeKey = key;
     this.level = slot.level;
     this.monsters = slot.monsters;
+    this.loadFloorRng(key);            // freeroam: bring the entered floor's RNG stream live
     this.applyKeyContext(key);
   }
 
