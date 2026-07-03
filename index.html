@@ -156,7 +156,7 @@
  #log { height: 96px; }
  }
  </style>
-   <script type="module" crossorigin src="/ascend/assets/index-ByuDfGJd.js"></script>
+   <script type="module" crossorigin src="/ascend/assets/index-DT8UxQNx.js"></script>
  </head>
  <body>
  <div id="app">
@@ -222,6 +222,7 @@
  </div>
  <div id="stats" title="A perpetual, global tally across all players">⚔ — runs braved · ☠ — fallen in the dungeon</div>
  <div id="audiobar">
+ <button id="sfx-toggle" title="Toggle sound effects">🔊 SFX: on</button>
  <button id="music-toggle" title="Toggle music">♪ Music: off</button>
  <select id="music-pick" title="Soundtrack">
  <option value="auto">Auto (by area)</option>
@@ -369,6 +370,10 @@
  <div class="opt-row">
  <label class="opt-name" for="opt-volume">Music volume</label>
  <div class="opt-ctl"><input id="opt-volume" type="range" min="0" max="100" step="5" /></div>
+ </div>
+ <div class="opt-row">
+ <label class="opt-name" for="opt-sfxvolume">SFX volume</label>
+ <div class="opt-ctl"><input id="opt-sfxvolume" type="range" min="0" max="100" step="5" /></div>
  </div>
  <div class="opt-row">
  <span class="opt-name">Map font size</span>
