@@ -17,7 +17,11 @@
 // explore↔idle sections swap only on a bar line, bridged by the zone's own tune-specific FILL (the
 // `FILLS` table). The five bright zones (upper/reaches/deeps/great hall/elsewhere) get a Geddy Lee-style
 // busy melodic bass run + a Neil Peart tom roll across that final beat; the dark depths + Planes keep
-// theme-appropriate fills (deep tom falls / ethereal rises). Everything stays locked to the bar tempo, so
+// theme-appropriate fills (deep tom falls / ethereal rises). Idle-groove VARIANT swaps (the every-8–12-bar
+// re-roll) are bridged by a very short half-beat pickup — an energetic tom+pick-bass lead-in in the bright
+// zones, a soft tom + bass slide in the smooth ones — laid over the outgoing bar's tail so the pattern
+// never jump-cuts. And the groove tempo GLIDES toward its target (quick to quicken, gentle to settle), so
+// the dark zones' explore→idle slowdown eases in instead of jerking. Everything stays locked to the bar tempo, so
 // the grid never resets mid-bar and
 // returns don't clutter. Combat stays reactive — it cuts in fast on a snare pickup while the tension
 // layer rises; when it clears, the groove resumes at the next downbeat. Everything still crossfades.
@@ -312,6 +316,8 @@ export class MusicEngine {
   private gBar = 0;                  // continuous bar counter (drives the dread bar-gate)
   private gFillArmed = false;        // a swap is queued → render the fill through this bar's final beat
   private gFilling = false;          // the fill has taken over the final beat → suppress normal hits
+  private gInjectArmed = false;      // the NEXT bar swaps idle variant → lay a short pickup fill this bar's tail
+  private gBpm = 0;                  // the groove's smoothed tempo — glides toward the target so idle↔explore never jerks
   private gIntensity = 0;            // explore drive, sampled at each bar line (density steps cleanly)
   private gExplore = 0;              // live explore drive (sampled into gIntensity at the bar line)
   private curIdle = 0;               // which of the zone's idle grooves is current
@@ -593,7 +599,8 @@ export class MusicEngine {
     this.calmSince = now;
     // the groove enters a bar or two after the bed (so a zone fades up ambient first, then finds its beat)
     this.gNext = now + 2.4; this.gStep = 0; this.gBar = 0; this.gBarLen = 16; this.curBar = null;
-    this.gState = "off"; this.gPending = null; this.gFillArmed = this.gFilling = false; this.gIntensity = this.gExplore = 0;
+    this.gState = "off"; this.gPending = null; this.gFillArmed = this.gFilling = this.gInjectArmed = false; this.gIntensity = this.gExplore = 0;
+    this.gBpm = 0; // re-init the tempo glide to the new zone's own bpm on the next tick (no bend across zones)
     this.curIdle = Math.floor(Math.random() * 5); // a fresh zone → its idle groove is re-rolled when calm settles
     this.idleBarsHeld = 0; this.idleReroll = 8 + Math.floor(Math.random() * 5);
     this.nextTrill = this.nextTensionStep = this.nextTensionBass = now;
@@ -1092,8 +1099,13 @@ export class MusicEngine {
   private scheduleGrooveLayer(t: TrackDef, now: number, horizon: number, want: "off" | "explore" | "idle"): void {
     // Idle runs at the zone's slow heartbeat (idleBpm); explore/off ride the active bpm — so combat,
     // which plays in the explore state + the tension layer, stays quick and decoupled from the heartbeat.
-    const bpm = this.gState === "idle" ? (t.idleBpm ?? t.bpm) : (t.bpm ?? 110);
-    const step = 60 / bpm / 4;
+    // The groove tempo GLIDES toward its target instead of hard-switching: in the dark zones (which drop to
+    // a slower idleBpm when settling) the explore↔idle change eases rather than jerks; bright zones, whose
+    // idle and explore bpm match, glide by zero (no change). Quicken briskly into combat, settle gently.
+    const targetBpm = this.gState === "idle" ? (t.idleBpm ?? t.bpm ?? 110) : (t.bpm ?? 110);
+    if (this.gBpm <= 0) this.gBpm = targetBpm;
+    this.gBpm += (targetBpm - this.gBpm) * (targetBpm > this.gBpm ? 0.3 : 0.12);
+    const step = 60 / this.gBpm / 4;
     if (this.gNext < now - 1) { this.gNext = now; this.gStep = 0; this.gFilling = false; } // resync after a stall
 
     // Queue a section change — applied on the next downbeat, announced by a fill across this bar.
@@ -1111,6 +1123,10 @@ export class MusicEngine {
       if (this.gFillArmed && this.gState !== "off" && s === this.gBarLen - 4) {
         this.renderFill(t, when, step); this.gFilling = true; this.gFillArmed = false;
       }
+      // A short pickup over the final HALF-beat bridges an idle-variant swap so the pattern change never jolts.
+      if (this.gInjectArmed && this.gState === "idle" && !this.gFilling && s === this.gBarLen - 2) {
+        this.renderInjectPickup(t, when, step); this.gInjectArmed = false;
+      }
       if (!this.gFilling && this.curBar) this.playBarStep(s, when, step);
       this.gStep = (s + 1) % this.gBarLen;
       this.gNext += step;
@@ -1122,7 +1138,7 @@ export class MusicEngine {
     this.gBar++;
     if (this.gPending !== null && this.gPending !== this.gState) {
       if (this.gPending === "idle" && this.gState !== "idle") { const n = (IDLE[t.area] ?? IDLE.legacy).length; this.curIdle = Math.floor(Math.random() * n); this.idleBarsHeld = 0; this.idleReroll = 8 + Math.floor(Math.random() * 5); }
-      this.gState = this.gPending; this.gPending = null;
+      this.gState = this.gPending; this.gPending = null; this.gInjectArmed = false; // a section swap owns this transition
       if (this.gState !== "off") this.fillCrash(t, when); // an impact greets the new section's downbeat
     }
     // ── the "groove inject": during a long idle, roll to a DIFFERENT variant every few bars, so the
@@ -1134,6 +1150,9 @@ export class MusicEngine {
       this.idleBarsHeld = 0; this.idleReroll = 8 + Math.floor(Math.random() * 5); // next section: 8–12 bars — more deliberate
       switched = true;
     }
+    // Arm the short bridging pickup for the bar that PRECEDES the next variant swap (so it renders across
+    // that bar's tail and leads the ear cleanly into the new groove).
+    this.gInjectArmed = this.gState === "idle" && !switched && this.idleBarsHeld + 1 >= this.idleReroll;
     this.gIntensity = this.gExplore; // sample explore density for the whole bar (clean, per-bar steps)
     this.gFilling = false;
     this.curBar = this.resolveBar(t);
@@ -1236,6 +1255,30 @@ export class MusicEngine {
     if (f.lead && this.active) { const n = Math.max(1, f.lead.length); f.lead.forEach((deg, i) => this.note(semi(t.root, deg) * 2, beatStart + i * step * (4 / n), step * 1.4, this.active!.bus, "triangle", 0.05, 3200)); }
     if (f.bassRun) this.renderBassRun(t, beatStart, step, f.bassRun, !!f.bright, bus);
     if (f.tomRoll) this.renderTomRoll(beatStart, step, f.tomRoll, bus);
+  }
+
+  /** A very short (half-beat) pickup that bridges an idle-variant swap — laid OVER the outgoing bar's last
+   *  two sixteenths (it doesn't suppress the groove), so the new pattern arrives led-in, not jump-cut. The
+   *  bright zones get an energetic tom + climbing pick-bass into the downbeat; the smooth (dark/planar)
+   *  zones get a soft tom + a gentle bass slide to the root that just melts into the next bar. */
+  private renderInjectPickup(t: TrackDef, beatStart: number, step: number): void {
+    const f = FILLS[t.area] ?? FILLS.legacy, bus = this.grooveBus;
+    const s0 = beatStart, s1 = beatStart + step; // the two sixteenths before the downbeat
+    const root = () => { let b = semi(t.root, 0); while (b < 41) b *= 2; return b; };
+    if (f.bright) {
+      // energetic: a quick tom pair + a two-note pick-bass lead-in that lands on the root
+      this.noiseHit(s0, 0.08, bus, 0.11, "bandpass", 360, 0.9);
+      this.noiseHit(s1, 0.07, bus, 0.13, "bandpass", 250, 0.9);
+      const lead = f.bassRun ? f.bassRun[Math.floor(f.bassRun.length / 2)] : 7;
+      let bl = semi(t.root, lead); while (bl < 41) bl *= 2;
+      this.pickBass(bl, s0, step * 1.1, bus, 0.15);
+      this.pickBass(root(), s1, step * 1.15, bus, 0.18);
+    } else {
+      // smooth: a single soft tom on the '&' + a slow bass note sliding toward the root — blends in
+      this.noiseHit(s1, 0.16, bus, f.deep ? 0.08 : 0.055, "lowpass", f.deep ? 240 : 420, 0.7);
+      let b7 = semi(t.root, 7); while (b7 < 41) b7 *= 2;
+      this.bassNote(b7, s0, step * 2, bus, 0.11);
+    }
   }
 
   /** A Geddy Lee-style bass fill: a busy melodic run of scale degrees spread evenly across the outgoing
