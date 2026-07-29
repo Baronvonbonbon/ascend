@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#0b0b0d"/>
+  <rect x="24" y="24" width="464" height="464" rx="12" fill="none" stroke="#e0b94d" stroke-width="8"/>
+  <text x="256" y="330" font-family="Courier New, monospace" font-size="300" font-weight="bold"
+        fill="#e0b94d" text-anchor="middle">&#10022;</text>
+</svg>
