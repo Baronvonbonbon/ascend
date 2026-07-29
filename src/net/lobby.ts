@@ -123,7 +123,72 @@ async function initChainInvites(
   const refresh = async () => {
     if (!signal || pane.hidden) return;
     render(await signal.inbox());
+    renderTables(await chain.openTables());
   };
+
+  // ── the open table: announce that you are looking for a game ──
+  // The listing carries only address, self-chosen name and time. Pressing Play on someone else's
+  // table sends them an ordinary SEALED invite — no handshake data is ever public.
+  const tablesEl = $("lobby-tables");
+  const openBtn = $<HTMLButtonElement>("lobby-open-table");
+  const openState = $("lobby-open-state");
+  let mineOpen = false;
+
+  const syncOpenBtn = () => {
+    if (openBtn) openBtn.textContent = mineOpen ? "Close my table" : "Open my table";
+    if (openState) openState.textContent = mineOpen
+      ? "Listed publicly — anyone can see this address is looking for a game. Expires in ~30 min."
+      : "";
+  };
+
+  openBtn?.addEventListener("click", async () => {
+    if (!openBtn) return;
+    openBtn.disabled = true;
+    const was = openBtn.textContent;
+    openBtn.textContent = mineOpen ? "Closing…" : "Opening…";
+    const ok = mineOpen ? await chain.closeMyTable() : await chain.openMyTable();
+    if (ok) mineOpen = !mineOpen; else say("That did not go through.");
+    openBtn.disabled = false;
+    openBtn.textContent = was;
+    syncOpenBtn();
+    void refresh();
+  });
+
+  function renderTables(tables: { host: string; name: string; at: number }[]) {
+    if (!tablesEl) return;
+    const me = (chain.chainStatus().address ?? "").toLowerCase();
+    const others = tables.filter((t) => t.host.toLowerCase() !== me);
+    mineOpen = tables.some((t) => t.host.toLowerCase() === me);
+    syncOpenBtn();
+
+    tablesEl.textContent = "";
+    if (!others.length) return;
+    for (const t of others) {
+      const row = document.createElement("div");
+      row.className = "table-row";
+      const name = document.createElement("span");
+      name.className = "table-name";
+      name.textContent = t.name;
+      const addr = document.createElement("span");
+      addr.className = "table-addr";
+      addr.textContent = `${t.host.slice(0, 6)}…${t.host.slice(-4)}`;
+      const ago = document.createElement("span");
+      ago.className = "table-addr";
+      const mins = Math.max(0, Math.round((Date.now() / 1000 - t.at) / 60));
+      ago.textContent = mins < 1 ? "just now" : `${mins}m ago`;
+      const play = document.createElement("button");
+      play.type = "button"; play.textContent = "Play";
+      play.addEventListener("click", async () => {
+        play.disabled = true;
+        say(`Inviting ${t.name}…`);
+        const res = await signal!.invite(t.host, (peer) => connected(peer, "host", "coop-ff"));
+        if (res !== "sent") { say(explain(res, t.name)); play.disabled = false; }
+        else say(`Invitation sent to ${t.name} — waiting for them to accept…`);
+      });
+      row.append(name, addr, ago, play);
+      tablesEl.appendChild(row);
+    }
+  }
 
   // Never hide this pane without saying why. It used to vanish silently whenever anything was
   // not ready, which made "the invite option isn't there" impossible to diagnose from the outside.

@@ -50,7 +50,7 @@ function decode(rows: any[]): ChainRun[] {
     won: Boolean(r.ascended),
     seed: Number(r.seed),
     turns: Number(r.turns),
-    at: Number(r.at),
+    at: Number(r.recordedAt),
     bonesCid: r.bonesCid === ZERO32 ? "" : String(r.bonesCid),
   }));
 }

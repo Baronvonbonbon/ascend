@@ -8,6 +8,7 @@ chain feature silently switches off; the game plays exactly as it does offline.
 | `AscendRuns.sol` | Ascension leaderboard + the ring of the recently fallen that seeds other players' bones |
 | `AscendRelics.sol` | ERC-721 relics struck at the in-game forge (`F`), with on-chain `data:` metadata |
 | `AscendInvites.sol` | Co-op rendezvous — replaces copy/pasting WebRTC handshake codes with a 1-click invite |
+| `AscendLobby.sol` | Open tables — announce you are looking for a game, and see who else is |
 
 ### Why there is an invite contract *and* a statement-store rail
 
@@ -59,6 +60,17 @@ one does not expose the other. It lives in `localStorage`; losing it means repub
 transaction), and any in-flight invite becomes undecryptable — harmless, since invites expire after
 an hour and either party can clear one.
 
+### What the open lobby does and does not hold
+
+A listing is three fields: address, self-chosen name, timestamp. **No SDP, no ICE candidates, no
+IP.** Pressing Play does not join anything here — it sends an ordinary *sealed* invite through
+`AscendInvites`, so the handshake stays encrypted end-to-end and network addresses are seen only by
+the two players.
+
+What a listing unavoidably reveals is that an address wants to play, and roughly when: opening a
+table is a signed transaction. A player who does not want that known simply invites by address
+instead. Tables expire on their own after 30 minutes, so a closed tab leaves no ghost.
+
 ## Two constraints that shaped these
 
 **Reads must never scan logs.** Players may connect through Pine-RPC, a smoldot light client with
@@ -78,6 +90,7 @@ Relics are a glyph, a name and a few numbers, so this is cheap and it is permane
 | `AscendRuns` | `0x28ED6F4bC53575DeABB7b1E457c46DFd94507648` |
 | `AscendRelics` | `0x67EEbcE6C8CA3eb2b9b50C152277a0D83A39e2Aa` |
 | `AscendInvites` | `0x35c7D2bC9eB1180a0e0486ed913308389c4d9C5e` |
+| `AscendLobby` | `0x169349D32FBec996B4B2eb1F360D5A8e0D4b7D4e` |
 
 Wired into `src/chain/config.ts`. **State is empty** — no test entries: `totalRuns` 0,
 `leaderboard` empty, `totalSupply` 0. Verified read-only after deployment, along with the ERC-721

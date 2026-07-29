@@ -144,6 +144,36 @@ export async function normalizeChainAddress(a: string): Promise<string | null> {
   try { const m = await import("./invites"); return m.normalizeAddress(a); } catch { return null; }
 }
 
+// ── the open table ──────────────────────────────────────────────────────────
+// A listing is address + self-chosen name + timestamp. Never any handshake data.
+
+export type { OpenTable } from "./openlobby";
+
+export async function openLobbyReady(): Promise<boolean> {
+  try { const { hasLobby } = await import("./openlobby"); return hasLobby() && status.canSign; } catch { return false; }
+}
+
+export async function openTables(): Promise<import("./openlobby").OpenTable[]> {
+  try {
+    const { hasContracts } = await import("./config");
+    if (!hasContracts()) return [];
+    const m = await import("./openlobby");
+    return m.hasLobby() ? await m.fetchTables() : [];
+  } catch { return []; }
+}
+
+export async function openMyTable(): Promise<boolean> {
+  try { const m = await import("./openlobby"); return await m.openTable(); } catch { return false; }
+}
+
+export async function closeMyTable(): Promise<boolean> {
+  try { const m = await import("./openlobby"); return await m.closeTable(); } catch { return false; }
+}
+
+export async function myTableIsOpen(): Promise<boolean> {
+  try { const m = await import("./openlobby"); return await m.tableIsOpen(); } catch { return false; }
+}
+
 export function toRunEntries(rows: ChainRun[]): RunEntry[] {
   return rows.map((r) => ({ name: r.name, depth: r.depth, won: r.won }));
 }

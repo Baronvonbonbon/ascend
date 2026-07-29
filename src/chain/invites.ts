@@ -15,7 +15,8 @@ const ABI = [
   "function accept(address from, bytes answer)",
   "function decline(address from)",
   "function withdraw(address to)",
-  "function inbox(address who) view returns (tuple(address from, uint40 at, bytes offer)[])",
+  // `sentAt`, not `at` — see the note in openlobby.ts; `at` collides with Array.prototype.at.
+  "function inbox(address who) view returns (tuple(address from, uint40 sentAt, bytes offer)[])",
   "function answerFor(address from, address to) view returns (bytes)",
   "function inviteKey(address who) view returns (bytes)",
   "function publishInviteKey(bytes key)",
@@ -161,10 +162,10 @@ export async function fetchInbox(): Promise<Invitation[]> {
   const rows = await withTimeout(c.inbox(conn.address), 10_000);
   if (!rows) return [];
   const out: Invitation[] = [];
-  for (const r of rows as { from: string; at: bigint; offer: string }[]) {
+  for (const r of rows as { from: string; sentAt: bigint; offer: string }[]) {
     const opened = await unseal(getBytes(r.offer));
     if (!opened) continue; // sealed to a key we no longer hold, or tampered with — never shown
-    out.push({ from: String(r.from), at: Number(r.at), offer: await inflate(opened) });
+    out.push({ from: String(r.from), at: Number(r.sentAt), offer: await inflate(opened) });
   }
   return out.sort((a, b) => b.at - a.at);
 }

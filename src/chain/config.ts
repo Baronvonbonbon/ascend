@@ -30,6 +30,7 @@ export const CONTRACTS = {
   runs:    "0x28ED6F4bC53575DeABB7b1E457c46DFd94507648", // AscendRuns    — leaderboard + bones ring
   relics:  "0x67EEbcE6C8CA3eb2b9b50C152277a0D83A39e2Aa", // AscendRelics  — ERC-721 relics from the forge
   invites: "0x35c7D2bC9eB1180a0e0486ed913308389c4d9C5e", // AscendInvites — co-op rendezvous
+  lobby:   "0x169349D32FBec996B4B2eb1F360D5A8e0D4b7D4e", // AscendLobby   — open tables
 };
 
 export type ContractName = keyof typeof CONTRACTS;
@@ -44,6 +45,7 @@ export const LS = {
   runs: "ascend.chain.runs",       // contract address overrides
   relics: "ascend.chain.relics",
   invites: "ascend.chain.invites",
+  lobby: "ascend.chain.lobby",
   name: "ascend.chain.name",       // the name signed onto the leaderboard
 } as const;
 

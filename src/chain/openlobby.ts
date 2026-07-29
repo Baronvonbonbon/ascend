@@ -1,0 +1,88 @@
+// The open table: announce that you are looking for a game, and see who else is.
+//
+// A listing is three fields — address, self-chosen name, timestamp — and nothing else. No SDP, no
+// ICE candidates, no IP. Joining someone's table does not happen here: it triggers the ordinary
+// sealed invite through AscendInvites, so the handshake stays encrypted end-to-end and the two
+// players' network addresses are seen only by each other.
+//
+// What a listing does unavoidably reveal is that an address wants to play, and roughly when.
+// Opening a table is a signed transaction, so that is inherent — the UI says so, and inviting by
+// address remains the private alternative.
+
+import { Contract, encodeBytes32String, decodeBytes32String } from "ethers";
+import { connection } from "./provider";
+import { contractAddress, withTimeout } from "./config";
+import { playerName, encodeName } from "./runs";
+
+const ABI = [
+  "function open(bytes32 name)",
+  "function close()",
+  // `openedAt`, not `at`: ethers' Result extends Array, so a field called `at` resolves to
+  // Array.prototype.at and every timestamp silently decodes as NaN. Names are positional here.
+  "function tables() view returns (tuple(address host, bytes32 name, uint40 openedAt)[])",
+  "function isOpen(address who) view returns (bool)",
+  "function TTL() view returns (uint40)",
+] as const;
+
+export interface OpenTable { host: string; name: string; at: number }
+
+export function lobbyAddress(): string { return contractAddress("lobby"); }
+export function hasLobby(): boolean { return /^0x[0-9a-fA-F]{40}$/.test(lobbyAddress()); }
+
+function read(): Contract | null {
+  const conn = connection();
+  if (!conn || !hasLobby()) return null;
+  return new Contract(lobbyAddress(), ABI as unknown as string[], conn.provider);
+}
+
+async function write(): Promise<Contract | null> {
+  const conn = connection();
+  if (!conn?.canSign || !hasLobby()) return null;
+  const signer = await (conn.provider as { getSigner(): Promise<unknown> }).getSigner();
+  return new Contract(lobbyAddress(), ABI as unknown as string[], signer as never);
+}
+
+/** Every table still within its TTL, newest first. Empty on any failure. */
+export async function fetchTables(): Promise<OpenTable[]> {
+  const c = read();
+  if (!c) return [];
+  const rows = await withTimeout(c.tables(), 10_000);
+  if (!rows) return [];
+  return (rows as { host: string; name: string; openedAt: bigint }[])
+    .map((t) => ({
+      host: String(t.host),
+      name: (() => { try { return decodeBytes32String(t.name) || "an adventurer"; } catch { return "an adventurer"; } })(),
+      at: Number(t.openedAt),
+    }))
+    .sort((a, b) => b.at - a.at);
+}
+
+/** Announce a table under the name the player chose in Options. Re-opening refreshes it. */
+export async function openTable(): Promise<boolean> {
+  const c = await write();
+  if (!c) return false;
+  const ok = await withTimeout((async () => {
+    const tx = await c.open(encodeName(playerName()));
+    await tx.wait();
+    return true;
+  })(), 60_000);
+  return ok === true;
+}
+
+export async function closeTable(): Promise<boolean> {
+  const c = await write();
+  if (!c) return false;
+  const ok = await withTimeout((async () => { await (await c.close()).wait(); return true; })(), 60_000);
+  return ok === true;
+}
+
+/** Do we currently have a table up? Drives Open/Close in the UI. */
+export async function tableIsOpen(): Promise<boolean> {
+  const conn = connection();
+  const c = read();
+  if (!c || !conn?.address) return false;
+  return (await withTimeout(c.isOpen(conn.address), 10_000)) === true;
+}
+
+// re-exported so the UI can label a table with the same name the roll uses
+export { playerName, encodeBytes32String };

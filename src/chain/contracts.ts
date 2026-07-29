@@ -11,7 +11,7 @@ import { contractAddress } from "./config";
 /** The Run tuple, spelled once — it appears in three signatures. */
 const RUN_TUPLE =
   "tuple(address player, bytes32 name, uint64 seed, bytes32 runHash, uint32 turns," +
-  " uint16 depth, uint16 maxDepth, bool ascended, uint40 at, bytes32 bonesCid)";
+  " uint16 depth, uint16 maxDepth, bool ascended, uint40 recordedAt, bytes32 bonesCid)";
 
 export const RUNS_ABI = [
   `function submitRun(bytes32 name, uint64 seed, bytes32 runHash, uint32 turns, uint16 depth, uint16 maxDepth, bool ascended, bytes32 bonesCid)`,
@@ -24,7 +24,7 @@ export const RUNS_ABI = [
 export const RELICS_ABI = [
   `function forge(bytes32 itemName, bytes32 glyph, int8 enchant, uint8 buc, uint16 depth, bytes32 runHash) returns (uint256)`,
   `function relicsOf(address owner) view returns (uint256[])`,
-  `function relicOf(uint256 tokenId) view returns (bytes32 itemName, bytes32 glyph, int8 enchant, uint8 buc, uint16 depth, uint40 at, bytes32 runHash, address forger)`,
+  `function relicOf(uint256 tokenId) view returns (bytes32 itemName, bytes32 glyph, int8 enchant, uint8 buc, uint16 depth, uint40 forgedAt, bytes32 runHash, address forger)`,
   `function tokenURI(uint256 tokenId) view returns (string)`,
   `function totalSupply() view returns (uint256)`,
 ] as const;

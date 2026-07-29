@@ -17,8 +17,8 @@ import { join } from "node:path";
 const RPC = process.env.ASCEND_RPC ?? "https://paseo-assethub-rpc.laissez-faire.trade";
 const CHAIN_ID = 420420417;
 const OUT = "contracts/out";
-const ORDER = ["AscendRuns", "AscendRelics", "AscendInvites"];
-const ENV_KEY = { AscendRuns: "RUNS_ADDRESS", AscendRelics: "RELICS_ADDRESS", AscendInvites: "INVITES_ADDRESS" };
+const ORDER = ["AscendRuns", "AscendRelics", "AscendInvites", "AscendLobby"];
+const ENV_KEY = { AscendRuns: "RUNS_ADDRESS", AscendRelics: "RELICS_ADDRESS", AscendInvites: "INVITES_ADDRESS", AscendLobby: "LOBBY_ADDRESS" };
 
 const args = process.argv.slice(2);
 const only = args.find((a) => a.startsWith("--only="))?.split("=")[1];
@@ -111,6 +111,7 @@ Wire them into the game by editing src/chain/config.ts:
     runs:    "${deployed.AscendRuns ?? ""}",
     relics:  "${deployed.AscendRelics ?? ""}",
     invites: "${deployed.AscendInvites ?? ""}",
+    lobby:   "${deployed.AscendLobby ?? ""}",
   };
 
 …or without a rebuild, in the browser console:
