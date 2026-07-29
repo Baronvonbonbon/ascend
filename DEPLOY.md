@@ -56,7 +56,8 @@ is permanent and first-come, so switching later means a new name, not a rename.
 |---|---|
 | Domain | `ascendyendor00.dot` (+ subname `app.ascendyendor00.dot`) |
 | Gateway | <https://ascendyendor00.dot.li> |
-| Content CID (root and `app.`) | `bafybeidkxt4nslicf2s47yzqjocaiwwuc7k457aibzxpy4i7mig5ljbdha` |
+| Content CID (root) | `bafybeiaigqh3etqlgscahujhqyeuoeonfs7nndx3pwxgf2gcx4skpdz5ye` |
+| Content CID (`app.` subname) | `bafybeigxpspm3qkjbnbvwe6rolpwqvooasbliu4e6bkn6wir7oqi7a5v6a` |
 | Icon CID | `bafk2bzacebryaxhhaftvjebpzpnwb2rn562rz3ec57hf7tknpqaophso5fmha` |
 
 Manifest and executable text records are written on chain and verified independently against the
@@ -137,6 +138,52 @@ and leaves whatever the Polkadot app resolves to go stale.
 
 Getting back to one signer means either transferring the root back, or reclaiming `app.` with a
 one-off `setSubnodeOwner` from the parent owner — the registry allows it, the CLI never asks for it.
+Note that transferring the root back needs the *current* owner's signature, so it depends on the
+phone channel working too — the split cannot be undone from the dev key alone.
+
+#### Deploying each half separately, which is how the split is worked around
+
+Until the two are reunited, one publish cannot cover both — but two can, because the deploy path
+handles a subname target on its own and never touches the parent:
+
+```bash
+npm run build:bulletin
+
+# 1. the app. subname — the dev key still owns it, so this needs no phone at all
+npx pad ./dist app.ascendyendor00.dot --env devnet --js-merkle
+
+# 2. the root — signed from the phone. NOTE the build dir is copied OUTSIDE the repo
+cp -r dist /tmp/ascend-deploy/dist
+npx pad /tmp/ascend-deploy/dist ascendyendor00.dot --env devnet --js-merkle \
+  --no-transfer-to-signedin-user
+```
+
+The copy is the load-bearing part of step 2. `--config` walks up from the build directory, and when
+it finds `polkadot-app-deploy.config.ts` it runs the manifest step — the step that aborts on the
+subname mismatch. From a directory with no config above it, the deploy sets the root contenthash and
+stops, which is all the root needs.
+
+The two halves end up on **different CIDs from one identical build**, and that is correct: the root
+re-embeds the manifest and the subname does not.
+
+### The phone signature will time out silently if the app is not open
+
+`Mobile signing rejected: createTransaction timed out — queue freed`, then
+`setContenthash timed out after 300000ms`. Nothing reaches the phone; the request sits in a queue
+and expires. The Bulletin upload has already succeeded by then, so only the DotNS write is lost.
+
+**`pad whoami` is not evidence the channel works.** It reads the session file under
+`~/.polkadot-apps/` and never contacts the app, so it reports a logged-in identity just the same.
+Open the Polkadot app and leave it in the foreground *before* deploying. If it still times out, the
+session itself is stale — `npx pad logout && npx pad login` and scan again.
+
+The CLI gates each signature behind an interactive `Press Y when ready`, which makes a non-TTY shell
+abort with `aborted by user`. Piping `yes` into it is safe: the gate resolves **before** the request
+is pushed to the phone (it exists to make sure you are holding it), so auto-confirming does not race
+the approval. The approval wait itself is unbounded and deliberately outside every timeout.
+
+Each retry re-embeds the manifest with a fresh nonce, so failed attempts leave unreferenced root CIDs
+uploaded to Bulletin. Harmless — nothing resolves to them and they expire with the retention window.
 
 ### Ownership and the weekly renewal are in direct conflict
 
