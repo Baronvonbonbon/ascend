@@ -56,17 +56,23 @@ is permanent and first-come, so switching later means a new name, not a rename.
 |---|---|
 | Domain | `ascendyendor00.dot` (+ subname `app.ascendyendor00.dot`) |
 | Gateway | <https://ascendyendor00.dot.li> |
-| Content CID (root) | `bafybeieeu6ipvphmuzqg32n4vnf7xg5sz6r6xl7snhlpvdsheuhuvvxowy` |
-| Content CID (`app.` subname) | `bafybeibb2nim7jae6z52r5iky6jvf6fkjobal6dlrpt2uu3fp6wnwxmuka` |
+| Content CID (root and `app.`) | `bafybeidkxt4nslicf2s47yzqjocaiwwuc7k457aibzxpy4i7mig5ljbdha` |
 | Icon CID | `bafk2bzacebryaxhhaftvjebpzpnwb2rn562rz3ec57hf7tknpqaophso5fmha` |
 
 Manifest and executable text records are written on chain and verified independently against the
 DotNS content resolver (`0x326bdE29315199c814B1c58b431D84D16EA5cE41`), not merely trusted from the
 deploy tool's output.
 
-The root and the `app.` subname point at **different CIDs**. Both are valid uploads of byte-identical
-files — a redeploy re-embeds the manifest, which changes the root hash even when nothing else moved.
-The gateway resolves the root; the Polkadot app resolves `app.`. Both work.
+The root and the `app.` subname **may or may not carry the same CID**, and both states are correct.
+A redeploy re-embeds the manifest, so the root hash can move even when no source file did; whether
+the two end up equal depends on what that pass rewrote. They matched on the deploy recorded above
+and differed on the one before it. The gateway resolves the root; the Polkadot app resolves `app.`.
+Both work either way — do not treat a mismatch as a failed deploy.
+
+**Verify the CID from the chain, not from the deploy log.** Read `contenthash(namehash(name))` off
+the DotNS content resolver (`0x326bdE29315199c814B1c58b431D84D16EA5cE41`) over the Asset Hub RPC and
+compare it to the CID the tool printed. The record is an ENS-style contenthash, so it comes back as
+`0x` + `e3` (ipfs) + the CID bytes — a base32 CIDv1 decodes to exactly the tail after `e3`.
 
 Redeploys are incremental — a no-op republish uploads 0.0 MB across 2 chunks instead of 5.1 MB —
 and always re-point the SAME name, so the URL never changes.
