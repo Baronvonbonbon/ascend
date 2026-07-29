@@ -5,7 +5,7 @@ Bulletin content is immutable per CID and expires unless renewed — an escape h
 
 | Target | URL | Built by |
 |---|---|---|
-| Bulletin chain (canonical) | `https://ascend.dot.li`, or `ascend.dot` in the Polkadot app | `npm run build:bulletin` (base `/`) |
+| Bulletin chain (canonical) | `https://ascendyendor00.dot.li`, or `ascendyendor00.dot` in the Polkadot app | `npm run build:bulletin` (base `/`) |
 | GitHub Pages (mirror) | `https://<user>.github.io/ascend/` | `npm run build:pages` (base `/ascend/`) |
 
 The two differ only in base path, which is why there are two build scripts.
@@ -29,14 +29,42 @@ npm install -g @polkadot-community-foundation/polkadot-app-deploy
 ```
 
 1. **Fund an account** on Paseo Asset Hub — <https://faucet.polkadot.io/paseo?parachain=1000>
-2. **Sign in** (no mnemonic on disk; scan a QR with a Polkadot wallet):
+2. **Sign in** (optional on this devnet; no mnemonic on disk):
    ```bash
-   polkadot-app-deploy login
-   polkadot-app-deploy whoami
+   npx pad login     # scan the QR with the Polkadot app
+   npx pad whoami
    ```
-3. **Storage authorization.** Writing to Bulletin needs a granted quota — reading never does. The
-   CLI's own `DEPLOYMENT.md` covers this; a raw `not authorized` chain error on a first deploy is
-   almost always this.
+   Without a session the CLI falls back to a local worker account, which is enough for the devnet.
+3. **Storage authorization.** Writing to Bulletin needs a granted quota — reading never does. A raw
+   `not authorized` chain error on a first deploy is almost always this.
+
+### Why the name looks like that
+
+**`ascend.dot` is not available to us.** Short `.dot` labels are gated on proof of personhood:
+
+> `ascend.dot requires ProofOfPersonhoodFull, but this signer is NoStatus`
+
+A signer with no personhood status can only register a label whose base is **≥ 9 characters with
+exactly two trailing digits** — hence `ascendyendor00.dot`. The alternatives are to sign in with a
+personhood-proven Polkadot app account (`npx pad login`), or to request a whitelist at
+<https://github.com/paritytech/dotns/>. Either would free up the short name; the registration below
+is permanent and first-come, so switching later means a new name, not a rename.
+
+## Deployed
+
+| | |
+|---|---|
+| Domain | `ascendyendor00.dot` (+ subname `app.ascendyendor00.dot`) |
+| Gateway | <https://ascendyendor00.dot.li> |
+| Content CID | `bafybeibb2nim7jae6z52r5iky6jvf6fkjobal6dlrpt2uu3fp6wnwxmuka` |
+| Icon CID | `bafk2bzacebryaxhhaftvjebpzpnwb2rn562rz3ec57hf7tknpqaophso5fmha` |
+
+Manifest and executable text records are written on chain and verified.
+
+**First load through the gateway is slow.** It resolves DotNS with a smoldot light client, which
+syncs the Paseo relay chain before it will answer — minutes from cold. The loader offers
+*"Use Trusted Provider"* to skip verification and resolve immediately. Nothing is wrong when it
+sits at a low percentage; it is syncing.
 
 ## Deploy
 
@@ -47,7 +75,7 @@ npm run deploy:bulletin
 which is `build:bulletin` followed by:
 
 ```bash
-polkadot-app-deploy ./dist ascend.dot --js-merkle
+polkadot-app-deploy ./dist ascendyendor00.dot --env devnet --js-merkle
 ```
 
 `--js-merkle` does content addressing in pure JavaScript, so no IPFS Kubo binary is needed.

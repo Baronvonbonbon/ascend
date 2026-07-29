@@ -9,7 +9,7 @@
     "build": "tsc && vite build",
     "build:pages": "tsc && vite build --base=/ascend/",
     "build:bulletin": "tsc && vite build --base=/",
-    "deploy:bulletin": "npm run build:bulletin && npx --yes @polkadot-community-foundation/polkadot-app-deploy ./dist ascend.dot --js-merkle",
+    "deploy:bulletin": "npm run build:bulletin && npx --yes @polkadot-community-foundation/polkadot-app-deploy ./dist ascendyendor00.dot --env devnet --js-merkle",
     "preview": "vite preview",
     "test": "vitest run",
     "contracts:build": "node scripts/compile-contracts.mjs",

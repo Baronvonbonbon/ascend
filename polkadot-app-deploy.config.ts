@@ -12,7 +12,7 @@
 import { defineConfig } from "@polkadot-community-foundation/polkadot-app-deploy";
 
 export default defineConfig({
-  domain: "ascend.dot",
+  domain: "ascendyendor00.dot",
   displayName: "Ascend",
   description: "An ASCII fantasy roguelike. Descend to recover the Amulet of Yendor, and ascend.",
   icon: { path: "public/icon-512.png", format: "png" },

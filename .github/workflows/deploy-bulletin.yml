@@ -59,4 +59,4 @@ jobs:
         env:
           MNEMONIC: ${{ secrets.BULLETIN_MNEMONIC }}
         # --js-merkle does content addressing in pure JS, so the runner needs no IPFS Kubo binary.
-        run: npx --yes @polkadot-community-foundation/polkadot-app-deploy ./dist ascend.dot --js-merkle
+        run: npx --yes @polkadot-community-foundation/polkadot-app-deploy ./dist ascendyendor00.dot --env devnet --js-merkle
