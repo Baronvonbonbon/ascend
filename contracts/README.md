@@ -1,7 +1,7 @@
 # Ascend contracts — Paseo Asset Hub
 
-Two contracts, both optional to the game. If neither is deployed, `hasContracts()` is false and
-every chain feature silently switches off; the game plays exactly as it does offline.
+Three contracts, all optional to the game. With none deployed, `hasContracts()` is false and every
+chain feature silently switches off; the game plays exactly as it does offline.
 
 | Contract | Purpose |
 |---|---|
@@ -71,32 +71,57 @@ are emitted as well, but purely so a real indexer can be added later; nothing re
 unless renewed. `tokenURI` therefore composes JSON + SVG **on chain** and returns a `data:` URI.
 Relics are a glyph, a name and a few numbers, so this is cheap and it is permanent.
 
+## Deployed — Paseo Asset Hub
+
+| Contract | Address |
+|---|---|
+| `AscendRuns` | `0xB222B8a4fb0B91e16E323ba80b2dB184eda9eF2C` |
+| `AscendRelics` | `0xB20D49AEb55276BE6acF2D1BD6b77dE84B220A79` |
+| `AscendInvites` | `0x9EF9A4676A8B8Ad4B39EA052031C7ffa6031eeD6` |
+
+Wired into `src/chain/config.ts`. All three were exercised after deployment — a run submitted and
+read back off the leaderboard, a relic forged and its on-chain `tokenURI` decoded, and an invite
+key published and read back. Gas is negligible (13k–33k per write).
+
+> The leaderboard holds one smoke-test entry — *"the Verifier"*, ascended at depth 48 — and relic
+> #1 is the matching test mint. Harmless, and proof the path works end to end; redeploy if you
+> want a clean slate.
+
 ## Build
 
+Two compilers, and the difference matters:
+
 ```bash
-npm run contracts:build     # solc -> contracts/out/*.abi.json + *.bin
+npm run contracts:build     # solc   -> contracts/out/*.abi.json + *.bin   (typecheck + ABIs)
+npm run contracts:revive    # resolc -> contracts/out/*.polkavm.json       (the deploy artifact)
 ```
 
-This uses stock `solc`, which is enough to typecheck the sources and produce ABIs for diffing
-against `src/chain/contracts.ts`. **It is not the deploy artifact.** Asset Hub runs PolkaVM via
-`pallet-revive`, which needs `resolc` output, not solc's EVM bytecode.
+Asset Hub runs PolkaVM via `pallet-revive`, which executes **`resolc`** output. Stock `solc` EVM
+bytecode **will not deploy**; `contracts:build` exists only to typecheck sources fast and to print
+the real ABI for diffing against `src/chain/contracts.ts`. PolkaVM blobs are much larger than the
+EVM equivalent (22–56 kB here versus 4–8 kB), which is normal.
 
 ## Deploy
 
-Deployment goes through the Community Foundation's `cdm` CLI, which builds with `resolc`, publishes
-the ABI to the Bulletin chain, deploys to Asset Hub, and registers the contract in the on-chain
-ContractRegistry — atomically.
-
 ```bash
-npm i -g @polkadot-community-foundation/cdm-cli    # needs Node 22+
-cdm setup
-cdm account map                                    # map your account for pallet-revive
-# fund it first: https://faucet.polkadot.io/paseo?parachain=1000
-cdm deploy --env devnet
+npm run contracts:key       # generate a deployer into .env (chmod 600, gitignored)
+                            # -> prints the address; fund it from the faucet
+npm run contracts:revive    # compile to PolkaVM
+npm run contracts:deploy    # deploy, and write the addresses back into .env
 ```
 
-Register them as `@ascend/runs` and `@ascend/relics`. **The CDM registry is append-only and
-first-come**: a name cannot be renamed, reassigned or deleted once claimed, so claim deliberately.
+`contracts:deploy` skips anything already recorded in `.env`; pass `--force` to redeploy, or
+`--only=AscendRuns` for one contract. Faucet: <https://faucet.polkadot.io/paseo?parachain=1000>.
+
+This deploys over Asset Hub's Ethereum JSON-RPC, so ethers drives it like any EVM chain — the only
+difference is the bytecode. No account mapping was needed: an Ethereum-native key works directly.
+
+### The `cdm` alternative
+
+`cdm deploy` also publishes the ABI to the Bulletin chain and registers the contract in the on-chain
+ContractRegistry. Worth doing if you want contracts discoverable by name, but note the registry is
+**append-only and first-come** — a name cannot be renamed, reassigned or deleted once claimed. The
+plain deployment above avoids burning `@ascend/*` names before the design has settled.
 
 ## Wire the addresses in
 

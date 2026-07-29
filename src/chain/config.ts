@@ -7,7 +7,7 @@
 export const PASEO = {
   /** EVM chain id of Paseo Asset Hub, where the contracts live (pallet-revive / PolkaVM). */
   chainId: 420420417,
-  chainIdHex: "0x190f5b81",
+  chainIdHex: "0x190f1b41",   // == 420420417; verified against eth_chainId, do not hand-compute
   name: "Paseo Asset Hub",
   nativeCurrency: { name: "Paseo", symbol: "PAS", decimals: 18 },
   /** Hosted Ethereum-JSON-RPC endpoints, tried in order. */
@@ -25,9 +25,11 @@ export const PASEO = {
  * rebuild — the CDM registry is append-only, but addresses still change between deployments.
  */
 export const CONTRACTS = {
-  runs: "",     // AscendRuns    — the leaderboard + the bones ring
-  relics: "",   // AscendRelics  — ERC-721 relics struck at the forge
-  invites: "",  // AscendInvites — the co-op rendezvous (WebRTC handshake only)
+  // Deployed to Paseo Asset Hub. Redeploying changes these; the localStorage overrides below
+  // exist so that does not force a rebuild.
+  runs:    "0xB222B8a4fb0B91e16E323ba80b2dB184eda9eF2C", // AscendRuns    — leaderboard + bones ring
+  relics:  "0xB20D49AEb55276BE6acF2D1BD6b77dE84B220A79", // AscendRelics  — ERC-721 relics from the forge
+  invites: "0x9EF9A4676A8B8Ad4B39EA052031C7ffa6031eeD6", // AscendInvites — co-op rendezvous
 };
 
 export type ContractName = keyof typeof CONTRACTS;

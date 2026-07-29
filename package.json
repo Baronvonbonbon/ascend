@@ -12,7 +12,10 @@
     "deploy:bulletin": "npm run build:bulletin && npx --yes @polkadot-community-foundation/polkadot-app-deploy ./dist ascend.dot --js-merkle",
     "preview": "vite preview",
     "test": "vitest run",
-    "contracts:build": "node scripts/compile-contracts.mjs"
+    "contracts:build": "node scripts/compile-contracts.mjs",
+    "contracts:revive": "node scripts/compile-revive.mjs",
+    "contracts:deploy": "node scripts/deploy-contracts.mjs",
+    "contracts:key": "node scripts/make-key.mjs"
   },
   "dependencies": {
     "@parity/product-sdk-statement-store": "^0.6.2",
@@ -21,6 +24,7 @@
     "rot-js": "^2.2.0"
   },
   "devDependencies": {
+    "@parity/resolc": "^1.4.0",
     "solc": "^0.8.28",
     "typescript": "^5.6.3",
     "vite": "^5.4.10",

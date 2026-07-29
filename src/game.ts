@@ -154,8 +154,24 @@ export class Game {
   private inQuest = false;                        // currently in your archetype's Quest homeland
   private questDone = false;                      // your nemesis is slain and the artifact claimed
   readonly music = new MusicEngine(); // procedural area soundtracks + danger tension layer
-  recentRuns: RunEntry[] = []; // local Hall of Fame cache + bones pool
-  private chainBones: ChainRun[] = []; // other players' falls, pulled from Asset Hub (empty offline)
+  // The roll of past adventurers, from three sources kept SEPARATE and merged on read. They used
+  // to share one array, which meant the synchronous local re-read in fetchLeaderboard() wiped the
+  // chain entries that had arrived asynchronously — the Hall would say "no runs recorded yet"
+  // while holding a full leaderboard. Composing on read makes that impossible.
+  private localRuns: RunEntry[] = [];  // this device (localStorage)
+  private chainBoard: ChainRun[] = []; // the ascension leaderboard, from Asset Hub
+  private chainBones: ChainRun[] = []; // other players' falls — the pool graves are drawn from
+
+  /** Everything known about past runs, newest source first, de-duplicated. */
+  get recentRuns(): RunEntry[] {
+    const seen = new Set<string>();
+    const out: RunEntry[] = [];
+    for (const r of [...this.localRuns, ...toRunEntries([...this.chainBoard, ...this.chainBones])]) {
+      const k = `${r.name}|${r.depth}|${r.won}`;
+      if (!seen.has(k)) { seen.add(k); out.push(r); }
+    }
+    return out;
+  }
   private scheduler = new ROT.Scheduler.Speed<Entity>(); // fast/slow actors act more/less often
   private engine!: ROT.Engine;
   private over = false;
@@ -459,15 +475,10 @@ export class Game {
    *  from every other player. Chain data is strictly additive: if the read fails, is empty, or
    *  no contract is deployed, the Hall behaves exactly as it does offline. */
   private fetchLeaderboard(): void {
-    this.recentRuns = readRecent(12); // the local Hall of Fame (past runs on this device)
+    this.localRuns = readRecent(12); // the local Hall of Fame (past runs on this device)
     void chainRuns().then(({ board, bones }) => {
-      if (!board.length && !bones.length) return;
+      this.chainBoard = board;
       this.chainBones = bones;
-      const seen = new Set(this.recentRuns.map((r) => `${r.name}|${r.depth}|${r.won}`));
-      for (const r of toRunEntries([...board, ...bones])) {
-        const k = `${r.name}|${r.depth}|${r.won}`;
-        if (!seen.has(k)) { seen.add(k); this.recentRuns.push(r); }
-      }
     });
   }
 
