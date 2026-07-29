@@ -56,7 +56,7 @@ is permanent and first-come, so switching later means a new name, not a rename.
 |---|---|
 | Domain | `ascendyendor00.dot` (+ subname `app.ascendyendor00.dot`) |
 | Gateway | <https://ascendyendor00.dot.li> |
-| Content CID (root) | `bafybeibpx6m2dfpolbxdtwsos5lvqpnzqpoium2geb6cnoex6sw7eibggq` |
+| Content CID (root) | `bafybeieeu6ipvphmuzqg32n4vnf7xg5sz6r6xl7snhlpvdsheuhuvvxowy` |
 | Content CID (`app.` subname) | `bafybeibb2nim7jae6z52r5iky6jvf6fkjobal6dlrpt2uu3fp6wnwxmuka` |
 | Icon CID | `bafk2bzacebryaxhhaftvjebpzpnwb2rn562rz3ec57hf7tknpqaophso5fmha` |
 
@@ -68,7 +68,13 @@ The root and the `app.` subname point at **different CIDs**. Both are valid uplo
 files — a redeploy re-embeds the manifest, which changes the root hash even when nothing else moved.
 The gateway resolves the root; the Polkadot app resolves `app.`. Both work.
 
-Redeploys are incremental: the second deploy uploaded 0.0 MB across 2 chunks instead of 5.1 MB.
+Redeploys are incremental — a no-op republish uploads 0.0 MB across 2 chunks instead of 5.1 MB —
+and always re-point the SAME name, so the URL never changes.
+
+**A redeploy can look like it did not take.** The PWA service worker precaches the app, so a
+browser that has loaded the site before will serve the previous build until the worker updates.
+`registerType: "autoUpdate"` picks it up on the next load; a hard reload forces it. This wasted
+real debugging time once — the fix was live and the cache was lying.
 
 ## Everything else is gated on proof of personhood
 
