@@ -16,7 +16,7 @@ export const COLORS = {
   dim:       "#6c6a60",
 };
 
-export type TileType = "wall" | "floor" | "door" | "doorClosed" | "doorLocked" | "doorHidden" | "stairsDown" | "stairsUp" | "altar" | "portal" | "fountain" | "throne" | "sink" | "vibrating" | "water" | "branchDown" | "pit" | "drawbridge" | "drawbridgeUp" | "lever";
+export type TileType = "wall" | "floor" | "door" | "doorClosed" | "doorLocked" | "doorHidden" | "stairsDown" | "stairsUp" | "altar" | "portal" | "fountain" | "throne" | "sink" | "vibrating" | "water" | "branchDown" | "pit" | "drawbridge" | "drawbridgeUp" | "lever" | "plate" | "gate" | "gateOpen";
 
 export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: string }> = {
   wall:       { ch: "#", fg: COLORS.wall,   fgDim: COLORS.wallDim },
@@ -39,6 +39,10 @@ export const TILE_GLYPH: Record<TileType, { ch: string; fg: string; fgDim: strin
   drawbridge: { ch: "=", fg: "#9a7a4a",     fgDim: "#4a3a22" }, // a drawbridge, lowered — walk across
   drawbridgeUp: { ch: "▚", fg: "#9a7a4a",   fgDim: "#4a3a22" }, // raised — an impassable span (blocks passage + sight)
   lever:      { ch: "|", fg: "#d0b040",     fgDim: "#665820" }, // a lever — walk into it to raise/lower the bridge
+  // ── Sokoban weight plates: a gate stands open only while a body rests on its plate ──
+  plate:      { ch: "▪", fg: "#d0b040",     fgDim: "#665820" }, // a weight plate — a boulder is too smooth to hold it; a body isn't
+  gate:       { ch: "▓", fg: "#9a7a4a",     fgDim: "#4a3a22" }, // a portcullis, dropped — impassable, blocks sight
+  gateOpen:   { ch: "▒", fg: "#9a7a4a",     fgDim: "#4a3a22" }, // raised into the ceiling — walk through while it's held
 };
 
 export const MAX_DEPTH = 25; // the foot of the dungeon — the vibrating square; the Invocation opens Gehennom below (NetHack-scale ~25-floor main descent)
@@ -201,7 +205,7 @@ export const BRANCHES: BranchDef[] = [
   }, // a DA/storage dungeon rendered as treasure caverns; its End yields a luckstone-grade luckstone
   {
     id: "vault", name: "Sokoban", branch: true, sokoban: true, difficulty: 0.5, loot: 0.5,
-    color: "#7ad0c0", layout: "normal", entryDepth: 9, floors: 1, prizeId: "vault", end: "Sokoban's Prize",
+    color: "#7ad0c0", layout: "normal", entryDepth: 9, floors: 4, prizeId: "vault", end: "Sokoban's Prize",
     entryFlavor: "You squeeze up into Sokoban — a sealed puzzle of boulders and chasms. Shove the boulders into the pits; claim the prize at the top.",
   }, // a Sokoban-style boulder puzzle; clear it for a guaranteed bag of holding (bag of holding)
   {

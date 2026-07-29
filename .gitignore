@@ -4,3 +4,6 @@ dist/
 .env
 .DS_Store
 artifacts/
+
+# Compiled contract artifacts (regenerate with: npm run contracts:build)
+contracts/out/

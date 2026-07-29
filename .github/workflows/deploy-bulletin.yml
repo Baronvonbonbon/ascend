@@ -1,0 +1,62 @@
+name: Deploy to the Bulletin chain
+
+# The CANONICAL deployment: uploads dist/ to the Polkadot Bulletin Chain and points the
+# `ascend.dot` DotNS name at the new CID. Served at https://ascend.dot.li (and as ascend.dot
+# inside the Polkadot app).
+#
+# WHY THIS ALSO RUNS ON A SCHEDULE
+# --------------------------------
+# Bulletin storage is retained for a configurable period — ~14 days by default — and content is
+# automatically cleaned up when it expires without renewal. A deploy is therefore NOT a
+# fire-and-forget publish: without a periodic re-deploy the game simply goes dark a fortnight
+# after the last push. The weekly run keeps the content alive with comfortable margin.
+#
+# Uploads are incremental (only changed chunks are pushed), so a no-op renewal is cheap.
+#
+# SETUP (once)
+#   1. Register the name and get storage authorization — see DEPLOY.md.
+#   2. Add repository secret BULLETIN_MNEMONIC (the DotNS owner account).
+# Without that secret the job is skipped rather than failed, so forks and PRs stay green.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 4 * * 1"   # 04:00 UTC every Monday — well inside the ~14-day retention window
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bulletin
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22          # polkadot-app-deploy requires >= 22
+      - run: npm install
+      - run: npm test
+      - run: npm run build:bulletin
+
+      - name: Check for the signing key
+        id: guard
+        run: |
+          if [ -z "${{ secrets.BULLETIN_MNEMONIC }}" ]; then
+            echo "BULLETIN_MNEMONIC is not set — skipping the Bulletin deploy."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload to Bulletin and update DotNS
+        if: steps.guard.outputs.ready == 'true'
+        env:
+          MNEMONIC: ${{ secrets.BULLETIN_MNEMONIC }}
+        # --js-merkle does content addressing in pure JS, so the runner needs no IPFS Kubo binary.
+        run: npx --yes @polkadot-community-foundation/polkadot-app-deploy ./dist ascend.dot --js-merkle

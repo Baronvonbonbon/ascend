@@ -2,6 +2,8 @@ import { Game } from "./game";
 import { initLobby } from "./net/lobby";
 import { loadCounts } from "./net/counter";
 import { readSave } from "./save";
+import { renderBanner } from "./ui/banner";
+import { connectChain, disconnectChain, resumeChain, onChainStatus, shortAddress, type ChainStatus } from "./chain";
 import { ARCHETYPES, archetypeName, archetypeBlurb, RACES, raceName, raceBlurb, introStory } from "./data";
 
 const screen = document.getElementById("screen");
@@ -125,6 +127,7 @@ if (screen && logEl) {
   // Returning from a death (solo): re-arm the menu with the story already shown.
   document.addEventListener("ascend:menu", () => { syncMode(); playStory(true); });
 
+  renderBanner();
   renderSubtitle();
   syncMode();
   // (the intro story is kicked off below, after options load, so reduce-motion is honoured)
@@ -201,6 +204,50 @@ if (screen && logEl) {
     if (con) { con.checked = storedContrast; con.addEventListener("change", () => { document.body.classList.toggle("opt-contrast", con.checked); localStorage.setItem("ascend.opt.contrast", con.checked ? "1" : "0"); }); }
     const rm = document.getElementById("opt-reduce-motion") as HTMLInputElement | null;
     if (rm) { rm.checked = storedMotion; rm.addEventListener("change", () => { document.body.classList.toggle("opt-reduce-motion", rm.checked); localStorage.setItem("ascend.opt.motion", rm.checked ? "1" : "0"); }); }
+
+    // ── coffers (optional chain link) ──
+    // Everything below fails soft. No wallet, no extension, no network: the panel just says so,
+    // and the game is untouched. The chain modules are dynamically imported, so a player who
+    // never presses Connect never downloads them.
+    const chainStatusEl = document.getElementById("opt-chain-status");
+    const chainKind = document.getElementById("opt-chain-kind") as HTMLSelectElement | null;
+    const chainName = document.getElementById("opt-chain-name") as HTMLInputElement | null;
+    const chainConnect = document.getElementById("opt-chain-connect") as HTMLButtonElement | null;
+    const chainOff = document.getElementById("opt-chain-disconnect") as HTMLButtonElement | null;
+
+    const showChain = (s: ChainStatus) => {
+      if (!chainStatusEl) return;
+      chainStatusEl.textContent = s.connected
+        ? `${shortAddress(s.address) || s.kind} — ${s.canSign ? "can sign" : "read-only"}${s.contracts ? "" : " · no contract deployed"}`
+        : "not connected";
+      chainStatusEl.classList.toggle("on", s.connected);
+      if (chainConnect) chainConnect.hidden = s.connected;
+      if (chainOff) chainOff.hidden = !s.connected;
+    };
+    onChainStatus(showChain);
+
+    if (chainName) {
+      try { chainName.value = localStorage.getItem("ascend.chain.name") ?? ""; } catch { /* storage blocked */ }
+      chainName.addEventListener("change", () => {
+        try { localStorage.setItem("ascend.chain.name", chainName.value.trim()); } catch { /* */ }
+      });
+    }
+    try { if (chainKind) chainKind.value = localStorage.getItem("ascend.chain.kind") ?? ""; } catch { /* */ }
+
+    chainConnect?.addEventListener("click", async () => {
+      chainConnect.disabled = true;
+      const was = chainConnect.textContent;
+      chainConnect.textContent = "Connecting…";
+      // Pine syncs a light client from genesis — report progress or it looks hung.
+      const kind = (chainKind?.value || undefined) as Parameters<typeof connectChain>[0];
+      const s = await connectChain(kind, (step) => { if (chainStatusEl) chainStatusEl.textContent = `light client: ${step}…`; });
+      if (!s.connected && chainStatusEl) chainStatusEl.textContent = "could not connect — the game is unaffected";
+      chainConnect.disabled = false;
+      chainConnect.textContent = was;
+    });
+    chainOff?.addEventListener("click", () => { void disconnectChain(); });
+
+    void resumeChain(); // silent — only reconnects a wallet that has already been authorised
   }
 
   // ── co-op chat bar: type + Send (PC keyboard or mobile touch keyboard) ──

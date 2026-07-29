@@ -8,13 +8,22 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "build:pages": "tsc && vite build --base=/ascend/",
-    "preview": "vite preview"
+    "build:bulletin": "tsc && vite build --base=/",
+    "deploy:bulletin": "npm run build:bulletin && npx --yes @polkadot-community-foundation/polkadot-app-deploy ./dist ascend.dot --js-merkle",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "contracts:build": "node scripts/compile-contracts.mjs"
   },
   "dependencies": {
+    "ethers": "^6.17.0",
+    "pine-rpc": "^0.3.0",
     "rot-js": "^2.2.0"
   },
   "devDependencies": {
+    "solc": "^0.8.28",
     "typescript": "^5.6.3",
-    "vite": "^5.4.10"
+    "vite": "^5.4.10",
+    "vite-plugin-pwa": "^1.3.0",
+    "vitest": "^4.1.10"
   }
 }

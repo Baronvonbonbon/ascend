@@ -52,6 +52,13 @@
  .opt-ctl .seg button { font-family: inherit; font-size: 12px; color: var(--dim); background: #16161a; border: none; padding: 4px 10px; cursor: pointer; }
  .opt-ctl .seg button.on { color: #0a0a0c; background: var(--gold); }
  .opt-note { color: var(--dim); font-size: 11px; margin: 12px 0 0; line-height: 1.4; }
+ .opt-note a { color: var(--gold); }
+ .opt-sep { border: 0; border-top: 1px solid #1c1c20; margin: 18px 0 12px; }
+ .opt-sub { color: var(--gold); font-size: 13px; margin: 0 0 4px; letter-spacing: 1px; }
+ .opt-tag { color: var(--dim); font-size: 10px; letter-spacing: 0; text-transform: uppercase; border: 1px solid #2a2a30; border-radius: 3px; padding: 1px 5px; margin-left: 6px; vertical-align: middle; }
+ #opt-chain-status { color: var(--dim); }
+ #opt-chain-status.on { color: var(--gold); }
+ #opt-chain-name { background: #0e0e11; color: var(--fg); border: 1px solid #2a2a30; border-radius: 3px; padding: 3px 6px; font: inherit; width: 100%; max-width: 200px; }
  /* accessibility filters applied to the game view */
  body.opt-contrast #screen { filter: contrast(1.35) saturate(1.25) brightness(1.08); }
  body.opt-reduce-motion #splash-story-inner, body.opt-reduce-motion .story-line { transition: none !important; }
@@ -81,6 +88,8 @@
  #splash-inner { max-width: 740px; width: 100%; display: flex; flex-direction: column; align-items: center; gap: 12px; }
  #splash-banner { color: var(--gold); font-size: clamp(6px, 2.15vw, 13px); line-height: 1.05; white-space: pre;
  margin: 6px 0 0; overflow-x: auto; max-width: 100%; text-shadow: 0 0 14px rgba(224,185,77,0.25); }
+ /* Too narrow for the block art — banner.ts swaps in spaced plain text instead. */
+ #splash-banner.banner-narrow { font-size: 20px; letter-spacing: 3px; line-height: 1.4; }
  #splash-subtitle { color: var(--dim); font-size: 13px; letter-spacing: 1.5px; text-transform: lowercase; }
  #splash-story { height: 176px; width: 100%; max-width: 620px; overflow: hidden;
  -webkit-mask-image: linear-gradient(180deg, transparent, #000 22%, #000 78%, transparent); mask-image: linear-gradient(180deg, transparent, #000 22%, #000 78%, transparent); }
@@ -133,6 +142,9 @@
  border: 1px solid #2a2620; border-radius: 4px; resize: vertical; }
  #lobby-status { color: var(--gold); min-height: 14px; }
  .lobby-note { color: var(--dim); font-size: 11px; line-height: 1.4; margin: 2px 0 0; }
+ #lobby-invite-to { background: #0e0e11; color: var(--fg); border: 1px solid #2a2a30; border-radius: 3px; padding: 3px 6px; font: inherit; min-width: 300px; flex: 1; }
+ .invite { display: flex; gap: 8px; align-items: center; padding: 5px 0; border-top: 1px solid #1c1c20; }
+ .invite-who { color: var(--gold); font-family: inherit; }
 
  /* ── touch controls (shown on touch / narrow screens) ── */
  #touch { display: none; width: 100%; max-width: 520px; flex-direction: column; align-items: center; gap: 8px; user-select: none; }
@@ -162,13 +174,9 @@
  <!-- ── start splash: stylized banner + auto-scrolling intro + Begin Descent setup ── -->
  <div id="splash">
  <div id="splash-inner">
-<pre id="splash-banner" aria-label="ASCEND">
- █████╗ ███████╗ ██████╗███████╗███╗ ██╗██████╗
-██╔══██╗██╔════╝██╔════╝██╔════╝████╗ ██║██╔══██╗
-███████║███████╗██║ █████╗ ██╔██╗ ██║██║ ██║
-██╔══██║╚════██║██║ ██╔══╝ ██║╚██╗██║██║ ██║
-██║ ██║███████║╚██████╗███████╗██║ ╚████║██████╔╝
-╚═╝ ╚═╝╚══════╝ ╚═════╝╚══════╝╚═╝ ╚═══╝╚═════╝ </pre>
+<!-- Art is painted by src/ui/banner.ts — it must NOT be inlined here, because
+          HTML formatters collapse the repeated spaces that hold its columns. -->
+     <pre id="splash-banner" aria-label="ASCEND"></pre>
  <div id="splash-subtitle">— a descent to recover the Amulet of Yendor —</div>
  <div id="splash-story"><div id="splash-story-inner"></div></div>
  <div id="splash-setup">
@@ -190,6 +198,16 @@
  <span id="lobby-status"></span>
  </div>
  <p class="lobby-note">🔒 Direct browser-to-browser (WebRTC, DTLS-encrypted — no server sees your game). Only play with people you trust: your partner sees your IP address, and the link is only as safe as the channel you swap the offer/answer codes over. Exchange those codes over a trusted, end-to-end-encrypted channel (not a public post).</p>
+ <!-- ── 1-click invites (only shown with coffers connected + the invite rune deployed) ── -->
+ <div id="lobby-chain" class="lobby-pane" hidden>
+ <div class="lobby-row">
+ <label for="lobby-invite-to">Invite an adventurer by address:</label>
+ <input id="lobby-invite-to" type="text" placeholder="0x…" spellcheck="false" />
+ <button id="lobby-invite-send" type="button">Send invite</button>
+ </div>
+ <div id="lobby-invites"></div>
+ <p class="lobby-note">The invite carries only the connection handshake, and it is public — anyone reading the chain can see the network addresses in it. Once you are linked, the game and all chat run directly between your browsers and never touch the chain.</p>
+ </div>
  <div id="lobby-host-pane" class="lobby-pane" hidden>
  <label>1) Send this <b>offer code</b> to your partner:</label>
  <textarea id="lobby-offer" readonly rows="2"></textarea>
@@ -388,6 +406,32 @@
  <label class="opt-name" for="opt-reduce-motion">Reduce motion</label>
  <div class="opt-ctl"><input id="opt-reduce-motion" type="checkbox" /></div>
  </div>
+ <hr class="opt-sep" />
+ <h3 class="opt-sub">⛓ Coffers <span class="opt-tag">optional</span></h3>
+ <p class="opt-note">Connecting coffers lets you strike relics at the forge (<b>F</b>), sign your descent onto the ascension roll, and raise the graves of adventurers who fell elsewhere. <b>The game is complete without it</b> — leave this alone and nothing changes.</p>
+ <div class="opt-row">
+ <span class="opt-name">Status</span>
+ <div class="opt-ctl"><span id="opt-chain-status">not connected</span></div>
+ </div>
+ <div class="opt-row">
+ <label class="opt-name" for="opt-chain-kind">Connect via</label>
+ <div class="opt-ctl"><select id="opt-chain-kind">
+ <option value="">Auto — best available</option>
+ <option value="injected">Browser wallet (Talisman / SubWallet / MetaMask)</option>
+ <option value="host">Polkadot app</option>
+ <option value="pine">Pine-RPC light client (no provider; slow to start)</option>
+ <option value="rpc">Hosted RPC (read-only)</option>
+ </select></div>
+ </div>
+ <div class="opt-row">
+ <label class="opt-name" for="opt-chain-name">Name on the roll</label>
+ <div class="opt-ctl"><input id="opt-chain-name" type="text" maxlength="24" placeholder="an adventurer" /></div>
+ </div>
+ <div class="opt-row">
+ <span class="opt-name"></span>
+ <div class="opt-ctl"><button id="opt-chain-connect" type="button">Connect</button> <button id="opt-chain-disconnect" type="button" hidden>Disconnect</button></div>
+ </div>
+ <p class="opt-note">Paseo devnet (chain id 420420417). Runs are self-reported and signed by you — the roll records what players claim, and stores each run's seed so descents can be replayed and verified later. Test tokens: <a href="https://faucet.polkadot.io/paseo?parachain=1000" target="_blank" rel="noreferrer noopener">faucet</a>.</p>
  <p class="opt-note">Settings are saved on this device. Music on/off &amp; soundtrack live in the ♪ bar. Custom key rebinding is coming later — the game already accepts arrows, hjkl (Vi), and the numpad.</p>
  </div>
  </div>

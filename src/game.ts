@@ -14,6 +14,8 @@ import {
 import { skin } from "./flavor";
 import { Idents, Appearances, ITEMS, Amulet, CORPSE, CHEST, GOLD, WRITABLE_SCROLLS, pickItemType, ItemType, EffectId, itemById, isGear, Buc, rollBuc, bucDelta } from "./items";
 import { recordRun, readRecent, RunEntry } from "./hall";
+import { sokobanSet } from "./soko";
+import { chainRuns, recordRunOnChain, toRunEntries, forgeRelic, onChainStatus, type ChainRun } from "./chain";
 import { bumpGames, bumpDeaths } from "./net/counter";
 import type { Peer } from "./net/peer";
 import { MusicEngine, MusicContext } from "./audio/music";
@@ -90,16 +92,6 @@ const EROSION_TAGS: Record<"rust" | "burn", string[]> = {
   rust: ["", "rusty", "corroded", "badly corroded"],
   burn: ["", "singed", "burnt", "badly burnt"],
 };
-// Hand-built Sokoban (Sokoban) floors. A 1-wide tunnel of alternating boulders (O) and
-// chasms (_): you can only push forward, so each boulder fills the next pit — unbrickable by design.
-// `<` start/exit · `>` goal (the prize) · `#` wall · `.` floor · `O` boulder · `_` pit.
-const SOKOBAN_FLOORS: string[][] = [
-  [
-    "###################",
-    "#<.O._.O._.O._...>#",
-    "###################",
-  ],
-];
 const SKILL_RANKS = ["Unskilled", "Basic", "Skilled", "Expert"]; // weapon-skill ranks (#enhance)
 const SKILL_NEED = [0, 20, 60, 140]; // landed hits to reach each rank
 const SKILL_LABEL: Record<string, string> = { blade: "blades", blunt: "bludgeons", martial: "martial arts" };
@@ -163,6 +155,7 @@ export class Game {
   private questDone = false;                      // your nemesis is slain and the artifact claimed
   readonly music = new MusicEngine(); // procedural area soundtracks + danger tension layer
   recentRuns: RunEntry[] = []; // local Hall of Fame cache + bones pool
+  private chainBones: ChainRun[] = []; // other players' falls, pulled from Asset Hub (empty offline)
   private scheduler = new ROT.Scheduler.Speed<Entity>(); // fast/slow actors act more/less often
   private engine!: ROT.Engine;
   private over = false;
@@ -201,6 +194,8 @@ export class Game {
     screen.appendChild(this.display.getContainer()!);
     this.log = new Log(logEl);
     window.addEventListener("keydown", (e) => this.onKey(e));
+    // The forge lights up only with coffers that can sign AND a deployed contract to sign at.
+    onChainStatus((s) => { this.forgeReady = s.canSign && s.contracts; });
     // The run no longer auto-starts: main.ts shows the splash, and newGame() runs when the
     // player clicks "Begin Descent" (solo) or a co-op peer connects.
     if (DEBUG) this.installMobileDebug(); // ── DEBUG (remove for release) ──
@@ -460,8 +455,20 @@ export class Game {
     this.fetchLeaderboard();
   }
 
+  /** The local roll, plus — when the chain is reachable — the ascended and the recently fallen
+   *  from every other player. Chain data is strictly additive: if the read fails, is empty, or
+   *  no contract is deployed, the Hall behaves exactly as it does offline. */
   private fetchLeaderboard(): void {
     this.recentRuns = readRecent(12); // the local Hall of Fame (past runs on this device)
+    void chainRuns().then(({ board, bones }) => {
+      if (!board.length && !bones.length) return;
+      this.chainBones = bones;
+      const seen = new Set(this.recentRuns.map((r) => `${r.name}|${r.depth}|${r.won}`));
+      for (const r of toRunEntries([...board, ...bones])) {
+        const k = `${r.name}|${r.depth}|${r.won}`;
+        if (!seen.has(k)) { seen.add(k); this.recentRuns.push(r); }
+      }
+    });
   }
 
   private giveStartingKit(who: Player): void {
@@ -1095,7 +1102,37 @@ export class Game {
     if (spot) { g.x = spot.x; g.y = spot.y; }
   }
 
+  /** A gate stands open only while a body rests on a plate of its circuit. A boulder is too smooth
+   *  to hold one down — which is exactly why the co-op Sokoban floors cannot be cleared alone.
+   *  A gate never drops on someone standing in the gateway; it waits until the way is clear. */
+  private syncGates(): void {
+    if (this.level.gates.length === 0) return;
+    const held = new Set<string>();
+    for (const p of this.playersHere()) { // only bodies on THIS floor — a partner two floors up holds nothing
+      const plate = this.level.plateAt(p.x, p.y);
+      if (plate) held.add(plate.circuit);
+    }
+    for (const m of this.monsters) {
+      if (!m.alive) continue;
+      const plate = this.level.plateAt(m.x, m.y);
+      if (plate) held.add(plate.circuit);
+    }
+    let changed = false;
+    for (const g of this.level.gates) {
+      const open = held.has(g.circuit);
+      const want: TileType = open ? "gateOpen" : "gate";
+      const now = this.level.tileAt(g.x, g.y);
+      if (now === want || (now !== "gate" && now !== "gateOpen")) continue; // untouched, or dug out
+      // Never drop a gate onto a body or a boulder — it waits until the gateway is clear.
+      if (!open && (this.playerAt(g.x, g.y) || this.monsterAt(g.x, g.y) || this.level.boulderAt(g.x, g.y))) continue;
+      this.level.tiles[g.y][g.x] = want;
+      changed = true;
+    }
+    if (changed) this.level.computeLighting(); // a raised portcullis lets the light through
+  }
+
   recomputeFOV(): void {
+    this.syncGates(); // gates alter what blocks sight, so settle them before the FOV pass
     if (this.coPlayer) this.resolvePlayerOverlap();
     const fovOn = (p: Player, co: boolean) => {
       const lvl = p.floorKey === this.activeKey ? this.level : this.slots.get(p.floorKey)?.level;
@@ -1255,6 +1292,10 @@ export class Game {
   enterBranch(def: BranchDef): void {
     this.enterBranchFloor(def, 1, "down");
     this.log.add(`${branchEntryFlavor(def) ?? `You clamber down into ${chainName(def)}.`} (< to climb back toward ${"the dungeon"})`, "bad");
+    if (def.sokoban) {
+      this.log.add("The ledges are too narrow to move diagonally here.", "dim");
+      if (this.coop) this.log.add("Weight plates (▪) are set into the stone — a portcullis (▓) lifts only while one of you stands on its plate, and a boulder is too smooth to hold one. Neither of you clears these floors alone.", "sys");
+    }
     this.draw();
   }
 
@@ -1311,6 +1352,7 @@ export class Game {
     this.acting.x = arrive.x; this.acting.y = arrive.y;
     if (restored) {
       this.restoreEnter();
+      if (def.sokoban) this.maybeResetSokoban(def, floor); // a wedged-shut puzzle grinds back open
     } else if (def.sokoban) {
       this.placeParty(); this.rebuildSchedule(); // a hand-built floor is fully populated by buildSokobanFloor — no procedural spawn
       this.saveActive();
@@ -1322,13 +1364,79 @@ export class Game {
     }
   }
 
-  /** Stamp a Sokoban branch floor from its template and lay the guaranteed prize on the goal tile. */
+  /** Is the puzzle still finishable from where it stands? A breadth-first search over
+   *  (player, boulders, chasms) using the very same push rule the game plays by. Sokoban is
+   *  genuinely deadlockable — waste a boulder and the floor is dead — and without this a careless
+   *  shove would quietly cost the branch prize with no way to tell. Solo floors only: they carry
+   *  no gates, so the state is small and the answer is exact.  */
+  private sokoSolvable(): boolean {
+    const lv = this.level;
+    const k = (x: number, y: number) => `${x},${y}`;
+    const goal = k(lv.stairs.x, lv.stairs.y);
+    // Anything not walkable and not a chasm is structure — a chasm can still become floor.
+    const wall = (x: number, y: number) => { const t = lv.tileAt(x, y); return t !== "pit" && !lv.isPassable(x, y); };
+    const pits0 = new Set<string>();
+    for (let y = 0; y < lv.height; y++) for (let x = 0; x < lv.width; x++) if (lv.tiles[y][x] === "pit") pits0.add(k(x, y));
+
+    const start = { p: k(this.acting.x, this.acting.y), b: new Set(lv.boulders.map((b) => k(b.x, b.y))), t: pits0 };
+    const enc = (s: typeof start) => `${s.p}#${[...s.b].sort().join()}#${[...s.t].sort().join()}`;
+    const seen = new Set([enc(start)]);
+    let frontier = [start];
+    let budget = 200_000; // these floors are tiny; the cap only guards against a pathological template
+    while (frontier.length) {
+      const next: typeof frontier = [];
+      for (const s of frontier) {
+        if (s.p === goal) return true;
+        const [px, py] = s.p.split(",").map(Number);
+        for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as [number, number][]) {
+          const nx = px + dx, ny = py + dy, n = k(nx, ny);
+          if (wall(nx, ny)) continue;
+          let b = s.b, t = s.t;
+          if (s.b.has(n)) {
+            const bx = nx + dx, by = ny + dy, bk = k(bx, by);
+            if (wall(bx, by) || s.b.has(bk)) continue;
+            b = new Set(s.b); b.delete(n);
+            if (s.t.has(bk)) { t = new Set(s.t); t.delete(bk); } else b.add(bk);
+          } else if (s.t.has(n)) continue; // a chasm bars the way until it is filled
+          const ns = { p: n, b, t };
+          const e = enc(ns);
+          if (seen.has(e) || --budget < 0) continue;
+          seen.add(e);
+          next.push(ns);
+        }
+      }
+      frontier = next;
+    }
+    return false;
+  }
+
+  /** Returning to a floor you have wedged shut: grind it back to its opening state rather than
+   *  leave the prize unreachable for the rest of the run. Progress is forfeit; the run is not. */
+  private maybeResetSokoban(def: BranchDef, floor: number): void {
+    if (this.coop) return;         // the co-op floors carry gates, and a partner can undo a bad shove
+    if (this.sokoSolvable()) return;
+    this.buildSokobanFloor(def, floor);
+    this.acting.x = this.level.start.x; this.acting.y = this.level.start.y;
+    this.recomputeFOV();
+    this.log.add("The chasms exhale — boulders grind back to where they lay. The puzzle resets.", "sys");
+    this.saveActive();
+  }
+
+  /** Stamp a Sokoban branch floor from its template. The co-op set needs two adventurers and
+   *  cannot be cleared alone; `coop` is identical on both clients, so the choice stays in lockstep. */
   private buildSokobanFloor(def: BranchDef, floor: number): void {
     this.monsters = []; // a pure puzzle — no spawns
-    this.level.loadSokoban(SOKOBAN_FLOORS[Math.min(floor, SOKOBAN_FLOORS.length) - 1]);
-    const s = this.level.stairs; // the goal `>` — the prize rests here (no stair deeper)
-    const prize = itemById(def.prizeId);
-    if (prize && !this.level.itemAt(s.x, s.y)) this.level.items.push({ x: s.x, y: s.y, type: prize, buc: "blessed", bucKnown: true });
+    const set = sokobanSet(this.coop);
+    this.level.loadSokoban(set[Math.min(floor, set.length) - 1].rows as string[]);
+    const s = this.level.stairs;
+    if (floor >= def.floors) {
+      // the End — the prize rests on the goal tile, with nothing deeper
+      this.level.tiles[s.y][s.x] = "floor";
+      const prize = itemById(def.prizeId);
+      if (prize && !this.level.itemAt(s.x, s.y)) this.level.items.push({ x: s.x, y: s.y, type: prize, buc: "blessed", bucKnown: true });
+    } else {
+      this.level.tiles[s.y][s.x] = "stairsDown"; // the way on, to the next puzzle
+    }
   }
 
   /** A branch's end floor: its down-stair becomes the guaranteed prize, with a guardian beside it. */
@@ -2479,6 +2587,9 @@ export class Game {
       drawbridgeUp: "a drawbridge, raised — impassable; throw its lever to lower it",
       lever: "a lever — walk into it to raise or lower the bridge",
       sink: "a burn sink",
+      plate: "a weight plate — a body holds it down and raises its gate; a boulder is too smooth to",
+      gate: "a portcullis, dropped — someone must stand on its plate to raise it",
+      gateOpen: "a portcullis, raised — it drops the moment its plate is stepped off",
     };
     this.log.add(`You see ${names[t!] ?? "nothing notable"}.`, "dim");
   }
@@ -2777,11 +2888,39 @@ export class Game {
     void this.showHallOfFame();
   }
 
-  // ── local Hall of the Fallen (past runs on this device) ─────────────────────
+  // ── the Hall of the Fallen (this device, plus the chain when a wallet is connected) ─────────
   private recordResult(won: boolean): void {
     const depth = won ? GEHENNOM_BOTTOM : this.player.maxDepthReached; // a win means wresting the Amulet from the bottom
     recordRun("an adventurer", depth, won);
     this.fetchLeaderboard();
+    // Sign the run onto Asset Hub if — and only if — a wallet is connected. Deliberately not
+    // awaited: a chain round trip must never sit between the player and their death screen.
+    void recordRunOnChain({
+      seed: this.masterSeed,
+      turns: this.turn,
+      depth: this.player.depth,
+      maxDepth: depth,
+      ascended: won,
+    }).then((hash) => {
+      if (hash) this.log.add(`Your descent is written into the ancient record. (${hash.slice(0, 10)}…)`, "dim");
+    });
+  }
+
+  /** True once a wallet that can sign is connected AND a forge contract is configured. Kept as a
+   *  plain flag so the key handler stays synchronous — the chain layer pushes updates into it. */
+  forgeReady = false;
+
+  /** Strike a relic into an NFT on Asset Hub. The item is a TROPHY: it is not consumed, not
+   *  altered, and confers nothing — it stays in your pack exactly as it was. Costs no game time,
+   *  because waiting on a signature prompt must never advance the dungeon around you. */
+  async forgeItem(item: Item): Promise<void> {
+    if (!item.relic) { this.log.add("Only a relic (✦) can be struck at the forge.", "dim"); return; }
+    this.log.add(`You lay ${this.ident.name(item.type)} upon the anvil…`, "sys");
+    this.music.sfx("forge");
+    const hash = await forgeRelic(item, this.acting.depth);
+    if (hash) this.log.add(`${cap(this.ident.name(item.type))} is struck into the ancient record — ${hash.slice(0, 10)}…  It remains yours, unchanged.`, "good");
+    else this.log.add("The forge gutters and goes cold — nothing was struck. Your relic is untouched.", "dim");
+    this.draw();
   }
 
   showHallOfFame(): void {
@@ -2794,10 +2933,26 @@ export class Game {
     for (const r of top) this.log.add(`  ${cap(r.name)} — ${r.won ? "★ ASCENDED" : "fell at depth " + r.depth}`, r.won ? "good" : "dim");
   }
 
+  /** Scatter a grave from the roll of the fallen — this device's Hall, and (when the chain is
+   *  reachable) other players' falls pulled from Asset Hub.
+   *
+   *  This draws its three random values UNCONDITIONALLY, before looking at the pool at all. That
+   *  is load-bearing: bones placement happens inside shared, seeded level generation, but the pool
+   *  itself is per-device (localStorage) and now also arrives asynchronously from the chain. If the
+   *  draws were skipped when a pool happened to be empty, two co-op clients would consume different
+   *  amounts of the shared RNG stream and every trap, portal and monster placed afterwards would
+   *  diverge. Whose name ends up on the stone may differ between clients; it is only a label, and
+   *  nothing in the simulation reads it. */
   private maybePlaceBones(): void {
-    if (this.recentRuns.length === 0 || ROT.RNG.getUniform() > 0.3) return;
-    const r = ROT.RNG.getItem(this.recentRuns)!;
+    const roll = ROT.RNG.getUniform();
+    const pick = ROT.RNG.getUniform();
     const pos = this.level.randomFloor();
+    if (roll > 0.3) return;
+
+    // Prefer the chain pool — those carry a real bones blob; fall back to the local roll.
+    const pool: RunEntry[] = this.chainBones.length ? this.chainBones : this.recentRuns;
+    if (pool.length === 0) return;
+    const r = pool[Math.min(pool.length - 1, Math.floor(pick * pool.length))];
     if (this.level.tileAt(pos.x, pos.y) !== "floor" || this.level.graveAt(pos.x, pos.y)) return;
     const who = cap(r.name);
     this.level.graves.push({ x: pos.x, y: pos.y, label: r.won ? `${who} ascended from here` : `Here fell ${who}, at depth ${r.depth}` });

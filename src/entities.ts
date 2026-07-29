@@ -5,8 +5,9 @@ import { Inventory, Item } from "./inventory";
 import { bucDelta, ITEMS, ItemType, ArmorSlot, Idents } from "./items";
 import { runAi, wanderStep, cheb, MONSTER_BEHAVIORS, PET_BEHAVIORS } from "./ai";
 import type { FloorItem } from "./level";
+import { tryPush } from "./level";
 
-type Verb = "wield" | "wear" | "takeoff" | "quaff" | "read" | "eat" | "drop" | "zap" | "throw" | "apply" | "quiver" | "name" | "offhand" | "dip" | "charge" | "grease";
+type Verb = "wield" | "wear" | "takeoff" | "quaff" | "read" | "eat" | "drop" | "zap" | "throw" | "apply" | "quiver" | "name" | "offhand" | "dip" | "charge" | "grease" | "forge";
 const VERB_PROMPT: Record<Verb, string> = {
   wield: "Wield which weapon?", wear: "Wear/put on which item?",
   quaff: "Quaff which potion?", read: "Read which scroll?",
@@ -18,6 +19,7 @@ const VERB_PROMPT: Record<Verb, string> = {
   dip: "Dip which item into the water?",
   charge: "Charge which wand or tool?",
   grease: "Grease which piece of gear?",
+  forge: "Strike which relic (✦) at the forge?",
 };
 
 export abstract class Entity {
@@ -452,6 +454,7 @@ export class Player extends Entity {
       case "H": void this.game.showHallOfFame(); return false;
       case "i": this.game.showInventory(); return false;
       case "@": this.game.showCharSheet(); return false;
+      case "F": return this.startForge();
       case "w": return this.startSelect("wield");
       case "W": return this.startSelect("wear");
       case "q": {
@@ -507,6 +510,19 @@ export class Player extends Entity {
     return false;
   }
 
+  /** `F` — the forge. Only relics (✦) can be struck, and only with coffers connected. */
+  private startForge(): boolean {
+    if (!this.inventory.items.some((i) => i.relic)) {
+      this.game.log.add("Nothing you carry is a relic (✦). Dip a blade at a fountain, or wrest one from a nemesis.", "dim");
+      return false;
+    }
+    if (!this.game.forgeReady) {
+      this.game.log.add("The forge stands cold — open your coffers (the ⚙ panel) to strike a relic into the ancient record.", "dim");
+      return false;
+    }
+    return this.startSelect("forge");
+  }
+
   private startSelect(verb: Verb): boolean {
     if (this.inventory.items.length === 0) { this.game.log.add("You have nothing.", "dim"); return false; }
     this.pending = verb;
@@ -523,6 +539,7 @@ export class Player extends Entity {
     if (e.key === "Escape") { this.pendingGrease = null; this.game.log.add("Never mind.", "dim"); return false; }
     const item = /^[a-z]$/.test(e.key) ? this.inventory.byLetter(e.key) : undefined;
     if (!item) { this.game.log.add("No such item.", "dim"); return false; }
+    if (verb === "forge") { void this.game.forgeItem(item); return false; } // struck off-chain of the turn loop — costs no time
     if (verb === "charge") return this.game.chargeItem(chargeScroll?.buc ?? "uncursed", item) ? this.endTurn() : false;
     if (verb === "grease") { const can = this.pendingGrease; this.pendingGrease = null; return can && this.game.greaseItem(can, item) ? this.endTurn() : false; }
     if (verb === "zap") {
@@ -968,6 +985,13 @@ export class Player extends Entity {
   }
 
   private tryMove(dx: number, dy: number): boolean {
+    // Sokoban's own rule (NetHack sokoban.c): the ledges are too narrow to cut a corner, so no
+    // diagonal steps. It also keeps the hand-built puzzles honest — every one is authored and
+    // machine-verified against orthogonal movement only.
+    if (this.game.level.kind === "sokoban" && dx !== 0 && dy !== 0) {
+      this.game.log.add("The ledges are too narrow to move diagonally here.", "dim");
+      return false;
+    }
     // Swallowed by a trapper: you can't walk — every move is a thrash to break free (handled in game).
     if (this.engulfedBy && this.engulfedBy.alive) return this.game.struggleEngulf(this) ? this.endTurn() : false;
     if (this.engulfedBy) this.engulfedBy = null; // engulfer died between turns — freed
@@ -1011,18 +1035,14 @@ export class Player extends Entity {
     }
     if (!this.game.level.isPassable(nx, ny)) return false; // bumping a wall costs no turn
     // Push a boulder one tile if the space beyond is clear; otherwise it won't budge.
-    const boulder = this.game.level.boulderAt(nx, ny);
-    if (boulder) {
+    if (this.game.level.boulderAt(nx, ny)) {
       this.game.music.sfx("boulder");
-      const bx = nx + dx, by = ny + dy;
-      if (this.game.level.tileAt(bx, by) === "pit" && !this.game.level.boulderAt(bx, by) && !this.game.monsterAt(bx, by) && !this.game.playerAt(bx, by)) {
-        // shove the boulder into the chasm — it fills, the boulder is consumed, and you advance
-        this.game.level.boulders = this.game.level.boulders.filter((b) => b !== boulder);
-        this.game.level.tiles[by][bx] = "floor";
+      const occupied = (x: number, y: number) => !!this.game.monsterAt(x, y) || !!this.game.playerAt(x, y);
+      const push = tryPush(this.game.level, nx, ny, dx, dy, occupied);
+      if (push === "filled") {
         this.game.recomputeFOV();
         this.game.log.add("You heave the boulder into the chasm — it fills with a grinding crunch.", "good");
-      } else if (this.game.level.isPassable(bx, by) && !this.game.level.boulderAt(bx, by) && !this.game.monsterAt(bx, by) && !this.game.playerAt(bx, by)) {
-        boulder.x = bx; boulder.y = by;
+      } else if (push === "moved") {
         this.game.log.add("You heave the boulder forward.", "dim");
       } else { this.game.log.add("The boulder won't budge — break it (a fire ray) or go around.", "dim"); return false; }
     }

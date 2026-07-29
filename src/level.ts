@@ -5,6 +5,11 @@ import type { ItemType } from "./items";
 import { serFloorItem, restoreFloorItem } from "./save";
 
 export type LevelKind = "normal" | "bigroom" | "maze" | "cave" | "labyrinth" | "grid" | "swamp" | "sokoban" | "fortress" | "concentric";
+
+/** Sokoban template glyphs for weight plates and the gates they hold open, paired by letter.
+ *  Deliberately not "any letter" — `O` is already a boulder, and a typo should fail loudly. */
+export const PLATE_GLYPHS = "abcd";
+export const GATE_GLYPHS = "ABCD";
 export interface Portal { x: number; y: number; chain: ChainDef; quest?: boolean; }
 
 export interface FloorItem { x: number; y: number; type: ItemType; price?: number; coins?: number; enchant?: number; relic?: boolean; buc?: import("./items").Buc; bucKnown?: boolean; corpse?: { def: import("./data").MonsterDef; born: number }; chest?: { locked: boolean }; detected?: boolean; } // price = shop ware (gold); coins = a gold pile; relic/enchant = an artifact; buc = sanctity; corpse = edible remains; chest = container; detected = sensed by treasure detection (renders out of FOV)
@@ -29,6 +34,11 @@ export class Level {
   traps: Trap[] = [];
   engravings: Engraving[] = []; // Gray-Paper wards scratched in the dust
   boulders: { x: number; y: number }[] = []; // pushable blocks (Sokoban-flavor)
+  // Weight plates and the gates they hold open, grouped into circuits by letter. A gate is open
+  // only while a *body* stands on a plate of the same circuit — a boulder is too smooth to hold
+  // one down, which is what makes the co-op Sokoban floors impossible to clear alone.
+  plates: { x: number; y: number; circuit: string }[] = [];
+  gates: { x: number; y: number; circuit: string }[] = [];
   portals: Portal[] = []; // the planar gate portals to dungeon branches
   branchEntries: { x: number; y: number; branchId: string }[] = []; // branch-stairs into sub-dungeons (the Mines)
   roomCenters: { x: number; y: number }[] = [];
@@ -85,6 +95,7 @@ export class Level {
       tiles: this.tiles, explored: this.explored, exploredCo: this.exploredCo, lit: this.lit,
       items: this.items.map((fi) => serFloorItem(fi as unknown as Record<string, unknown>)),
       graves: this.graves, drawbridges: this.drawbridges, coopTuned: this.coopTuned,
+      plates: this.plates, gates: this.gates,
       traps: this.traps, engravings: this.engravings, boulders: this.boulders,
       portals: this.portals.map((p) => ({ x: p.x, y: p.y, quest: p.quest, chain: p.chain.id })),
       branchEntries: this.branchEntries, roomCenters: this.roomCenters, lightSources: this.lightSources,
@@ -112,6 +123,7 @@ export class Level {
     lv.items = arr(d.items).map((x) => restoreFloorItem(x)).filter(Boolean) as unknown as Level["items"];
     lv.graves = arr(d.graves) as Level["graves"]; lv.drawbridges = arr(d.drawbridges) as Level["drawbridges"];
     lv.coopTuned = (d.coopTuned as number) ?? 0;
+    lv.plates = arr(d.plates) as Level["plates"]; lv.gates = arr(d.gates) as Level["gates"];
     lv.traps = arr(d.traps) as Level["traps"]; lv.engravings = arr(d.engravings) as Level["engravings"]; lv.boulders = arr(d.boulders) as Level["boulders"];
     lv.portals = arr<{ x: number; y: number; quest?: boolean; chain: string }>(d.portals)
       .map((p) => ({ x: p.x, y: p.y, quest: p.quest, chain: CHAINS.find((c) => c.id === p.chain)! }))
@@ -383,7 +395,7 @@ export class Level {
   private lightPasses(x: number, y: number): boolean {
     const t = this.tiles[y]?.[x];
     // sight crosses open water (you see the far shore) but you cannot walk into it
-    return t === "floor" || t === "door" || t === "stairsDown" || t === "stairsUp" || t === "altar" || t === "portal" || t === "fountain" || t === "throne" || t === "sink" || t === "vibrating" || t === "water" || t === "branchDown" || t === "pit" || t === "drawbridge" || t === "lever";
+    return t === "floor" || t === "door" || t === "stairsDown" || t === "stairsUp" || t === "altar" || t === "portal" || t === "fountain" || t === "throne" || t === "sink" || t === "vibrating" || t === "water" || t === "branchDown" || t === "pit" || t === "drawbridge" || t === "lever" || t === "plate" || t === "gateOpen";
   }
 
   isPassable(x: number, y: number): boolean {
@@ -392,9 +404,10 @@ export class Level {
   }
 
   /** Stamp a hand-built Sokoban-style level from an ASCII template, centred on the map.
-   *  Glyphs: `#` wall · `.` floor · `_` pit (chasm) · `O` boulder · `<` start/exit · `>` goal. */
+   *  Glyphs: `#` wall · `.` floor · `_` pit (chasm) · `O` boulder · `<` start/exit · `>` goal
+   *  · `a`/`b` weight plate (circuit a/b) · `A`/`B` the gate that plate holds open. */
   loadSokoban(rows: string[]): void {
-    this.floors = []; this.boulders = []; this.roomCenters = [];
+    this.floors = []; this.boulders = []; this.roomCenters = []; this.plates = []; this.gates = [];
     for (let y = 0; y < this.height; y++) for (let x = 0; x < this.width; x++) this.tiles[y][x] = "wall";
     const oy = Math.max(1, Math.floor((this.height - rows.length) / 2));
     for (let r = 0; r < rows.length; r++) {
@@ -405,10 +418,14 @@ export class Level {
         if (x < 1 || y < 1 || x >= this.width - 1 || y >= this.height - 1) continue;
         if (ch === "#") { this.tiles[y][x] = "wall"; continue; }
         if (ch === "_") { this.tiles[y][x] = "pit"; continue; } // a chasm — not a floor, can't spawn here
+        if (GATE_GLYPHS.includes(ch)) { // a dropped portcullis — sealed until its plate is held
+          this.tiles[y][x] = "gate"; this.gates.push({ x, y, circuit: ch.toLowerCase() }); continue;
+        }
         this.tiles[y][x] = "floor"; this.floors.push({ x, y });
         if (ch === "O") this.boulders.push({ x, y });
         else if (ch === "<") this.start = { x, y };
         else if (ch === ">") this.stairs = { x, y };
+        else if (PLATE_GLYPHS.includes(ch)) { this.tiles[y][x] = "plate"; this.plates.push({ x, y, circuit: ch }); }
       }
     }
     this.tiles[this.start.y][this.start.x] = "stairsUp"; // the way back out (toward the dungeon)
@@ -509,6 +526,10 @@ export class Level {
     return this.engravings.find((e) => e.x === x && e.y === y && e.life > 0);
   }
 
+  plateAt(x: number, y: number): { x: number; y: number; circuit: string } | undefined {
+    return this.plates.find((p) => p.x === x && p.y === y);
+  }
+
   boulderAt(x: number, y: number): { x: number; y: number } | undefined {
     return this.boulders.find((b) => b.x === x && b.y === y);
   }
@@ -585,4 +606,40 @@ export class Level {
         }
     return n;
   }
+}
+
+/** What a push attempt did. `none` means there was no boulder to push in the first place. */
+export type PushResult = "none" | "moved" | "filled" | "blocked";
+
+/**
+ * The boulder-push rule, in one place so the game and the Sokoban level validator can never
+ * drift apart. `(nx,ny)` is the tile being stepped into and `(dx,dy)` the direction of travel;
+ * `occupied` reports any body (player, pet, monster) standing on a tile.
+ *
+ * Shoving a boulder into a chasm consumes it and turns the chasm to floor — that is the only
+ * way across, and it is why a wasted boulder can strand a puzzle.
+ */
+export function tryPush(
+  level: Level,
+  nx: number,
+  ny: number,
+  dx: number,
+  dy: number,
+  occupied: (x: number, y: number) => boolean,
+): PushResult {
+  const boulder = level.boulderAt(nx, ny);
+  if (!boulder) return "none";
+  const bx = nx + dx, by = ny + dy;
+  if (level.boulderAt(bx, by) || occupied(bx, by)) return "blocked";
+  // A portcullis housing is too tight to take a boulder. Without this you could wedge one in the
+  // gateway to stop the gate ever dropping, which would defeat the whole point of the plates.
+  const beyond = level.tileAt(bx, by);
+  if (beyond === "gate" || beyond === "gateOpen") return "blocked";
+  if (beyond === "pit") {
+    level.boulders = level.boulders.filter((b) => b !== boulder);
+    level.tiles[by][bx] = "floor";
+    return "filled";
+  }
+  if (level.isPassable(bx, by)) { boulder.x = bx; boulder.y = by; return "moved"; }
+  return "blocked";
 }
