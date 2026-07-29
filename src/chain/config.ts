@@ -39,7 +39,16 @@ export type ContractName = keyof typeof CONTRACTS;
 export type ProviderKind = "host" | "injected" | "pine" | "rpc";
 
 export const LS = {
-  kind: "ascend.chain.kind",       // preferred ProviderKind ("" = auto)
+  // The player's EXPLICIT choice in the ⚙ panel; "" (or absent) means auto. Only the panel writes
+  // this. It must never record whatever strategy happened to win, because a concrete kind here
+  // collapses `available()` to one entry and disables the fallback chain permanently — which is
+  // what pinned the Polkadot app to the read-only RPC even after host signing worked.
+  //
+  // The key is deliberately NOT the old `ascend.chain.kind`: that one was poisoned by the bug on
+  // every device that ever connected, so it is ignored and cleaned up rather than migrated.
+  prefer: "ascend.chain.prefer",
+  legacyKind: "ascend.chain.kind",  // removed on boot; see above
+  lastKind: "ascend.chain.lastkind", // what actually connected last, for reporting only
   autoConnect: "ascend.chain.auto", // "1" once the player has connected at least once
   rpc: "ascend.chain.rpc",         // custom hosted endpoint
   runs: "ascend.chain.runs",       // contract address overrides

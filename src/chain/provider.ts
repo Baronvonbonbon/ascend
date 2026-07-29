@@ -23,6 +23,10 @@ export interface Connection {
 let current: Connection | null = null;
 let pine: { disconnect(): Promise<void> } | null = null;
 
+// One-time cleanup of the poisoned preference key (see LS.prefer). Every device that ever pressed
+// Connect has a concrete kind stored there, which would keep forcing that one strategy forever.
+try { localStorage.removeItem(LS.legacyKind); } catch { /* storage blocked */ }
+
 export function connection(): Connection | null { return current; }
 
 const injected = (): Eip1193Provider | null =>
@@ -52,7 +56,10 @@ export function inHostApp(): boolean {
 export function available(): ProviderKind[] {
   const out: ProviderKind[] = ["host"];
   if (injected()) out.push("injected");
-  out.push("pine", "rpc");
+  // `pine` is deliberately NOT in the automatic chain. It is a smoldot light client that syncs from
+  // genesis — the ⚙ panel itself calls it "slow to start" — so auto-selecting it means Connect
+  // appears to hang for minutes whenever the paths above fail. It stays a deliberate choice.
+  out.push("rpc");
   return out;
 }
 
@@ -127,7 +134,9 @@ export async function connect(kind?: ProviderKind, onStep?: (s: string) => void)
         : connectRpc();
       if (c) {
         current = c;
-        try { localStorage.setItem(LS.autoConnect, "1"); localStorage.setItem(LS.kind, c.kind); } catch { /* */ }
+        // Record what connected for reporting only — NOT as the player's preference. Writing the
+        // resolved kind back into the preference is what disabled the fallback chain.
+        try { localStorage.setItem(LS.autoConnect, "1"); localStorage.setItem(LS.lastKind, c.kind); } catch { /* */ }
         return c;
       }
     } catch { /* try the next strategy — a declined prompt is not a failure worth surfacing */ }

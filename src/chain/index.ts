@@ -71,6 +71,11 @@ export async function availableProviders(): Promise<ProviderKind[]> {
   try { const { available } = await import("./provider"); return available(); } catch { return []; }
 }
 
+/** Whether we are running inside the Polkadot app's container — used to explain a read-only rail. */
+export async function insideHostApp(): Promise<boolean> {
+  try { const { insideHost } = await import("./host"); return await insideHost(); } catch { return false; }
+}
+
 // ── the game-facing surface ─────────────────────────────────────────────────
 
 /**

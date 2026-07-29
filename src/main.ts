@@ -4,7 +4,7 @@ import { loadCounts } from "./net/counter";
 import { readSave } from "./save";
 import { renderBanner } from "./ui/banner";
 import { initDropdowns } from "./ui/dropdown";
-import { connectChain, disconnectChain, resumeChain, onChainStatus, shortAddress, type ChainStatus } from "./chain";
+import { connectChain, disconnectChain, resumeChain, onChainStatus, shortAddress, insideHostApp, type ChainStatus } from "./chain";
 import { ARCHETYPES, archetypeName, archetypeBlurb, RACES, raceName, raceBlurb, introStory } from "./data";
 
 const screen = document.getElementById("screen");
@@ -216,7 +216,11 @@ if (screen && logEl) {
         try { localStorage.setItem("ascend.chain.name", chainName.value.trim()); } catch { /* */ }
       });
     }
-    try { if (chainKind) chainKind.value = localStorage.getItem("ascend.chain.kind") ?? ""; } catch { /* */ }
+    // The panel is the ONLY writer of this preference — see LS.prefer in ./chain/config.
+    try { if (chainKind) chainKind.value = localStorage.getItem("ascend.chain.prefer") ?? ""; } catch { /* */ }
+    chainKind?.addEventListener("change", () => {
+      try { localStorage.setItem("ascend.chain.prefer", chainKind.value); } catch { /* */ }
+    });
   }
 
   // ── coffers (optional chain link) ──
@@ -255,8 +259,13 @@ if (screen && logEl) {
         btn.textContent = "Connecting…";
         // Pine syncs a light client from genesis — report progress or it looks hung.
         const kind = (kindSel()?.value || undefined) as Parameters<typeof connectChain>[0];
-        const s = await connectChain(kind, (step) => sayChain(`light client: ${step}…`));
+        const s = await connectChain(kind, (step) => sayChain(`${step}…`));
         if (!s.connected) sayChain("could not connect — the game is unaffected");
+        // Landing on a read-only rail INSIDE the Polkadot app is the failure that hid for two
+        // rounds, because the panel reported it as an ordinary read-only connection. Name it.
+        else if (!s.canSign && (await insideHostApp())) {
+          sayChain("inside the Polkadot app, but its wallet did not answer — read-only");
+        }
         for (const b of connectBtns) b.disabled = false;
         btn.textContent = was;
       });
