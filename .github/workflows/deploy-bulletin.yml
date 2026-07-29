@@ -1,8 +1,18 @@
 name: Deploy to the Bulletin chain
 
 # The CANONICAL deployment: uploads dist/ to the Polkadot Bulletin Chain and points the
-# `ascend.dot` DotNS name at the new CID. Served at https://ascend.dot.li (and as ascend.dot
-# inside the Polkadot app).
+# `ascendyendor00.dot` DotNS name at the new CID. Served at https://ascendyendor00.dot.li (and as
+# ascendyendor00.dot inside the Polkadot app). The short `ascend.dot` is personhood-gated — see
+# DEPLOY.md; this job has never deployed it.
+#
+# THIS JOB ONLY WORKS WHILE BULLETIN_MNEMONIC OWNS THE NAME
+# ---------------------------------------------------------
+# The deploy path checks name ownership and, when the signer does not own it, tries to REGISTER —
+# which reverts on a name that already exists, failing the whole job. There is no upload-only flag,
+# so CI cannot renew storage for a name it does not hold. Transferring the name to a phone-held
+# personhood account therefore stops the renewal below, silently, until the retention window runs
+# out. DEPLOY.md ("Ownership and the weekly renewal are in direct conflict") has the details and the
+# way out: give the name to a dedicated account whose mnemonic can live in the secret.
 #
 # WHY THIS ALSO RUNS ON A SCHEDULE
 # --------------------------------

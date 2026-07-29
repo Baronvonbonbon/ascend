@@ -101,18 +101,69 @@ The app **is** available now: **Android on Google Play** (`io.pcf.polkadotapp`),
 and Polkadot Web at `dot.li`. Once an account there has PoP:
 
 ```bash
-npx pad login                 # scan the QR with the app
-npx pad whoami
-npm run deploy:bulletin -- --publish     # now succeeds
-npx pad transfer ascendyendor00.dot      # hand the name to that account
+npx pad login                 # scan the QR with the app; `pad` is a devDependency, so run it
+npx pad whoami                # from the repo — from $HOME npx resolves an unrelated `pad` package
+npm run deploy:bulletin -- --publish            # now succeeds
+npx pad transfer ascendyendor00.dot --env devnet # hand the name to that account
 ```
 
-### The name is currently owned by a public dev account
+`--env devnet` is not optional: the CLI defaults to `paseo-next-v2` and this name lives on devnet.
+`transfer` signs with the built-in dev phrase unless given `--mnemonic`, and sends to the signed-in
+session unless given `--to` — so from a logged-in shell it needs no other arguments. Read the
+consequences below before running it.
 
-`ascendyendor00.dot` is owned by `5DfhGyQdFobKM8NsWvEeAKk5EQQgYe9AydgJ7rMB6E1EqRzV` — the **base
-account of the well-known Substrate dev phrase**, which the deploy CLI falls back to when no session
-exists. That phrase is public, so on this devnet the name is not meaningfully *ours*: anyone can
-re-point or transfer it. Fine for a testnet; transfer it to a real account before it matters.
+### Who owns what, and why the two halves disagree
+
+Read from the DotNS registry (`0x527b08a640b527a3dae0C4BE04D7344E430B6E50`, `owner(namehash(name))`),
+not from the deploy log:
+
+| Name | Owner | |
+|---|---|---|
+| `ascendyendor00.dot` | `0xff54a5a1fdac91bb4f2b4fbf4bfff37cdbea333f` | the personhood-proven app account (`5DoMJAZMGSJfTpC2hV4irP9G4R1iSoJvKq1xriPa984TLT43`) |
+| `app.ascendyendor00.dot` | `0x35cdb23ff7fc86e8dccd577ca309bfea9c978d20` | still the public dev-phrase account |
+
+`pad transfer` moves the registrar token for a 2LD label and **nothing beneath it**. Subnames are
+registry nodes, not registrar tokens, so `app.` stayed where it was. Both halves still resolve to the
+current CID, so nothing is visibly broken — but no single signer can now complete a full publish:
+
+- the **root manifest** text record needs the root owner (the app account);
+- the **`app.` contenthash + executable** records need the subname owner (the dev account).
+
+**A deploy in this state aborts.** The manifest-publish step checks subname ownership and throws
+`Subname app.ascendyendor00.dot is owned by 0x35cd…, not the publisher. Aborting.` rather than
+reclaiming it — it only calls `setSubnodeOwner` when the subname has **no** owner at all. Deploying
+without the config file found (so the manifest step never runs) updates the root contenthash only,
+and leaves whatever the Polkadot app resolves to go stale.
+
+Getting back to one signer means either transferring the root back, or reclaiming `app.` with a
+one-off `setSubnodeOwner` from the parent owner — the registry allows it, the CLI never asks for it.
+
+### Ownership and the weekly renewal are in direct conflict
+
+This is the constraint to design around, not a bug to fix:
+
+| | needs |
+|---|---|
+| the weekly cron renewal | a signer whose **mnemonic** can live in `BULLETIN_MNEMONIC` |
+| Browse listing (`--publish`), the short name | a signer with **personhood**, which exists only inside the Polkadot app |
+
+A phone-held personhood account has no mnemonic to give CI. And CI cannot simply skip the DotNS
+phase: the deploy path calls `checkOwnership(name)` and, when the signer does not own the name,
+tries to **register** it — which reverts on a name that already exists. There is no upload-only
+flag (`--publish`/`--unpublish` are the only DotNS toggles), so the whole job fails.
+
+Two details make this less bad than it sounds, both verified:
+
+- **The build is byte-for-byte deterministic.** Building twice from the same commit produced an
+  identical `dist/` tree hash, so an unchanged source really does yield an unchanged CID.
+- **An unchanged CID writes no transaction** — the tool logs `Contenthash already set: … skipping tx`.
+
+So a renewal is *almost* signature-free; what blocks it is purely the ownership pre-check, not the
+work it would do. Whoever holds the name must hold it as a mnemonic if the cron is to run unattended.
+The honest fix is a **dedicated deploy account** — a fresh keypair whose mnemonic goes in
+`BULLETIN_MNEMONIC` and which holds the name. That is strictly better than today's public dev phrase
+(the name becomes genuinely ours) and keeps renewal alive; the cost is that Browse listing, which
+wants personhood on the signer, stays out of reach for that name.
 
 ### What "badge" is, and is not
 
