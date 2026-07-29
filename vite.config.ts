@@ -25,10 +25,20 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // The whole game is precached, so a run survives going offline mid-descent. The light
-        // client chunk is deliberately excluded — 4 MB nobody who hasn't opted into Pine will use.
+        // The whole game is precached, so a run survives going offline mid-descent. The optional
+        // chain layer is deliberately excluded, because precaching is what would undo the lazy
+        // loading everything else here is built around: these chunks are already behind dynamic
+        // imports, so a player who never connects never requests one — but the service worker would
+        // happily fetch all of them up front anyway.
+        //
+        //   chain-lightclient  — ~4 MB of smoldot, only for players who choose Pine-RPC
+        //   *_metadata-*       — PAPI chain descriptors pulled in by the Polkadot app host SDK.
+        //                        One per known chain, ~250 kB–900 kB each; only one is ever used,
+        //                        and only inside the app. Precaching them took the payload from
+        //                        0.8 MB to 7.2 MB.
+        //   metadataTypes-*    — their shared type tables, same story.
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
-        globIgnores: ["**/chain-lightclient-*.js"],
+        globIgnores: ["**/chain-lightclient-*.js", "**/*_metadata-*.js", "**/metadataTypes-*.js"],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
       },
     }),

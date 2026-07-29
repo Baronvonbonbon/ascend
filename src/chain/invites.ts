@@ -7,6 +7,7 @@
 
 import { Contract, getAddress, hexlify, toUtf8Bytes, toUtf8String, getBytes } from "ethers";
 import { connection } from "./provider";
+import { sendWrite, canWrite } from "./write";
 import { withTimeout, contractAddress } from "./config";
 import { seal, open as unseal, localPublicKey, sealingAvailable } from "./crypto";
 
@@ -83,11 +84,10 @@ function read(): Contract | null {
   return new Contract(invitesAddress(), ABI as unknown as string[], conn.provider);
 }
 
-async function write(): Promise<Contract | null> {
-  const conn = connection();
-  if (!conn?.canSign || !hasInvites()) return null;
-  const signer = await (conn.provider as { getSigner(): Promise<unknown> }).getSigner();
-  return new Contract(invitesAddress(), ABI as unknown as string[], signer as never);
+/** Writes go through sendWrite, which picks the EVM wallet or the Polkadot app's host signer. */
+async function send(fn: string, args: unknown[]): Promise<boolean> {
+  if (!hasInvites()) return false;
+  return (await sendWrite("invites", ABI, fn, args)) !== null;
 }
 
 /** Normalise whatever the player typed. Returns null if it is not an address. */
@@ -112,20 +112,13 @@ export async function keyOf(who: string): Promise<Uint8Array | null> {
  */
 export async function ensureKeyPublished(): Promise<boolean> {
   const conn = connection();
-  if (!conn?.canSign || !conn.address || !hasInvites() || !sealingAvailable()) return false;
+  if (!canWrite() || !conn?.address || !hasInvites() || !sealingAvailable()) return false;
   const mine = await localPublicKey();
   if (!mine) return false;
   const published = await keyOf(conn.address);
   if (published && published.length === mine.length && published.every((b, i) => b === mine[i])) return true;
 
-  const c = await write();
-  if (!c) return false;
-  const ok = await withTimeout((async () => {
-    const tx = await c.publishInviteKey(hexlify(mine));
-    await tx.wait();
-    return true;
-  })(), 60_000);
-  return ok === true;
+  return send("publishInviteKey", [hexlify(mine)]);
 }
 
 // ── invites ─────────────────────────────────────────────────────────────────
@@ -139,19 +132,13 @@ export async function ensureKeyPublished(): Promise<boolean> {
  */
 export async function sendInvite(to: string, offer: string): Promise<SendResult> {
   if (!sealingAvailable()) return "no-crypto";
-  const c = await write();
-  if (!c) return "no-wallet";
+  if (!canWrite()) return "no-wallet";
   const theirKey = await keyOf(to);
   if (!theirKey) return "no-recipient-key";
   const sealed = await seal(theirKey, await deflate(offer));
   if (!sealed) return "failed";
 
-  const ok = await withTimeout((async () => {
-    const tx = await c.invite(to, hexlify(sealed));
-    await tx.wait();
-    return true;
-  })(), 60_000);
-  return ok === true ? "sent" : "failed";
+  return (await send("invite", [to, hexlify(sealed)])) ? "sent" : "failed";
 }
 
 /** Pending invites for the connected account, newest first. Ones we cannot open are dropped. */
@@ -173,19 +160,13 @@ export async function fetchInbox(): Promise<Invitation[]> {
 /** Accept an invite by publishing the SDP answer, sealed back to whoever invited us. */
 export async function acceptInvite(from: string, answer: string): Promise<SendResult> {
   if (!sealingAvailable()) return "no-crypto";
-  const c = await write();
-  if (!c) return "no-wallet";
+  if (!canWrite()) return "no-wallet";
   const theirKey = await keyOf(from);
   if (!theirKey) return "no-recipient-key"; // they invited us, so this means they rotated keys
   const sealed = await seal(theirKey, await deflate(answer));
   if (!sealed) return "failed";
 
-  const ok = await withTimeout((async () => {
-    const tx = await c.accept(from, hexlify(sealed));
-    await tx.wait();
-    return true;
-  })(), 60_000);
-  return ok === true ? "sent" : "failed";
+  return (await send("accept", [from, hexlify(sealed)])) ? "sent" : "failed";
 }
 
 /** Has `to` answered our invite yet? Returns the raw SDP answer, or null. */
@@ -200,6 +181,5 @@ export async function pollAnswer(to: string): Promise<string | null> {
 }
 
 export async function declineInvite(from: string): Promise<void> {
-  const c = await write();
-  if (c) await withTimeout((async () => { await (await c.decline(from)).wait(); return true; })(), 60_000);
+  await send("decline", [from]);
 }

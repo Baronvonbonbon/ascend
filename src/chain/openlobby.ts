@@ -12,6 +12,7 @@
 import { Contract, encodeBytes32String, decodeBytes32String } from "ethers";
 import { connection, readOnly } from "./provider";
 import { contractAddress, withTimeout } from "./config";
+import { sendWrite } from "./write";
 import { playerName, encodeName } from "./runs";
 
 const ABI = [
@@ -38,11 +39,10 @@ async function read(): Promise<Contract | null> {
   return new Contract(lobbyAddress(), ABI as unknown as string[], conn.provider);
 }
 
-async function write(): Promise<Contract | null> {
-  const conn = connection();
-  if (!conn?.canSign || !hasLobby()) return null;
-  const signer = await (conn.provider as { getSigner(): Promise<unknown> }).getSigner();
-  return new Contract(lobbyAddress(), ABI as unknown as string[], signer as never);
+/** Writes go through sendWrite, which picks the EVM wallet or the Polkadot app's host signer. */
+async function send(fn: string, args: unknown[]): Promise<boolean> {
+  if (!hasLobby()) return false;
+  return (await sendWrite("lobby", ABI, fn, args)) !== null;
 }
 
 /** Every table still within its TTL, newest first. Empty on any failure. */
@@ -62,21 +62,11 @@ export async function fetchTables(): Promise<OpenTable[]> {
 
 /** Announce a table under the name the player chose in Options. Re-opening refreshes it. */
 export async function openTable(): Promise<boolean> {
-  const c = await write();
-  if (!c) return false;
-  const ok = await withTimeout((async () => {
-    const tx = await c.open(encodeName(playerName()));
-    await tx.wait();
-    return true;
-  })(), 60_000);
-  return ok === true;
+  return send("open", [encodeName(playerName())]);
 }
 
 export async function closeTable(): Promise<boolean> {
-  const c = await write();
-  if (!c) return false;
-  const ok = await withTimeout((async () => { await (await c.close()).wait(); return true; })(), 60_000);
-  return ok === true;
+  return send("close", []);
 }
 
 /** Do we currently have a table up? Drives Open/Close in the UI. */

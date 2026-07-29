@@ -5,9 +5,10 @@
 
 import { encodeBytes32String, decodeBytes32String, keccak256, toUtf8Bytes } from "ethers";
 import type { RunEntry } from "../hall";
-import { connection, readOnly } from "./provider";
-import { runsContract } from "./contracts";
+import { readOnly } from "./provider";
+import { runsContract, RUNS_ABI } from "./contracts";
 import { hasContracts, withTimeout, LS } from "./config";
+import { sendWrite, canWrite } from "./write";
 
 /** A run as the chain holds it — a superset of the local `RunEntry`. */
 export interface ChainRun extends RunEntry {
@@ -94,22 +95,15 @@ export interface RunSubmission {
  * game-over screen behind a chain round trip costs the player their evening.
  */
 export async function submitRun(r: RunSubmission): Promise<string | null> {
-  const conn = connection();
-  if (!conn?.canSign || !hasContracts()) return null;
-  return withTimeout((async () => {
-    const signer = await (conn.provider as { getSigner(): Promise<unknown> }).getSigner();
-    const c = runsContract(signer as never);
-    if (!c) return null;
-    const tx = await c.submitRun(
-      encodeName(playerName()),
-      BigInt(Math.max(0, Math.floor(r.seed))),
-      r.inputLog ? keccak256(toUtf8Bytes(r.inputLog)) : ZERO32,
-      Math.max(0, Math.floor(r.turns)),
-      Math.max(0, Math.floor(r.depth)),
-      Math.max(0, Math.floor(r.maxDepth)),
-      r.ascended,
-      r.bonesCid || ZERO32,
-    );
-    return String(tx.hash);
-  })(), 30_000); // a signature prompt is a human in the loop — give them time
+  if (!canWrite() || !hasContracts()) return null;
+  return sendWrite("runs", RUNS_ABI, "submitRun", [
+    encodeName(playerName()),
+    BigInt(Math.max(0, Math.floor(r.seed))),
+    r.inputLog ? keccak256(toUtf8Bytes(r.inputLog)) : ZERO32,
+    Math.max(0, Math.floor(r.turns)),
+    Math.max(0, Math.floor(r.depth)),
+    Math.max(0, Math.floor(r.maxDepth)),
+    r.ascended,
+    r.bonesCid || ZERO32,
+  ]);
 }

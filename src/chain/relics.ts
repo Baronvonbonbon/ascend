@@ -6,8 +6,9 @@
 import { encodeBytes32String } from "ethers";
 import type { Item } from "../inventory";
 import { connection } from "./provider";
-import { relicsContract } from "./contracts";
+import { relicsContract, RELICS_ABI } from "./contracts";
 import { hasContracts, withTimeout } from "./config";
+import { sendWrite, canWrite } from "./write";
 
 const ZERO32 = "0x" + "00".repeat(32);
 const BUC = { cursed: 0, uncursed: 1, blessed: 2 } as const;
@@ -21,7 +22,7 @@ function b32(s: string): string {
 }
 
 export function canForge(): boolean {
-  return !!connection()?.canSign && hasContracts();
+  return canWrite() && hasContracts();
 }
 
 /**
@@ -29,22 +30,15 @@ export function canForge(): boolean {
  * no contract, or the player declined the signature.
  */
 export async function forge(item: Item, depth: number, runHash?: string): Promise<string | null> {
-  const conn = connection();
-  if (!conn?.canSign || !hasContracts()) return null;
-  return withTimeout((async () => {
-    const signer = await (conn.provider as { getSigner(): Promise<unknown> }).getSigner();
-    const c = relicsContract(signer as never);
-    if (!c) return null;
-    const tx = await c.forge(
-      b32(item.type.fname ?? item.type.name),
-      b32(item.type.ch),
-      Math.max(-128, Math.min(127, Math.round(item.enchant ?? 0))),
-      BUC[item.buc ?? "uncursed"] ?? 1,
-      Math.max(0, Math.min(65535, Math.round(depth))),
-      runHash || ZERO32,
-    );
-    return String(tx.hash);
-  })(), 30_000);
+  if (!canWrite() || !hasContracts()) return null;
+  return sendWrite("relics", RELICS_ABI, "forge", [
+    b32(item.type.fname ?? item.type.name),
+    b32(item.type.ch),
+    Math.max(-128, Math.min(127, Math.round(item.enchant ?? 0))),
+    BUC[item.buc ?? "uncursed"] ?? 1,
+    Math.max(0, Math.min(65535, Math.round(depth))),
+    runHash || ZERO32,
+  ]);
 }
 
 /** Token ids the connected player owns. Empty when there is no wallet — never throws. */

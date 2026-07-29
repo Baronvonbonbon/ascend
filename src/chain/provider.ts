@@ -28,18 +28,29 @@ export function connection(): Connection | null { return current; }
 const injected = (): Eip1193Provider | null =>
   (globalThis as { ethereum?: Eip1193Provider }).ethereum ?? null;
 
-/** Is the page running inside the Polkadot host app? Cheap synchronous sniff, no import cost. */
+/**
+ * Is the page running inside the Polkadot host app?
+ *
+ * This used to sniff `window.__POLKADOT_HOST__` and the referrer. Neither is real: the app sets no
+ * such global, and the referrer check was a guess. The authoritative answer comes from the host SDK
+ * itself, which is already in the bundle for the statement store — but it is behind a dynamic
+ * import, so this stays a cheap heuristic for ordering `available()` and the real check happens in
+ * ./host.ts before anything is attempted.
+ */
 export function inHostApp(): boolean {
-  const g = globalThis as { __POLKADOT_HOST__?: unknown };
-  if (g.__POLKADOT_HOST__) return true;
-  try { return window.self !== window.top && /dev-dot\.li|polkadot/i.test(document.referrer); }
-  catch { return false; } // cross-origin referrer check threw — assume not hosted
+  try { return window.self !== window.top; } catch { return true; } // cross-origin frame — assume embedded
 }
 
-/** Which strategies could plausibly work right now, best first. */
+/**
+ * Which strategies could plausibly work right now, best first.
+ *
+ * `host` is always first and never gated on a synchronous guess. Whether the app embeds us in an
+ * iframe or a native web view is not something the page can reliably tell, and getting it wrong is
+ * what stranded the app on the read-only RPC. `connectHostApp` asks the host SDK and returns null in
+ * a plain browser, so the only cost of trying is one dynamic import on an explicit Connect.
+ */
 export function available(): ProviderKind[] {
-  const out: ProviderKind[] = [];
-  if (inHostApp()) out.push("host");
+  const out: ProviderKind[] = ["host"];
   if (injected()) out.push("injected");
   out.push("pine", "rpc");
   return out;
@@ -71,16 +82,16 @@ async function connectInjected(): Promise<Connection | null> {
   return { kind: "injected", provider, address: accounts[0], canSign: true };
 }
 
-async function connectHost(): Promise<Connection | null> {
-  // The Polkadot host exposes an EIP-1193 surface to embedded apps; when it does, it behaves
-  // exactly like an injected wallet, so we reuse that path rather than pulling in the whole SDK.
-  const g = globalThis as { __POLKADOT_HOST__?: { ethereum?: Eip1193Provider } };
-  const eth = g.__POLKADOT_HOST__?.ethereum ?? injected();
-  if (!eth) return null;
-  const accounts = (await eth.request({ method: "eth_requestAccounts" })) as string[];
-  if (!accounts?.length) return null;
-  const provider = new BrowserProvider(eth, PASEO.chainId);
-  return { kind: "host", provider, address: accounts[0], canSign: true };
+/**
+ * The Polkadot app. Signing goes through the host SDK (see ./host.ts) rather than an EVM provider,
+ * because the app has none — but reads still go over the hosted RPC, so the Connection we hand back
+ * carries the ordinary read provider and an address that can sign through the host link.
+ */
+async function connectHostApp(onStep?: (s: string) => void): Promise<Connection | null> {
+  const { connectHost } = await import("./host");
+  const link = await connectHost(onStep);
+  if (!link) return null;
+  return { kind: "host", provider: connectRpc().provider, address: link.address, canSign: true };
 }
 
 /** A light client in the page. Slow to start (10–60s sync) but beholden to no RPC operator. */
@@ -110,7 +121,7 @@ export async function connect(kind?: ProviderKind, onStep?: (s: string) => void)
   const order = kind ? [kind] : available();
   for (const k of order) {
     try {
-      const c = k === "host" ? await connectHost()
+      const c = k === "host" ? await connectHostApp(onStep)
         : k === "injected" ? await connectInjected()
         : k === "pine" ? await connectPine(onStep)
         : connectRpc();
@@ -140,6 +151,7 @@ export async function disconnect(): Promise<void> {
   current = null;
   try { localStorage.removeItem(LS.autoConnect); } catch { /* */ }
   if (pine) { await pine.disconnect().catch(() => { /* */ }); pine = null; }
+  try { const { clearHostLink } = await import("./host"); clearHostLink(); } catch { /* never connected */ }
 }
 
 /** A read-only connection for leaderboard/bones when the player has not connected a wallet. */
