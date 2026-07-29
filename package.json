@@ -25,10 +25,14 @@
   },
   "devDependencies": {
     "@parity/resolc": "^1.4.0",
+    "@polkadot-community-foundation/polkadot-app-deploy": "^0.13.1",
     "solc": "^0.8.28",
     "typescript": "^5.6.3",
     "vite": "^5.4.10",
     "vite-plugin-pwa": "^1.3.0",
     "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "@polkadot-api/json-rpc-provider": "^0.2.0"
   }
 }

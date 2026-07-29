@@ -27,9 +27,9 @@ export const PASEO = {
 export const CONTRACTS = {
   // Deployed to Paseo Asset Hub. Redeploying changes these; the localStorage overrides below
   // exist so that does not force a rebuild.
-  runs:    "0xB222B8a4fb0B91e16E323ba80b2dB184eda9eF2C", // AscendRuns    — leaderboard + bones ring
-  relics:  "0xB20D49AEb55276BE6acF2D1BD6b77dE84B220A79", // AscendRelics  — ERC-721 relics from the forge
-  invites: "0x9EF9A4676A8B8Ad4B39EA052031C7ffa6031eeD6", // AscendInvites — co-op rendezvous
+  runs:    "0x28ED6F4bC53575DeABB7b1E457c46DFd94507648", // AscendRuns    — leaderboard + bones ring
+  relics:  "0x67EEbcE6C8CA3eb2b9b50C152277a0D83A39e2Aa", // AscendRelics  — ERC-721 relics from the forge
+  invites: "0x35c7D2bC9eB1180a0e0486ed913308389c4d9C5e", // AscendInvites — co-op rendezvous
 };
 
 export type ContractName = keyof typeof CONTRACTS;

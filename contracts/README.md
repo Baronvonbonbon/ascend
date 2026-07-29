@@ -75,17 +75,18 @@ Relics are a glyph, a name and a few numbers, so this is cheap and it is permane
 
 | Contract | Address |
 |---|---|
-| `AscendRuns` | `0xB222B8a4fb0B91e16E323ba80b2dB184eda9eF2C` |
-| `AscendRelics` | `0xB20D49AEb55276BE6acF2D1BD6b77dE84B220A79` |
-| `AscendInvites` | `0x9EF9A4676A8B8Ad4B39EA052031C7ffa6031eeD6` |
+| `AscendRuns` | `0x28ED6F4bC53575DeABB7b1E457c46DFd94507648` |
+| `AscendRelics` | `0x67EEbcE6C8CA3eb2b9b50C152277a0D83A39e2Aa` |
+| `AscendInvites` | `0x35c7D2bC9eB1180a0e0486ed913308389c4d9C5e` |
 
-Wired into `src/chain/config.ts`. All three were exercised after deployment — a run submitted and
-read back off the leaderboard, a relic forged and its on-chain `tokenURI` decoded, and an invite
-key published and read back. Gas is negligible (13k–33k per write).
+Wired into `src/chain/config.ts`. **State is empty** — no test entries: `totalRuns` 0,
+`leaderboard` empty, `totalSupply` 0. Verified read-only after deployment, along with the ERC-721
+interface IDs and every bound (`BOARD_MAX` 32, invite `TTL` 3600s, `MAX_BLOB` 8192, `MAX_PENDING` 8).
 
-> The leaderboard holds one smoke-test entry — *"the Verifier"*, ascended at depth 48 — and relic
-> #1 is the matching test mint. Harmless, and proof the path works end to end; redeploy if you
-> want a clean slate.
+An earlier deployment was exercised with real writes to prove the full path — a run submitted and
+read back off the leaderboard, a relic forged and its on-chain `tokenURI` decoded to correct JSON
+and SVG, an invite key published and read back. Gas is negligible, 13k–33k per write. Those
+contracts were then discarded so the live ones start clean.
 
 ## Build
 
