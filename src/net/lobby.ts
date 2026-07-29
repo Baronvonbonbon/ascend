@@ -89,7 +89,11 @@ export function initLobby(game: Game): void {
   void initChainInvites(game, connected, say);
 }
 
-/** Wire the invite pane, if the player has coffers connected and the invite rune is deployed. */
+/**
+ * Wire the invite pane to whichever addressed transport is available — the statement store inside
+ * the Polkadot app, the invite contract elsewhere. The paste panes above stay on screen regardless,
+ * because neither transport reaches a player with no wallet at all.
+ */
 async function initChainInvites(
   game: Game,
   connected: (p: Peer, role: "host" | "guest", m: CoopMode) => void,
@@ -98,65 +102,72 @@ async function initChainInvites(
   const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T | null;
   const pane = $("lobby-chain");
   const list = $("lobby-invites");
+  const note = $("lobby-chain-note");
   const to = $<HTMLInputElement>("lobby-invite-to");
   const send = $<HTMLButtonElement>("lobby-invite-send");
   if (!pane || !list) return;
 
+  const { pickSignal } = await import("./signal");
   const chain = await import("../chain");
 
-  // Publishing our sealing key is what lets anyone invite us. It costs one transaction, once,
-  // and is a no-op afterwards — see src/chain/crypto.ts for why invites are sealed at all.
-  let keyReady = false;
-  const show = async () => {
-    const on = await chain.invitesReady();
-    pane.hidden = !on;
-    if (on && !keyReady) {
-      keyReady = await chain.publishInviteKey();
-      if (!keyReady) say("Could not publish your invite key — others will not be able to invite you yet.");
-    }
+  let signal: Awaited<ReturnType<typeof pickSignal>> = null;
+  let timer: number | undefined;
+
+  const describe = () => {
+    if (!note || !signal) return;
+    note.textContent = signal.mailbox
+      ? "🔐 Sealed to the recipient — the chain stores only ciphertext. An invitation waits about an hour, so they need not be online yet. Your address and the fact you invited someone are public."
+      : "🔐 Sent over the People chain statement store, exactly as the Polkadot app signals its own calls. Statements never enter block storage and expire in seconds, so nothing is recorded — but your partner must have this lobby open right now.";
   };
-  chain.onChainStatus(() => { void show(); });
-  await show();
+
+  const refresh = async () => {
+    if (!signal || pane.hidden) return;
+    render(await signal.inbox());
+  };
+
+  const setup = async () => {
+    signal?.stop();
+    signal = await pickSignal();
+    pane.hidden = !signal;
+    if (!signal) return;
+    describe();
+    void refresh();
+    if (timer) clearInterval(timer);
+    // The statement transport is push-driven and keeps its own list; polling just repaints it.
+    timer = window.setInterval(() => void refresh(), signal.mailbox ? 15_000 : 2_000);
+  };
+  chain.onChainStatus(() => { void setup(); });
+  await setup();
 
   // Every refusal has a different fix, so never collapse them into "something went wrong".
   const explain = (r: string, who: string) => ({
     "no-wallet": "Connect your coffers first (the ⚙ panel).",
     "no-recipient-key": `${who} has not opened Ascend with coffers connected yet, so there is no key to seal the invitation to. Ask them to do that once — or use the offer/answer codes below instead.`,
     "no-crypto": "This browser cannot seal the invitation, so it will not be sent. Use the offer/answer codes below.",
+    "offline": `${who} does not have the lobby open. This rail only reaches someone who is here right now — use the codes below instead.`,
     "failed": "The invitation was not sent.",
   } as Record<string, string>)[r] ?? "The invitation was not sent.";
 
-  // ── outgoing: create an offer, publish it, then watch for their answer ──
+  // ── outgoing ──
   send?.addEventListener("click", async () => {
     const addr = await chain.normalizeChainAddress(to?.value ?? "");
     if (!addr) { say("That is not an address."); return; }
+    if (!signal) { say("No invite rail is available."); return; }
     send.disabled = true;
     say("Sealing an invitation…");
     try {
-      const { peer, code, accept } = await hostOffer();
-      const res = await chain.sendCoopInvite(addr, code);
+      const res = await signal.invite(addr, (peer) => connected(peer, "host", "coop-ff"));
       if (res !== "sent") { say(explain(res, `${addr.slice(0, 6)}…${addr.slice(-4)}`)); send.disabled = false; return; }
-      say("Invitation sent — waiting for them to accept…");
-      peer.onState((open) => { if (open) connected(peer, "host", "coop-ff"); });
-      // Poll for the answer. There is no push channel here, and a light client only serves
-      // `latest`, so a slow poll is the honest mechanism — it stops the moment the link opens.
-      const started = Date.now();
-      const tick = async () => {
-        if (peer.isOpen()) return;
-        if (Date.now() - started > 10 * 60_000) { say("The invitation went unanswered."); send.disabled = false; return; }
-        const answer = await chain.pollCoopAnswer(addr);
-        if (answer) { say("Accepted — linking…"); try { await accept(answer); } catch { say("Their answer did not parse."); } return; }
-        setTimeout(() => void tick(), 6000);
-      };
-      setTimeout(() => void tick(), 6000);
+      say(signal.mailbox ? "Invitation sent — waiting for them to accept…" : "Ringing — waiting for them to accept…");
     } catch (e) {
       say(`Could not send: ${e instanceof Error ? e.message : "?"}`);
       send.disabled = false;
     }
   });
 
-  // ── incoming: show pending invites, accept with one click ──
-  const render = (invites: { from: string; at: number; offer: string }[]) => {
+  // ── incoming ──
+  function render(invites: { from: string; at: number; offer: string }[]) {
+    if (!list) return;
     list.textContent = "";
     for (const inv of invites) {
       const row = document.createElement("div");
@@ -172,9 +183,7 @@ async function initChainInvites(
         ok.disabled = no.disabled = true;
         say("Accepting…");
         try {
-          const { peer, code } = await guestAnswer(inv.offer);
-          peer.onState((open) => { if (open) connected(peer, "guest", "coop-ff"); });
-          const res = await chain.acceptCoopInvite(inv.from, code);
+          const res = await signal!.accept(inv, (peer) => connected(peer, "guest", "coop-ff"));
           if (res === "sent") say("Accepted — linking…");
           else { say(explain(res, "They")); ok.disabled = no.disabled = false; }
         } catch {
@@ -182,14 +191,11 @@ async function initChainInvites(
           ok.disabled = no.disabled = false;
         }
       });
-      no.addEventListener("click", async () => { no.disabled = true; await chain.declineCoopInvite(inv.from); void refresh(); });
+      no.addEventListener("click", async () => { no.disabled = true; await signal!.decline(inv); void refresh(); });
       row.append(who, ok, no);
       list.appendChild(row);
     }
-  };
+  }
 
-  const refresh = async () => { if (!pane.hidden) render(await chain.coopInbox()); };
-  void refresh();
-  setInterval(() => void refresh(), 15_000); // the lobby is idle; a slow poll is plenty
   void game; // the game only enters the picture once a peer link is open
 }

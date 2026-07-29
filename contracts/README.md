@@ -9,12 +9,30 @@ every chain feature silently switches off; the game plays exactly as it does off
 | `AscendRelics.sol` | ERC-721 relics struck at the in-game forge (`F`), with on-chain `data:` metadata |
 | `AscendInvites.sol` | Co-op rendezvous — replaces copy/pasting WebRTC handshake codes with a 1-click invite |
 
-### Why there is an invite contract
+### Why there is an invite contract *and* a statement-store rail
 
-The intent was to use the Polkadot app's contact messaging for co-op invites, but that messaging
-API **is not documented for third-party apps**. `AscendInvites` does the same job with primitives
-that are documented: address-addressed storage anyone can read. You invite an address, it appears
-in their inbox, they accept — one click each.
+The Polkadot app signals its own calls over the **People chain statement store** — *"the call
+offer, answer, and connection candidates as encrypted chat messages over the statement-store
+channel."* That is the right rail, and `src/net/signal-statement.ts` uses it. It is free, it is
+push-delivered, and statements *"never enter block storage"* — so signalling leaves no permanent
+record at all, which is strictly better than encrypting something that lives forever.
+
+But it cannot be the only rail. Publishing a statement requires a statement allowance, and
+claiming one requires a personhood alias:
+
+> `resources.setStatementStoreAccount` — *"The origin must be `Origin::StmtStoreAlias`, produced by
+> the `AsResources` (`RegisterStatementStoreAllowance(..)`) transaction extension **after proof
+> validation**."*
+
+Inside the Polkadot app the host has already onboarded the player. In a plain browser nobody has,
+and `peopleLite.attest` needs an authority with attestation allowance — you cannot self-onboard.
+(This is live and in use: 131 statement allowances and 146 lite people on Paseo People.)
+
+So `AscendInvites` remains the rail for everyone outside the app. It is also the only **mailbox**:
+statements default to a 30-second TTL with 1024 bytes live per account, so they only reach someone
+who has the lobby open *right now*, whereas a contract invite waits an hour for a player who is
+offline. `src/net/signal.ts` picks whichever is available; copy/paste codes remain for players with
+no wallet at all.
 
 Only the WebRTC handshake (a deflate-compressed SDP blob, a couple of KB) goes through it. Moves,
 world state and chat all stay on the direct peer link, exactly as before.
