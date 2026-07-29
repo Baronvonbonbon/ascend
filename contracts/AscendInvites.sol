@@ -17,16 +17,29 @@ pragma solidity ^0.8.24;
  * game actually does (moves, chat, world state) stays on the direct peer link, exactly as before.
  * Nothing here touches gameplay.
  *
- * PRIVACY. SDP is public. It carries your candidate IP addresses, which is already true of the
- * copy/paste flow, but there it was visible only to whoever you handed the code to; here it is
- * visible to anyone reading the chain. That is a real trade-off and the UI says so plainly.
- * Invites expire, and either party can clear one.
+ * PRIVACY — READ THIS BEFORE CHANGING ANYTHING HERE. An SDP offer contains ICE candidates, which
+ * include your PUBLIC IP address. An invite is a transaction signed by your account, so a
+ * plaintext offer would put "this address had this IP at this time" into block history
+ * permanently — readable by anyone, and impossible to withdraw, because clearing storage does not
+ * clear calldata or events. That is a deanonymisation vector, and it is strictly worse than the
+ * copy/paste flow it replaces, where your IP went only to the person you handed the code to.
+ *
+ * So payloads are ENCRYPTED end-to-end. Each player publishes a P-256 ECDH public key once
+ * (`publishInviteKey`); senders seal the SDP to that key with an ephemeral keypair, and only the
+ * recipient can open it. The chain sees ciphertext. The client REFUSES to send an invite to an
+ * address with no published key rather than quietly falling back to plaintext — a silent
+ * downgrade would defeat the entire point.
+ *
+ * This contract treats payloads as opaque bytes and does not care how they are encrypted; the
+ * scheme lives in src/chain/crypto.ts.
+ *
+ * Invites still expire, and either party can clear one.
  */
 contract AscendInvites {
     struct Invite {
         address from;
         uint40  at;
-        bytes   offer;   // compressed SDP offer
+        bytes   offer;   // SEALED (encrypted) compressed SDP offer — never plaintext
     }
 
     /** How long an unanswered invite is worth showing. Handshakes are useless once stale. */
@@ -36,17 +49,44 @@ contract AscendInvites {
     /** Bounded so `inbox()` is always one cheap `eth_call`, never an unbounded scan. */
     uint8  public constant MAX_PENDING = 8;
 
+    /** An uncompressed P-256 public point is 65 bytes. */
+    uint8 public constant MAX_KEY = 65;
+
     mapping(address => Invite[]) private _inbox;          // recipient => pending invites
-    mapping(bytes32 => bytes)    private _answers;        // key(from,to) => compressed SDP answer
+    mapping(bytes32 => bytes)    private _answers;        // key(from,to) => sealed SDP answer
+
+    /**
+     * Each player's published ECDH public key — what everyone else seals invites to. Public, and
+     * meant to be: a public key is not a secret. Republishing (a new device, a cleared browser)
+     * simply supersedes; in-flight invites sealed to the old key become undecryptable, which is
+     * harmless because invites expire within the hour anyway.
+     */
+    mapping(address => bytes) public inviteKey;
 
     event Invited(address indexed to, address indexed from);
     event Accepted(address indexed from, address indexed to);
+    event InviteKeyPublished(address indexed who);
+
+    /** Announce the key others should seal their invites to. Costs one transaction, once. */
+    function publishInviteKey(bytes calldata key) external {
+        require(key.length > 0 && key.length <= MAX_KEY, "bad key");
+        inviteKey[msg.sender] = key;
+        emit InviteKeyPublished(msg.sender);
+    }
+
+    /** Look up several keys at once, so a client can check a whole contact list in one call. */
+    function inviteKeysOf(address[] calldata who) external view returns (bytes[] memory out) {
+        out = new bytes[](who.length);
+        for (uint256 i = 0; i < who.length; i++) out[i] = inviteKey[who[i]];
+    }
 
     function _key(address from, address to) private pure returns (bytes32) {
         return keccak256(abi.encodePacked(from, to));
     }
 
-    /** Offer to play. Replaces any previous invite from you, so a retry never stacks up. */
+    /** Offer to play. `offer` must be sealed to the recipient's published key — see the privacy
+     *  note above; the contract cannot enforce that, so the client is what refuses to downgrade.
+     *  Replaces any previous invite from you, so a retry never stacks up. */
     function invite(address to, bytes calldata offer) external {
         require(to != address(0) && to != msg.sender, "bad recipient");
         require(offer.length > 0 && offer.length <= MAX_BLOB, "bad offer");

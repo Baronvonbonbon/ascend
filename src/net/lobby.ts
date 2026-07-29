@@ -103,9 +103,28 @@ async function initChainInvites(
   if (!pane || !list) return;
 
   const chain = await import("../chain");
-  const show = async () => { pane.hidden = !(await chain.invitesReady()); };
+
+  // Publishing our sealing key is what lets anyone invite us. It costs one transaction, once,
+  // and is a no-op afterwards — see src/chain/crypto.ts for why invites are sealed at all.
+  let keyReady = false;
+  const show = async () => {
+    const on = await chain.invitesReady();
+    pane.hidden = !on;
+    if (on && !keyReady) {
+      keyReady = await chain.publishInviteKey();
+      if (!keyReady) say("Could not publish your invite key — others will not be able to invite you yet.");
+    }
+  };
   chain.onChainStatus(() => { void show(); });
   await show();
+
+  // Every refusal has a different fix, so never collapse them into "something went wrong".
+  const explain = (r: string, who: string) => ({
+    "no-wallet": "Connect your coffers first (the ⚙ panel).",
+    "no-recipient-key": `${who} has not opened Ascend with coffers connected yet, so there is no key to seal the invitation to. Ask them to do that once — or use the offer/answer codes below instead.`,
+    "no-crypto": "This browser cannot seal the invitation, so it will not be sent. Use the offer/answer codes below.",
+    "failed": "The invitation was not sent.",
+  } as Record<string, string>)[r] ?? "The invitation was not sent.";
 
   // ── outgoing: create an offer, publish it, then watch for their answer ──
   send?.addEventListener("click", async () => {
@@ -115,7 +134,8 @@ async function initChainInvites(
     say("Sealing an invitation…");
     try {
       const { peer, code, accept } = await hostOffer();
-      if (!await chain.sendCoopInvite(addr, code)) { say("The invitation was not sent."); send.disabled = false; return; }
+      const res = await chain.sendCoopInvite(addr, code);
+      if (res !== "sent") { say(explain(res, `${addr.slice(0, 6)}…${addr.slice(-4)}`)); send.disabled = false; return; }
       say("Invitation sent — waiting for them to accept…");
       peer.onState((open) => { if (open) connected(peer, "host", "coop-ff"); });
       // Poll for the answer. There is no push channel here, and a light client only serves
@@ -154,8 +174,9 @@ async function initChainInvites(
         try {
           const { peer, code } = await guestAnswer(inv.offer);
           peer.onState((open) => { if (open) connected(peer, "guest", "coop-ff"); });
-          if (await chain.acceptCoopInvite(inv.from, code)) say("Accepted — linking…");
-          else { say("Could not publish your answer."); ok.disabled = no.disabled = false; }
+          const res = await chain.acceptCoopInvite(inv.from, code);
+          if (res === "sent") say("Accepted — linking…");
+          else { say(explain(res, "They")); ok.disabled = no.disabled = false; }
         } catch {
           say("That invitation did not parse.");
           ok.disabled = no.disabled = false;

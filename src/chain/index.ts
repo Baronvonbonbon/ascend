@@ -109,22 +109,27 @@ export async function canForgeRelic(): Promise<boolean> {
 // ── co-op invites ───────────────────────────────────────────────────────────
 // Only the WebRTC handshake goes through the chain; the game itself stays on the direct peer link.
 
-export type { Invitation } from "./invites";
+export type { Invitation, SendResult } from "./invites";
 
 export async function invitesReady(): Promise<boolean> {
   try { const { hasInvites } = await import("./invites"); return hasInvites() && status.canSign; } catch { return false; }
 }
 
-export async function sendCoopInvite(to: string, offer: string): Promise<boolean> {
-  try { const m = await import("./invites"); return await m.sendInvite(to, offer); } catch { return false; }
+export async function sendCoopInvite(to: string, offer: string): Promise<import("./invites").SendResult> {
+  try { const m = await import("./invites"); return await m.sendInvite(to, offer); } catch { return "failed"; }
+}
+
+/** Publish this device's sealing key so others can invite us. One transaction, once. */
+export async function publishInviteKey(): Promise<boolean> {
+  try { const m = await import("./invites"); return await m.ensureKeyPublished(); } catch { return false; }
 }
 
 export async function coopInbox(): Promise<import("./invites").Invitation[]> {
   try { const m = await import("./invites"); return await m.fetchInbox(); } catch { return []; }
 }
 
-export async function acceptCoopInvite(from: string, answer: string): Promise<boolean> {
-  try { const m = await import("./invites"); return await m.acceptInvite(from, answer); } catch { return false; }
+export async function acceptCoopInvite(from: string, answer: string): Promise<import("./invites").SendResult> {
+  try { const m = await import("./invites"); return await m.acceptInvite(from, answer); } catch { return "failed"; }
 }
 
 export async function pollCoopAnswer(to: string): Promise<string | null> {

@@ -17,10 +17,29 @@ that are documented: address-addressed storage anyone can read. You invite an ad
 in their inbox, they accept — one click each.
 
 Only the WebRTC handshake (a deflate-compressed SDP blob, a couple of KB) goes through it. Moves,
-world state and chat all stay on the direct peer link, exactly as before. **SDP is public**, and it
-contains candidate IP addresses — true of the copy/paste flow too, but there it was visible only to
-whoever you handed the code to. The lobby says so plainly. Invites expire after an hour and either
-party can clear one.
+world state and chat all stay on the direct peer link, exactly as before.
+
+**Payloads are sealed end-to-end**, and this is not optional. An SDP offer contains ICE candidates,
+which include your **public IP**, and an invite is a transaction signed by your account. A plaintext
+payload would therefore write *"this address had this IP at this time"* into block history
+permanently — readable by anyone, and impossible to withdraw, since clearing contract storage does
+not clear calldata or events. That is a deanonymisation vector and strictly worse than the
+copy/paste flow it replaces, where your IP went only to the person you handed the code to.
+
+So each player publishes a P-256 ECDH public key once (`publishInviteKey`), and senders seal the
+SDP to it — ECIES over WebCrypto, HKDF-SHA256 into AES-256-GCM, scheme in `src/chain/crypto.ts`.
+The chain sees ciphertext. **The client refuses to send to an address with no published key** rather
+than silently falling back to plaintext; a quiet downgrade would defeat the entire point. The
+contract cannot enforce that — it treats payloads as opaque bytes — so the refusal lives in
+`sendInvite()`, and `src/chain/crypto.test.ts` pins the properties it depends on.
+
+What is still public: your address, the recipient's address, and the fact and timing of an invite.
+Only the handshake contents are hidden.
+
+The long-term key is generated locally and is **not** derived from your wallet key, so compromising
+one does not expose the other. It lives in `localStorage`; losing it means republishing (one cheap
+transaction), and any in-flight invite becomes undecryptable — harmless, since invites expire after
+an hour and either party can clear one.
 
 ## Two constraints that shaped these
 

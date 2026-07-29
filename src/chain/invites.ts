@@ -1,11 +1,14 @@
 // The co-op rendezvous: send an invite to an address, they accept, the peer link forms.
 //
-// Only the WebRTC handshake passes through the chain. Once the data channel is open, moves and
-// chat go directly browser-to-browser exactly as they always have — see src/net/peer.ts.
+// Only the WebRTC handshake passes through the chain, and it is SEALED end-to-end (see crypto.ts
+// for why — an SDP offer carries your public IP, and an invite is a signed transaction, so a
+// plaintext payload would tie your address to your IP in block history forever). Once the data
+// channel is open, moves and chat go directly browser-to-browser exactly as they always have.
 
 import { Contract, getAddress, hexlify, toUtf8Bytes, toUtf8String, getBytes } from "ethers";
 import { connection } from "./provider";
 import { withTimeout, contractAddress } from "./config";
+import { seal, open as unseal, localPublicKey, sealingAvailable } from "./crypto";
 
 const ABI = [
   "function invite(address to, bytes offer)",
@@ -14,21 +17,24 @@ const ABI = [
   "function withdraw(address to)",
   "function inbox(address who) view returns (tuple(address from, uint40 at, bytes offer)[])",
   "function answerFor(address from, address to) view returns (bytes)",
+  "function inviteKey(address who) view returns (bytes)",
+  "function publishInviteKey(bytes key)",
 ] as const;
 
 export interface Invitation { from: string; at: number; offer: string }
+
+/** Why an invite could not be sent — the lobby needs to tell these apart. */
+export type SendResult = "sent" | "no-wallet" | "no-recipient-key" | "no-crypto" | "failed";
 
 export function invitesAddress(): string { return contractAddress("invites"); }
 
 export function hasInvites(): boolean { return /^0x[0-9a-fA-F]{40}$/.test(invitesAddress()); }
 
 // ── SDP compression ─────────────────────────────────────────────────────────
-// A gathered SDP offer is 1.5–4 KB of highly repetitive text; deflate takes ~70% off it, which
-// matters because every byte is contract storage. CompressionStream is in every browser that can
-// run WebRTC, but fall back to raw bytes rather than fail if it is somehow missing.
+// A gathered SDP offer is 1.5–4 KB of highly repetitive text; deflate takes ~70% off before we
+// seal it, which matters because every byte is contract storage.
 
-/** ethers hands back Uint8Array<ArrayBufferLike>; the streams API wants an ArrayBuffer-backed
- *  view. Copying is cheap at these sizes and avoids a cast that could hide a real mismatch. */
+/** Copy into an ArrayBuffer-backed view — the streams and crypto APIs will not take any other. */
 function plain(a: Uint8Array): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(new ArrayBuffer(a.byteLength));
   out.set(a);
@@ -49,16 +55,15 @@ async function through(s: ReadableStream<Uint8Array>): Promise<Uint8Array> {
   return out;
 }
 
-async function deflate(text: string): Promise<string> {
+async function deflate(text: string): Promise<Uint8Array> {
   const raw = toUtf8Bytes(text);
-  if (typeof CompressionStream === "undefined") return hexlify(raw);
+  if (typeof CompressionStream === "undefined") return raw;
   const cs = new CompressionStream("deflate-raw");
   const w = cs.writable.getWriter(); void w.write(plain(raw)); void w.close();
-  return hexlify(await through(cs.readable));
+  return through(cs.readable);
 }
 
-async function inflate(hex: string): Promise<string> {
-  const raw = getBytes(hex);
+async function inflate(raw: Uint8Array): Promise<string> {
   if (typeof DecompressionStream === "undefined") return toUtf8String(raw);
   try {
     const ds = new DecompressionStream("deflate-raw");
@@ -89,19 +94,66 @@ export function normalizeAddress(a: string): string | null {
   try { return getAddress(a.trim()); } catch { return null; }
 }
 
-/** Offer to play. `offer` is the raw base64 SDP from `hostOffer()`. */
-export async function sendInvite(to: string, offer: string): Promise<boolean> {
+// ── the key registry ────────────────────────────────────────────────────────
+
+/** The key `who` has published, or null if they have never opened the game with coffers. */
+export async function keyOf(who: string): Promise<Uint8Array | null> {
+  const c = read();
+  if (!c) return null;
+  const hex = await withTimeout(c.inviteKey(who), 10_000);
+  if (!hex || hex === "0x") return null;
+  return getBytes(hex as string);
+}
+
+/**
+ * Make sure the key on chain is this device's. Costs a transaction only when it actually differs,
+ * so the steady state is one view call and nothing else.
+ */
+export async function ensureKeyPublished(): Promise<boolean> {
+  const conn = connection();
+  if (!conn?.canSign || !conn.address || !hasInvites() || !sealingAvailable()) return false;
+  const mine = await localPublicKey();
+  if (!mine) return false;
+  const published = await keyOf(conn.address);
+  if (published && published.length === mine.length && published.every((b, i) => b === mine[i])) return true;
+
   const c = await write();
   if (!c) return false;
-  const r = await withTimeout((async () => {
-    const tx = await c.invite(to, await deflate(offer));
+  const ok = await withTimeout((async () => {
+    const tx = await c.publishInviteKey(hexlify(mine));
     await tx.wait();
     return true;
   })(), 60_000);
-  return r === true;
+  return ok === true;
 }
 
-/** Pending invites addressed to the connected account, newest first. */
+// ── invites ─────────────────────────────────────────────────────────────────
+
+/**
+ * Offer to play. `offer` is the raw base64 SDP from `hostOffer()`.
+ *
+ * REFUSES rather than downgrading. With no recipient key there is nothing to seal to, and sending
+ * the SDP in the clear would publish this player's IP address permanently. The lobby turns that
+ * refusal into "ask them to open the game with coffers connected once".
+ */
+export async function sendInvite(to: string, offer: string): Promise<SendResult> {
+  if (!sealingAvailable()) return "no-crypto";
+  const c = await write();
+  if (!c) return "no-wallet";
+  const theirKey = await keyOf(to);
+  if (!theirKey) return "no-recipient-key";
+  const sealed = await seal(theirKey, await deflate(offer));
+  if (!sealed) return "failed";
+
+  const ok = await withTimeout((async () => {
+    const tx = await c.invite(to, hexlify(sealed));
+    await tx.wait();
+    return true;
+  })(), 60_000);
+  return ok === true ? "sent" : "failed";
+}
+
+/** Pending invites for the connected account, newest first. Ones we cannot open are dropped. */
 export async function fetchInbox(): Promise<Invitation[]> {
   const conn = connection();
   const c = read();
@@ -110,21 +162,29 @@ export async function fetchInbox(): Promise<Invitation[]> {
   if (!rows) return [];
   const out: Invitation[] = [];
   for (const r of rows as { from: string; at: bigint; offer: string }[]) {
-    out.push({ from: String(r.from), at: Number(r.at), offer: await inflate(r.offer) });
+    const opened = await unseal(getBytes(r.offer));
+    if (!opened) continue; // sealed to a key we no longer hold, or tampered with — never shown
+    out.push({ from: String(r.from), at: Number(r.at), offer: await inflate(opened) });
   }
   return out.sort((a, b) => b.at - a.at);
 }
 
-/** Accept an invite by publishing the SDP answer back. */
-export async function acceptInvite(from: string, answer: string): Promise<boolean> {
+/** Accept an invite by publishing the SDP answer, sealed back to whoever invited us. */
+export async function acceptInvite(from: string, answer: string): Promise<SendResult> {
+  if (!sealingAvailable()) return "no-crypto";
   const c = await write();
-  if (!c) return false;
-  const r = await withTimeout((async () => {
-    const tx = await c.accept(from, await deflate(answer));
+  if (!c) return "no-wallet";
+  const theirKey = await keyOf(from);
+  if (!theirKey) return "no-recipient-key"; // they invited us, so this means they rotated keys
+  const sealed = await seal(theirKey, await deflate(answer));
+  if (!sealed) return "failed";
+
+  const ok = await withTimeout((async () => {
+    const tx = await c.accept(from, hexlify(sealed));
     await tx.wait();
     return true;
   })(), 60_000);
-  return r === true;
+  return ok === true ? "sent" : "failed";
 }
 
 /** Has `to` answered our invite yet? Returns the raw SDP answer, or null. */
@@ -134,7 +194,8 @@ export async function pollAnswer(to: string): Promise<string | null> {
   if (!c || !conn?.address) return null;
   const hex = await withTimeout(c.answerFor(conn.address, to), 10_000);
   if (!hex || hex === "0x") return null;
-  return inflate(hex as string);
+  const opened = await unseal(getBytes(hex as string));
+  return opened ? inflate(opened) : null;
 }
 
 export async function declineInvite(from: string): Promise<void> {
