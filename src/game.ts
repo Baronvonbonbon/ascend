@@ -103,7 +103,7 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 // to false (disables all of it), or delete this flag + every block fenced with
 // a "DEBUG" comment (onKey hook, the debug methods, the downPlayer guard).
 // ═══════════════════════════════════════════════════════════════════════════
-const DEBUG = true;
+const DEBUG = false; // release: no god-mode keys, no mobile debug pad
 
 /** A single transient action-effect glyph. delay = frames before it appears; life = frames it lasts. */
 interface FxParticle { x: number; y: number; ch: string; fg: string; delay: number; life: number; }

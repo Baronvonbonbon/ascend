@@ -165,6 +165,7 @@ export async function statementSignal(): Promise<AddressedSignal | null> {
   return {
     id: "statement",
     label: "Polkadot app invite",
+    ready: Promise.resolve(true), // no key registry — the host account is already addressable
     mailbox: false, // 30-second TTL: the other player must have the lobby open right now
 
     async invite(to: string, onPeer: (p: Peer) => void): Promise<SendResult> {

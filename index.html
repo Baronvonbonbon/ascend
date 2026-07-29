@@ -100,7 +100,16 @@
  .story-line.blank { height: 9px; }
  #splash-setup { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%; max-width: 560px;
  border-top: 1px solid #24221a; padding-top: 16px; }
- .setup-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; color: var(--dim); font-size: 13px; }
+ .setup-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; color: var(--dim); font-size: 13px; width: 100%; }
+ /* The Class/Ecosystem options carry long blurbs, so the select wants to be as wide as its widest
+    option and blows past the viewport on a phone. Let it shrink and ellipsize instead; the full
+    text is still there when the native picker opens. */
+ .setup-row select { flex: 1 1 260px; min-width: 0; max-width: 100%; text-overflow: ellipsis; }
+ @media (max-width: 560px) {
+ .setup-row { flex-direction: column; align-items: stretch; gap: 4px; }
+ .setup-row > label, .setup-row > span { text-align: left; }
+ .setup-row select { flex: 1 1 auto; width: 100%; }
+ }
  .setup-field { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); }
  .setup-field select { font-family: inherit; font-size: 13px; color: var(--ink); background: #16161a; border: 1px solid #3a361f; border-radius: 4px; padding: 5px 8px; }
  .setup-lab { color: var(--dim); }
@@ -145,6 +154,8 @@
  #lobby-invite-to { background: #0e0e11; color: var(--fg); border: 1px solid #2a2a30; border-radius: 3px; padding: 3px 6px; font: inherit; min-width: 300px; flex: 1; }
  .invite { display: flex; gap: 8px; align-items: center; padding: 5px 0; border-top: 1px solid #1c1c20; }
  .invite-who { color: var(--gold); font-family: inherit; }
+ #lobby-chain-state { color: var(--gold); }
+ #lobby-chain-state.working { color: var(--dim); }
 
  /* ── touch controls (shown on touch / narrow screens) ── */
  #touch { display: none; width: 100%; max-width: 520px; flex-direction: column; align-items: center; gap: 8px; user-select: none; }
@@ -206,6 +217,7 @@
  <button id="lobby-invite-send" type="button">Send invite</button>
  </div>
  <div id="lobby-invites"></div>
+ <p class="lobby-note" id="lobby-chain-state"></p>
  <p class="lobby-note" id="lobby-chain-note"></p>
  <p class="lobby-note">Only the connection handshake travels this way. Once you are linked, the game and all chat run directly between your browsers and never touch the chain.</p>
  </div>

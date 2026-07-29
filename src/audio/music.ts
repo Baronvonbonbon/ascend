@@ -363,11 +363,11 @@ export class MusicEngine {
   private _sfxVolume = 1;
   private sfxMaster!: GainNode;
   constructor() {
-    this._enabled = localStorage.getItem("ascend.audio") === "on";
+    this._enabled = localStorage.getItem("ascend.audio") !== "off"; // music defaults ON (opt out, not in)
     this._mode = localStorage.getItem("ascend.audio.mode") || "auto";
     const v = parseFloat(localStorage.getItem("ascend.audio.vol") ?? "1");
     this._volume = isNaN(v) ? 1 : Math.max(0, Math.min(1, v));
-    this._sfxEnabled = localStorage.getItem("ascend.sfx") !== "off"; // SFX default ON (music defaults off)
+    this._sfxEnabled = localStorage.getItem("ascend.sfx") !== "off"; // SFX defaults ON too
     const sv = parseFloat(localStorage.getItem("ascend.sfx.vol") ?? "1");
     this._sfxVolume = isNaN(sv) ? 1 : Math.max(0, Math.min(1, sv));
   }

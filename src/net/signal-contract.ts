@@ -17,8 +17,13 @@ export async function contractSignal(): Promise<AddressedSignal | null> {
   const chain = await import("../chain");
   if (!(await chain.invitesReady())) return null;
 
-  // Others can only invite us once our sealing key is on chain. One transaction, once.
-  await chain.publishInviteKey();
+  // Publishing our sealing key is what lets OTHERS invite us. It costs one wallet signature, once.
+  //
+  // It is deliberately NOT awaited here. It used to be, and that hid the entire invite pane behind
+  // a signature prompt the player had never been told about — dismiss it, or simply not notice it,
+  // and the pane never appeared at all. Sending an invite does not need our own key, only the
+  // recipient's, so there is nothing to wait for.
+  const keyPublished = chain.publishInviteKey().catch(() => false);
 
   let stopped = false;
   /** Watch for the answer to an invite we sent. No push channel here, so poll — slowly. */
@@ -38,6 +43,8 @@ export async function contractSignal(): Promise<AddressedSignal | null> {
     id: "contract",
     label: "on-chain invite",
     mailbox: true,
+    /** Resolves once our own key is on chain — until then, others cannot invite us. */
+    ready: keyPublished,
 
     async invite(to: string, onPeer: (p: Peer) => void): Promise<SendResult> {
       const { peer, code, accept } = await hostOffer();

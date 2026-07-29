@@ -125,12 +125,35 @@ async function initChainInvites(
     render(await signal.inbox());
   };
 
+  // Never hide this pane without saying why. It used to vanish silently whenever anything was
+  // not ready, which made "the invite option isn't there" impossible to diagnose from the outside.
+  const state = (msg: string, working = false) => {
+    const el = $("lobby-chain-state");
+    if (el) { el.textContent = msg; el.classList.toggle("working", working); }
+  };
+
   const setup = async () => {
     signal?.stop();
+    const st = chain.chainStatus();
+    pane.hidden = false;
+
+    if (!st.connected) { state("Connect your coffers in the ⚙ panel to invite by address."); signal = null; return; }
+    if (!st.contracts) { state("No invite rune is deployed on this build — use the codes below."); signal = null; return; }
+    if (!st.canSign)   { state("This connection is read-only. Reconnect with a wallet that can sign."); signal = null; return; }
+
+    state("Preparing…", true);
     signal = await pickSignal();
-    pane.hidden = !signal;
-    if (!signal) return;
+    if (!signal) { state("Could not reach the invite rune — use the codes below."); return; }
+
     describe();
+    state("Ready — invite by address, or wait for one to arrive.");
+    // Being INVITED needs our sealing key on chain; sending does not. Report it without blocking.
+    void signal.ready?.then((ok) => {
+      state(ok
+        ? "Ready — invite by address, or wait for one to arrive."
+        : "You can send invites, but until you approve the one-off key signature, others cannot invite you.");
+    });
+
     void refresh();
     if (timer) clearInterval(timer);
     // The statement transport is push-driven and keeps its own list; polling just repaints it.
@@ -152,7 +175,7 @@ async function initChainInvites(
   send?.addEventListener("click", async () => {
     const addr = await chain.normalizeChainAddress(to?.value ?? "");
     if (!addr) { say("That is not an address."); return; }
-    if (!signal) { say("No invite rail is available."); return; }
+    if (!signal) { say("No invite rail is available — see the note above."); return; }
     send.disabled = true;
     say("Sealing an invitation…");
     try {

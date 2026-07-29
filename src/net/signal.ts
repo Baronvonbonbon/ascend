@@ -41,6 +41,12 @@ export interface AddressedSignal {
   readonly label: string;
   /** Whether an invite waits for an offline player, or needs them present right now. */
   readonly mailbox: boolean;
+  /**
+   * Resolves true once this player is reachable BY others (contract: their sealing key is on
+   * chain). Sending works before this settles; only being invited depends on it. Never awaited on
+   * a path that draws UI — that mistake once hid the whole invite pane behind a silent prompt.
+   */
+  readonly ready?: Promise<boolean>;
 
   /** Offer to play. Resolves once the invite is out; `onPeer` fires when the link forms. */
   invite(to: string, onPeer: (p: Peer) => void): Promise<SendResult>;
