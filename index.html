@@ -154,6 +154,10 @@
  #lobby-invite-to { background: #0e0e11; color: var(--fg); border: 1px solid #2a2a30; border-radius: 3px; padding: 3px 6px; font: inherit; min-width: 300px; flex: 1; }
  .invite { display: flex; gap: 8px; align-items: center; padding: 5px 0; border-top: 1px solid #1c1c20; }
  .invite-who { color: var(--gold); font-family: inherit; }
+ .table-row { display: flex; gap: 8px; align-items: center; padding: 4px 0; border-top: 1px solid #1c1c20; font-size: 12px; }
+ .table-name { color: var(--gold); flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+ .table-addr { color: var(--dim); }
+ #lobby-open-state { color: var(--dim); font-size: 11px; }
  #lobby-chain-state { color: var(--gold); }
  #lobby-chain-state.working { color: var(--dim); }
 
@@ -179,7 +183,7 @@
  #log { height: 96px; }
  }
  </style>
-   <script type="module" crossorigin src="/ascend/assets/index-TEkDUd1o.js"></script>
+   <script type="module" crossorigin src="/ascend/assets/index-CYvJjk4O.js"></script>
    <link rel="modulepreload" crossorigin href="/ascend/assets/chain-ethers-DxQ5HDMr.js">
    <link rel="modulepreload" crossorigin href="/ascend/assets/chain-lightclient-Da3RLAzu.js">
  <link rel="manifest" href="/ascend/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/ascend/registerSW.js"></script></head>
@@ -220,6 +224,11 @@
  <button id="lobby-invite-send" type="button">Send invite</button>
  </div>
  <div id="lobby-invites"></div>
+ <div class="lobby-row" id="lobby-open-row">
+ <button id="lobby-open-table" type="button">Open my table</button>
+ <span id="lobby-open-state"></span>
+ </div>
+ <div id="lobby-tables"></div>
  <p class="lobby-note" id="lobby-chain-state"></p>
  <p class="lobby-note" id="lobby-chain-note"></p>
  <p class="lobby-note">Only the connection handshake travels this way. Once you are linked, the game and all chat run directly between your browsers and never touch the chain.</p>
