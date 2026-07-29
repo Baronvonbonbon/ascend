@@ -170,7 +170,7 @@ export async function statementSignal(): Promise<AddressedSignal | null> {
     async invite(to: string, onPeer: (p: Peer) => void): Promise<SendResult> {
       try {
         const t = await hostOfferTrickle();
-        wire(to, t, onPeer);
+        wire(to, t, onPeer); // subscribe before anything is awaited — see signal-contract.ts
         await publish(to, { k: "ring", f: me, q: msgId++ });
         await sendChunked(to, "o", t.sdp);
         return "sent";

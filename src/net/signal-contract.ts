@@ -41,9 +41,12 @@ export async function contractSignal(): Promise<AddressedSignal | null> {
 
     async invite(to: string, onPeer: (p: Peer) => void): Promise<SendResult> {
       const { peer, code, accept } = await hostOffer();
+      // Subscribe BEFORE the transaction: sending an invite waits on a block, and the link can
+      // form inside that window. (peer.onState also replays the current state to late
+      // subscribers, so this is belt and braces — but the ordering is the part that is obvious.)
+      peer.onState((open) => { if (open) onPeer(peer); });
       const res = await chain.sendCoopInvite(to, code);
       if (res !== "sent") { peer.close(); return res as SendResult; }
-      peer.onState((open) => { if (open) onPeer(peer); });
       awaitAnswer(to, accept, () => peer.isOpen());
       return "sent";
     },
@@ -54,9 +57,9 @@ export async function contractSignal(): Promise<AddressedSignal | null> {
 
     async accept(inv: Invite, onPeer: (p: Peer) => void): Promise<SendResult> {
       const { peer, code } = await guestAnswer(inv.offer);
+      peer.onState((open) => { if (open) onPeer(peer); }); // before the tx — see invite() above
       const res = await chain.acceptCoopInvite(inv.from, code);
       if (res !== "sent") { peer.close(); return res as SendResult; }
-      peer.onState((open) => { if (open) onPeer(peer); });
       return "sent";
     },
 

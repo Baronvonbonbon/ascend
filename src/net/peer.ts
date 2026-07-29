@@ -43,7 +43,11 @@ function makePeer(pc: RTCPeerConnection): { peer: Peer; bind: (dc: RTCDataChanne
   const peer: Peer = {
     send: (m) => { if (chan && chan.readyState === "open") chan.send(JSON.stringify(m)); },
     onMessage: (cb) => msgCbs.push(cb),
-    onState: (cb) => stateCbs.push(cb),
+    // A late subscriber is told the current state immediately. Without this, anyone who registers
+    // after the channel has already opened never hears about it — and the open event is gone for
+    // good. That is easy to do by accident: the invite transports await a chain transaction
+    // between creating the peer and subscribing, and the link can form inside that window.
+    onState: (cb) => { stateCbs.push(cb); if (chan?.readyState === "open") cb(true); },
     isOpen: () => chan?.readyState === "open",
     close: () => { try { chan?.close(); } catch { /* */ } pc.close(); },
   };
