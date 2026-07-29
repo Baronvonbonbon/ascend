@@ -5654,7 +5654,9 @@ export class Game {
     if (!this.player) return; // no run yet — the start splash is up; ignore game keys
     if (e.ctrlKey || e.metaKey || e.altKey) return; // let browser shortcuts (refresh, copy, devtools) through
     const ae = document.activeElement; // typing in a text field (chat box, lobby paste) must not drive the game
-    if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA")) return;
+    // SELECT belongs here too: with a picker focused, swallowing keys left its arrows dead and its
+    // list unopenable from the keyboard.
+    if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.tagName === "SELECT")) return;
     if (this.coop && this.netRole !== "solo" && (e.key === "\"" || e.key === "'")) { this.focusChat(); e.preventDefault(); return; } // open the chat box
     if (this.busy) { e.preventDefault(); return; } // frozen while a blocking action resolves
     if (this.over) {

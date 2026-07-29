@@ -10,7 +10,7 @@
 // address remains the private alternative.
 
 import { Contract, encodeBytes32String, decodeBytes32String } from "ethers";
-import { connection } from "./provider";
+import { connection, readOnly } from "./provider";
 import { contractAddress, withTimeout } from "./config";
 import { playerName, encodeName } from "./runs";
 
@@ -29,9 +29,12 @@ export interface OpenTable { host: string; name: string; at: number }
 export function lobbyAddress(): string { return contractAddress("lobby"); }
 export function hasLobby(): boolean { return /^0x[0-9a-fA-F]{40}$/.test(lobbyAddress()); }
 
-function read(): Contract | null {
-  const conn = connection();
-  if (!conn || !hasLobby()) return null;
+// Browsing tables is a plain read, so it goes through readOnly() rather than the player's own
+// connection: you can see who is looking for a game before you have connected anything at all.
+// Only opening/closing your own table needs a signer.
+async function read(): Promise<Contract | null> {
+  if (!hasLobby()) return null;
+  const conn = await readOnly();
   return new Contract(lobbyAddress(), ABI as unknown as string[], conn.provider);
 }
 
@@ -44,7 +47,7 @@ async function write(): Promise<Contract | null> {
 
 /** Every table still within its TTL, newest first. Empty on any failure. */
 export async function fetchTables(): Promise<OpenTable[]> {
-  const c = read();
+  const c = await read();
   if (!c) return [];
   const rows = await withTimeout(c.tables(), 10_000);
   if (!rows) return [];
@@ -79,8 +82,9 @@ export async function closeTable(): Promise<boolean> {
 /** Do we currently have a table up? Drives Open/Close in the UI. */
 export async function tableIsOpen(): Promise<boolean> {
   const conn = connection();
-  const c = read();
-  if (!c || !conn?.address) return false;
+  if (!conn?.address) return false;
+  const c = await read();
+  if (!c) return false;
   return (await withTimeout(c.isOpen(conn.address), 10_000)) === true;
 }
 

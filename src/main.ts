@@ -3,6 +3,7 @@ import { initLobby } from "./net/lobby";
 import { loadCounts } from "./net/counter";
 import { readSave } from "./save";
 import { renderBanner } from "./ui/banner";
+import { initDropdowns } from "./ui/dropdown";
 import { connectChain, disconnectChain, resumeChain, onChainStatus, shortAddress, type ChainStatus } from "./chain";
 import { ARCHETYPES, archetypeName, archetypeBlurb, RACES, raceName, raceBlurb, introStory } from "./data";
 
@@ -130,6 +131,7 @@ if (screen && logEl) {
   renderBanner();
   renderSubtitle();
   syncMode();
+  initDropdowns(); // the menus draw their own popups — see ui/dropdown.ts for why
   // (the intro story is kicked off below, after options load, so reduce-motion is honoured)
 
   // On-screen touch controls: each button carries a data-key; tapping it drives the
@@ -205,26 +207,8 @@ if (screen && logEl) {
     const rm = document.getElementById("opt-reduce-motion") as HTMLInputElement | null;
     if (rm) { rm.checked = storedMotion; rm.addEventListener("change", () => { document.body.classList.toggle("opt-reduce-motion", rm.checked); localStorage.setItem("ascend.opt.motion", rm.checked ? "1" : "0"); }); }
 
-    // ── coffers (optional chain link) ──
-    // Everything below fails soft. No wallet, no extension, no network: the panel just says so,
-    // and the game is untouched. The chain modules are dynamically imported, so a player who
-    // never presses Connect never downloads them.
-    const chainStatusEl = document.getElementById("opt-chain-status");
     const chainKind = document.getElementById("opt-chain-kind") as HTMLSelectElement | null;
     const chainName = document.getElementById("opt-chain-name") as HTMLInputElement | null;
-    const chainConnect = document.getElementById("opt-chain-connect") as HTMLButtonElement | null;
-    const chainOff = document.getElementById("opt-chain-disconnect") as HTMLButtonElement | null;
-
-    const showChain = (s: ChainStatus) => {
-      if (!chainStatusEl) return;
-      chainStatusEl.textContent = s.connected
-        ? `${shortAddress(s.address) || s.kind} — ${s.canSign ? "can sign" : "read-only"}${s.contracts ? "" : " · no contract deployed"}`
-        : "not connected";
-      chainStatusEl.classList.toggle("on", s.connected);
-      if (chainConnect) chainConnect.hidden = s.connected;
-      if (chainOff) chainOff.hidden = !s.connected;
-    };
-    onChainStatus(showChain);
 
     if (chainName) {
       try { chainName.value = localStorage.getItem("ascend.chain.name") ?? ""; } catch { /* storage blocked */ }
@@ -233,19 +217,51 @@ if (screen && logEl) {
       });
     }
     try { if (chainKind) chainKind.value = localStorage.getItem("ascend.chain.kind") ?? ""; } catch { /* */ }
+  }
 
-    chainConnect?.addEventListener("click", async () => {
-      chainConnect.disabled = true;
-      const was = chainConnect.textContent;
-      chainConnect.textContent = "Connecting…";
-      // Pine syncs a light client from genesis — report progress or it looks hung.
-      const kind = (chainKind?.value || undefined) as Parameters<typeof connectChain>[0];
-      const s = await connectChain(kind, (step) => { if (chainStatusEl) chainStatusEl.textContent = `light client: ${step}…`; });
-      if (!s.connected && chainStatusEl) chainStatusEl.textContent = "could not connect — the game is unaffected";
-      chainConnect.disabled = false;
-      chainConnect.textContent = was;
-    });
-    chainOff?.addEventListener("click", () => { void disconnectChain(); });
+  // ── coffers (optional chain link) ──
+  // Everything below fails soft. No wallet, no extension, no network: the panel just says so, and
+  // the game is untouched. The chain modules are dynamically imported, so a player who never
+  // presses Connect never downloads them.
+  //
+  // The same control exists twice — on the start menu and in ⚙ Options — because the co-op lobby
+  // asks you to connect and the menu is where you are standing when it does. One status, one
+  // connect path, two sets of widgets bound to it.
+  {
+    const kindSel = () => document.getElementById("opt-chain-kind") as HTMLSelectElement | null;
+    const statusEls = ["opt-chain-status", "splash-chain-status"]
+      .map((id) => document.getElementById(id)).filter((e): e is HTMLElement => !!e);
+    const connectBtns = ["opt-chain-connect", "splash-chain-connect"]
+      .map((id) => document.getElementById(id) as HTMLButtonElement | null).filter((b): b is HTMLButtonElement => !!b);
+    const offBtns = ["opt-chain-disconnect", "splash-chain-disconnect"]
+      .map((id) => document.getElementById(id) as HTMLButtonElement | null).filter((b): b is HTMLButtonElement => !!b);
+
+    const sayChain = (text: string) => { for (const el of statusEls) el.textContent = text; };
+
+    const showChain = (s: ChainStatus) => {
+      sayChain(s.connected
+        ? `${shortAddress(s.address) || s.kind} — ${s.canSign ? "can sign" : "read-only"}${s.contracts ? "" : " · no contract deployed"}`
+        : "not connected");
+      for (const el of statusEls) el.classList.toggle("on", s.connected);
+      for (const b of connectBtns) b.hidden = s.connected;
+      for (const b of offBtns) b.hidden = !s.connected;
+    };
+    onChainStatus(showChain);
+
+    for (const btn of connectBtns) {
+      btn.addEventListener("click", async () => {
+        for (const b of connectBtns) b.disabled = true;
+        const was = btn.textContent;
+        btn.textContent = "Connecting…";
+        // Pine syncs a light client from genesis — report progress or it looks hung.
+        const kind = (kindSel()?.value || undefined) as Parameters<typeof connectChain>[0];
+        const s = await connectChain(kind, (step) => sayChain(`light client: ${step}…`));
+        if (!s.connected) sayChain("could not connect — the game is unaffected");
+        for (const b of connectBtns) b.disabled = false;
+        btn.textContent = was;
+      });
+    }
+    for (const btn of offBtns) btn.addEventListener("click", () => { void disconnectChain(); });
 
     void resumeChain(); // silent — only reconnects a wallet that has already been authorised
   }

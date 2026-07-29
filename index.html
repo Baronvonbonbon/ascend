@@ -113,6 +113,14 @@
  .setup-field { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); }
  .setup-field select { font-family: inherit; font-size: 13px; color: var(--ink); background: #16161a; border: 1px solid #3a361f; border-radius: 4px; padding: 5px 8px; }
  .setup-lab { color: var(--dim); }
+ #splash-chain-row { gap: 8px; }
+ #splash-chain-row button { font-family: inherit; font-size: 12px; color: var(--gold); background: #1c1c20;
+ border: 1px solid var(--gold); border-radius: 4px; padding: 4px 12px; cursor: pointer; touch-action: manipulation; }
+ #splash-chain-row button:hover { background: #262620; }
+ #splash-chain-row button[hidden] { display: none; }
+ #splash-chain-status { color: var(--dim); }
+ #splash-chain-status.on { color: var(--gold); }
+ #splash-chain-hint { flex-basis: 100%; }
  .setup-sep { color: #3a361f; }
  .pill { display: inline-flex; align-items: center; gap: 5px; color: var(--ink); cursor: pointer; }
  #coop-setup { width: 100%; }
@@ -136,6 +144,18 @@
  #audiobar button, #audiobar select { font-family: inherit; font-size: 12px; color: var(--gold); background: #1c1c20; border: 1px solid #3a361f; border-radius: 4px; padding: 3px 8px; cursor: pointer; }
  #audiobar button.on { color: #76c66a; border-color: #2f6a28; }
  a { color: var(--gold); }
+
+ /* ── self-drawn <select> popups (src/ui/dropdown.ts) ──
+    Above every modal: a select inside the ⚙ panel (z-index 55) must still list over it. */
+ .dd-pop { position: fixed; z-index: 200; max-height: min(60vh, 380px); overflow-y: auto;
+ max-width: calc(100vw - 12px); background: #101014; border: 1px solid var(--gold); border-radius: 5px;
+ box-shadow: 0 10px 34px rgba(0,0,0,0.72); padding: 3px; font-family: inherit; }
+ .dd-opt { color: var(--ink); font-size: 13px; line-height: 1.35; padding: 8px 10px; border-radius: 3px;
+ cursor: pointer; white-space: normal; }
+ .dd-opt:hover { background: #23231a; color: var(--gold); }
+ .dd-opt.on { background: #2c2a1c; color: var(--gold); }
+ .dd-opt.off { color: var(--dim); cursor: default; }
+ select { cursor: pointer; }
 
  /* ── co-op lobby ── */
  #lobby { width: 100%; max-width: 620px; border: 1px solid #2a2620; border-radius: 6px; padding: 8px 10px;
@@ -203,6 +223,16 @@
  <span class="setup-lab">Mode</span>
  <label class="pill"><input type="radio" name="mode" value="solo" checked> Solo</label>
  <label class="pill"><input type="radio" name="mode" value="coop"> Co-op</label>
+ </div>
+ <!-- Coffers, right here on the menu. It used to live only behind ⚙ Options, which meant the
+      co-op lobby could tell you to connect but not let you. The ⚙ panel keeps the same controls
+      (name on the roll, how to connect) — both drive the one shared status. -->
+ <div class="setup-row" id="splash-chain-row">
+ <span class="setup-lab">⛓ Coffers</span>
+ <span id="splash-chain-status">not connected</span>
+ <button id="splash-chain-connect" type="button">Connect</button>
+ <button id="splash-chain-disconnect" type="button" hidden>Disconnect</button>
+ <span class="setup-hint" id="splash-chain-hint">optional — the game is complete without it</span>
  </div>
  <div id="coop-setup" hidden>
  <div id="lobby">

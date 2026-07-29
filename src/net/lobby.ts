@@ -120,9 +120,12 @@ async function initChainInvites(
       : "🔐 Sent over the People chain statement store, exactly as the Polkadot app signals its own calls. Statements never enter block storage and expire in seconds, so nothing is recorded — but your partner must have this lobby open right now.";
   };
 
+  // Invites need a signing rail; the table list does not — it is a plain chain read, so it keeps
+  // refreshing for a player who has connected nothing at all. Seeing who is looking for a game is
+  // how you decide whether connecting is worth it.
   const refresh = async () => {
-    if (!signal || pane.hidden) return;
-    render(await signal.inbox());
+    if (pane.hidden) return;
+    if (signal) render(await signal.inbox());
     renderTables(await chain.openTables());
   };
 
@@ -135,10 +138,15 @@ async function initChainInvites(
   let mineOpen = false;
 
   const syncOpenBtn = () => {
-    if (openBtn) openBtn.textContent = mineOpen ? "Close my table" : "Open my table";
+    const canSign = chain.chainStatus().canSign;
+    if (openBtn) {
+      openBtn.textContent = mineOpen ? "Close my table" : "Open my table";
+      openBtn.disabled = !canSign;
+      openBtn.title = canSign ? "" : "Connect your coffers to announce a table.";
+    }
     if (openState) openState.textContent = mineOpen
       ? "Listed publicly — anyone can see this address is looking for a game. Expires in ~30 min."
-      : "";
+      : canSign ? "" : "Connect your coffers to put your own table up.";
   };
 
   openBtn?.addEventListener("click", async () => {
@@ -162,7 +170,13 @@ async function initChainInvites(
     syncOpenBtn();
 
     tablesEl.textContent = "";
-    if (!others.length) return;
+    if (!others.length) {
+      const none = document.createElement("p");
+      none.className = "lobby-note";
+      none.textContent = "No open tables right now. Open yours and someone can join it.";
+      tablesEl.appendChild(none);
+      return;
+    }
     for (const t of others) {
       const row = document.createElement("div");
       row.className = "table-row";
@@ -179,6 +193,9 @@ async function initChainInvites(
       const play = document.createElement("button");
       play.type = "button"; play.textContent = "Play";
       play.addEventListener("click", async () => {
+        // Joining sends a sealed invite, which needs a signer — but the table was browsable
+        // without one, so say what is missing instead of leaving a dead button.
+        if (!signal) { say("Connect your coffers to join a table — or use the offer/answer codes below."); return; }
         play.disabled = true;
         say(`Inviting ${t.name}…`);
         const res = await signal!.invite(t.host, (peer) => connected(peer, "host", "coop-ff"));
@@ -197,18 +214,27 @@ async function initChainInvites(
     if (el) { el.textContent = msg; el.classList.toggle("working", working); }
   };
 
+  // Poll on a cadence that matches what we are actually watching: the statement transport is
+  // push-driven and only needs repainting, a mailbox needs fetching, and with no signal at all the
+  // only live thing on screen is the table list.
+  const poll = () => {
+    if (timer) clearInterval(timer);
+    void refresh();
+    timer = window.setInterval(() => void refresh(), !signal ? 20_000 : signal.mailbox ? 15_000 : 2_000);
+  };
+
   const setup = async () => {
     signal?.stop();
     const st = chain.chainStatus();
     pane.hidden = false;
 
-    if (!st.connected) { state("Connect your coffers in the ⚙ panel to invite by address."); signal = null; return; }
-    if (!st.contracts) { state("No invite rune is deployed on this build — use the codes below."); signal = null; return; }
-    if (!st.canSign)   { state("This connection is read-only. Reconnect with a wallet that can sign."); signal = null; return; }
+    if (!st.connected)      { signal = null; state("Connect your coffers to invite by address or open a table — the tables below are readable without it."); poll(); return; }
+    if (!st.contracts)      { signal = null; state("No invite rune is deployed on this build — use the codes below."); poll(); return; }
+    if (!st.canSign)        { signal = null; state("This connection is read-only. Reconnect with a wallet that can sign to join or open a table."); poll(); return; }
 
     state("Preparing…", true);
     signal = await pickSignal();
-    if (!signal) { state("Could not reach the invite rune — use the codes below."); return; }
+    if (!signal) { state("Could not reach the invite rune — use the codes below."); poll(); return; }
 
     describe();
     state("Ready — invite by address, or wait for one to arrive.");
@@ -219,10 +245,7 @@ async function initChainInvites(
         : "You can send invites, but until you approve the one-off key signature, others cannot invite you.");
     });
 
-    void refresh();
-    if (timer) clearInterval(timer);
-    // The statement transport is push-driven and keeps its own list; polling just repaints it.
-    timer = window.setInterval(() => void refresh(), signal.mailbox ? 15_000 : 2_000);
+    poll();
   };
   chain.onChainStatus(() => { void setup(); });
   await setup();
