@@ -56,10 +56,58 @@ is permanent and first-come, so switching later means a new name, not a rename.
 |---|---|
 | Domain | `ascendyendor00.dot` (+ subname `app.ascendyendor00.dot`) |
 | Gateway | <https://ascendyendor00.dot.li> |
-| Content CID | `bafybeibb2nim7jae6z52r5iky6jvf6fkjobal6dlrpt2uu3fp6wnwxmuka` |
+| Content CID (root) | `bafybeibpx6m2dfpolbxdtwsos5lvqpnzqpoium2geb6cnoex6sw7eibggq` |
+| Content CID (`app.` subname) | `bafybeibb2nim7jae6z52r5iky6jvf6fkjobal6dlrpt2uu3fp6wnwxmuka` |
 | Icon CID | `bafk2bzacebryaxhhaftvjebpzpnwb2rn562rz3ec57hf7tknpqaophso5fmha` |
 
-Manifest and executable text records are written on chain and verified.
+Manifest and executable text records are written on chain and verified independently against the
+DotNS content resolver (`0x326bdE29315199c814B1c58b431D84D16EA5cE41`), not merely trusted from the
+deploy tool's output.
+
+The root and the `app.` subname point at **different CIDs**. Both are valid uploads of byte-identical
+files — a redeploy re-embeds the manifest, which changes the root hash even when nothing else moved.
+The gateway resolves the root; the Polkadot app resolves `app.`. Both work.
+
+Redeploys are incremental: the second deploy uploaded 0.0 MB across 2 chunks instead of 5.1 MB.
+
+## Everything else is gated on proof of personhood
+
+Three separate things are refused without it, and they all fail differently, so it is worth naming
+them together:
+
+| Want | Error | Needs |
+|---|---|---|
+| the short name `ascend.dot` | `requires ProofOfPersonhoodFull, but this signer is NoStatus` | PoP Full |
+| listing in the app's **Browse** | `Publisher.publish reverted: NoPersonhood` | PoP |
+| the statement-store invite rail | no statement allowance | a personhood alias |
+
+**Personhood cannot be obtained outside the Polkadot app.** Its docs say only that *"A user
+completes PoP once (in the Polkadot App)"*, and the TestNet guide states plainly that *"The process
+for obtaining a Statement Store allowance on TestNet is not yet documented."*
+
+The app **is** available now: **Android on Google Play** (`io.pcf.polkadotapp`), iOS "coming soon",
+and Polkadot Web at `dot.li`. Once an account there has PoP:
+
+```bash
+npx pad login                 # scan the QR with the app
+npx pad whoami
+npm run deploy:bulletin -- --publish     # now succeeds
+npx pad transfer ascendyendor00.dot      # hand the name to that account
+```
+
+### The name is currently owned by a public dev account
+
+`ascendyendor00.dot` is owned by `5DfhGyQdFobKM8NsWvEeAKk5EQQgYe9AydgJ7rMB6E1EqRzV` — the **base
+account of the well-known Substrate dev phrase**, which the deploy CLI falls back to when no session
+exists. That phrase is public, so on this devnet the name is not meaningfully *ours*: anyone can
+re-point or transfer it. Fine for a testnet; transfer it to a real account before it matters.
+
+### What "badge" is, and is not
+
+`badge` in this toolchain is a field on the **environment** descriptor (a UI label like "testnet"),
+not app metadata — there is nothing for an app to set. What Browse would show comes from the
+`manifest` text record (display name, description, icon CID), and that **is** set and verified. The
+only thing missing for Browse is the Publisher listing, which is personhood-gated.
 
 **First load through the gateway is slow.** It resolves DotNS with a smoldot light client, which
 syncs the Paseo relay chain before it will answer — minutes from cold. The loader offers
