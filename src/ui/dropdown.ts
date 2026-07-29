@@ -77,18 +77,21 @@ export function enhanceSelect(sel: HTMLSelectElement): void {
   if (sel.dataset.dd === "1") return;
   sel.dataset.dd = "1";
 
-  // Suppressing the native popup is the whole trick: preventDefault on the press stops the browser
-  // from opening its own, and we open ours in its place.
-  const grab = (e: Event) => {
+  // EXACTLY ONE of these events may toggle. A single real click fires `pointerdown` AND `mousedown`
+  // (and on a touch screen `touchstart` as well), so wiring the toggle to all of them opened the
+  // popup and then immediately closed it again — the control looked completely dead. `pointerdown`
+  // is the opener because it covers mouse, touch and pen in every browser we target; the others
+  // exist only to suppress the native popup, which is what preventDefault on the press does.
+  sel.addEventListener("pointerdown", (e) => {
     e.preventDefault();
     e.stopPropagation();
     sel.focus();
     openPop(sel);
-  };
-  sel.addEventListener("pointerdown", grab);
-  sel.addEventListener("mousedown", grab);
-  sel.addEventListener("touchstart", grab, { passive: false });
-  sel.addEventListener("click", (e) => e.preventDefault());
+  });
+  const suppress = (e: Event) => e.preventDefault();
+  sel.addEventListener("mousedown", suppress);
+  sel.addEventListener("touchstart", suppress, { passive: false });
+  sel.addEventListener("click", suppress);
 
   // Keyboard: the select still owns arrow keys (they move the value natively, which is fine and
   // needs no popup). Enter/Space open the list, Escape closes it.
@@ -96,7 +99,9 @@ export function enhanceSelect(sel: HTMLSelectElement): void {
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPop(sel); }
     else if (e.key === "Escape" && open?.sel === sel) { e.preventDefault(); closePop(); }
   });
-  sel.addEventListener("blur", () => { if (open?.sel === sel) setTimeout(closePop, 120); });
+  // No `blur` handler. Focusing the popup — or just tapping it — blurs the select, and tearing the
+  // popup down there detached the row before its own `click` could fire, so picking silently did
+  // nothing. Dismissal is handled once, globally, by the outside-press listener in initDropdowns().
 }
 
 /** Enhance every select on the page, now and for any added later. */
